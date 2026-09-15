@@ -24,12 +24,21 @@ export function estimateTokens(text: string): number {
   return Math.max(1, Math.ceil(chars / perToken));
 }
 
+/** A picture, roughly. Providers bill an image by its area — about 750 pixels
+ *  a token is the published rule of thumb — and cap what one image can cost,
+ *  because anything bigger is downscaled on arrival. With no size known, a
+ *  typical screenshot. */
+export function estimateImageTokens(dims?: { w: number; h: number }): number {
+  if (!dims || !dims.w || !dims.h) return 1000;
+  return Math.max(85, Math.min(1600, Math.ceil((dims.w * dims.h) / 750)));
+}
+
 export function estimateTurnTokens(turns: Turn[]): number {
   let n = 0;
   for (const t of turns) {
     const v = t.variants[t.active];
     if (v) n += estimateTokens(v.content);
-    for (const a of t.attachments || []) n += estimateTokens(a.text);
+    for (const a of t.attachments || []) n += a.kind === "image" ? estimateImageTokens(a.dims) : estimateTokens(a.text);
     n += 4; // per-message framing overhead
   }
   return n;

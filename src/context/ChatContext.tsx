@@ -24,7 +24,7 @@ import * as memoryStore from "@/services/memoryStore";
 import * as memoryCapture from "@/services/memoryCapture";
 import * as AI from "@/services/ai";
 import { isAbort } from "@/services/ai/backends";
-import { loadPricing, priceForModel } from "@/services/pricing";
+import { catalogueEntry, loadPricing, priceForModel } from "@/services/pricing";
 import { buildContext } from "@/lib/chatContext";
 import { getPersona } from "@/lib/personas";
 import { budgetFor, deepSteps } from "@/lib/effort";
@@ -35,6 +35,9 @@ import { resolveBackend, resolveEffort, resolveModel } from "@/lib/resolveSettin
 import { useRoute } from "./RouteContext";
 import type { Attachment, ChatMode, Conversation, ContextSource, Turn, Usage, Variant } from "@/types/chat";
 import { runAgentTurn } from "@/services/agent";
+import { hydrate, type BinaryNeed } from "@/services/files/wire";
+import { canTake } from "@/lib/modality";
+import { carry, windowFor, type CarryContext } from "@/lib/files/carry";
 import type { AgentPlan, AgentTrace, ToolCall, ToolRun } from "@/types/agent";
 import type { ChatActionId } from "@/lib/chatActions";
 import type { BackendType, ChatMessage, Citation, Memory } from "@/types";
@@ -92,6 +95,21 @@ function patchStep(live: AgentLive, step: number, fn: (s: LiveStep) => LiveStep)
   else steps.push(next);
   steps.sort((a, b) => a.step - b.step);
   return { ...live, steps };
+}
+
+/** One attachment's share of a message: its text always, and — when it rides
+ *  as itself — the files to read at send time. */
+function carryInto(
+  a: Attachment,
+  ctx: CarryContext,
+  pinned: boolean,
+  blocks: string[],
+  needs: Omit<BinaryNeed, "message">[]
+): void {
+  const r = carry(a, ctx, pinned);
+  blocks.push(r.text);
+  if (r.as === "image") needs.push({ kind: "image", fileIds: r.fileIds, name: a.name });
+  else if (r.as === "file") needs.push({ kind: "file", fileIds: [r.fileId], name: a.name, mime: r.mime });
 }
 
 interface ChatState {
@@ -257,15 +275,44 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   /* ---- assemble the wire messages ---- */
   const buildMessages = useCallback(
-    (c: Conversation, upTo: number): { messages: ChatMessage[]; memories: Memory[] } => {
+    (c: Conversation, upTo: number): { messages: ChatMessage[]; memories: Memory[]; binary: BinaryNeed[] } => {
       const project = store.get().projects[c.projectId];
-      const budget = budgetFor(resolveEffort(c, project).value);
+      const effort = resolveEffort(c, project).value;
+      const budget = budgetFor(effort);
       const persona = c.systemPrompt || getPersona(c.personaId).prompt;
       const lastUser = [...c.turns.slice(0, upTo + 1)].reverse().find((t) => t.role === "user");
       const queryText = lastUser ? chatStore.activeContent(lastUser) : "";
       const { system, memories } = buildContext(persona, c.context, queryText, c.projectId, budget.memoryLimit);
       const msgs: ChatMessage[] = [];
       if (system) msgs.push({ role: "system", content: system });
+
+      /* What the model that will answer can take, asked of the model the
+         conversation actually resolves to — through its project — so the
+         warning the composer showed and the bytes that go out agree. */
+      const target = AI.resolve({ backend: resolveBackend(c, project).value, model: resolveModel(c, project).value });
+      const modalities = catalogueEntry(target.model)?.inputModalities;
+      const mode = c.mode === "agent" || c.mode === "deep" ? c.mode : "direct";
+      const base: Omit<CarryContext, "age"> = {
+        window: windowFor(effort),
+        image: canTake(modalities, "image"),
+        file: canTake(modalities, "file"),
+        backend: target.type,
+        /* The agent loop has no way to name OpenRouter's PDF parser on its
+           requests, and a file sent with none named is read by OpenRouter's
+           paid default. Agent and Deep read PDFs in this browser. */
+        pdfEngine: mode === "direct" ? store.settings().pdfEngine || "local" : "local"
+      };
+
+      /* How many user turns stand between each turn and the newest — what
+         decides whether a picture still rides as itself. */
+      const age = new Map<number, number>();
+      let seen = 0;
+      for (let i = Math.min(upTo, c.turns.length - 1); i >= 0; i--) {
+        if (c.turns[i].role === "user") age.set(i, seen++);
+      }
+      const pinnedIds = new Set(c.pinnedAttachments.map((a) => a.id));
+      const binary: BinaryNeed[] = [];
+
       /* Effort decides how far back the conversation is replayed. The window
          is counted from the newest end so the current exchange is always in
          it — truncating from the front would drop the question being asked. */
@@ -273,16 +320,35 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       for (let i = first; i <= upTo && i < c.turns.length; i++) {
         const t = c.turns[i];
         let content = chatStore.activeContent(t);
-        if (t.attachments?.length) {
-          const blocks = t.attachments
-            .map((a) => `--- attached: ${a.name} ---\n${a.text}\n--- end ${a.name} ---`)
-            .join("\n\n");
-          content = blocks + (content ? "\n\n" + content : "");
+        const blocks: string[] = [];
+        const needs: Omit<BinaryNeed, "message">[] = [];
+        for (const a of t.attachments || []) {
+          /* A pinned attachment rides on the newest message instead, below;
+             carrying it here as well would pay for it twice. */
+          if (pinnedIds.has(a.id)) continue;
+          carryInto(a, { ...base, age: age.get(i) ?? 0 }, false, blocks, needs);
         }
+        if (blocks.length) content = blocks.join("\n\n") + (content ? "\n\n" + content : "");
         if (!content.trim()) continue;
+        for (const n of needs) binary.push({ ...n, message: msgs.length });
         msgs.push({ role: t.role, content });
       }
-      return { messages: msgs, memories };
+
+      /* Pinned attachments ride on the newest user message of every send —
+         the thread's standing material, as a project's knowledge is the
+         project's. `pinnedAttachments` was persisted and copied on branch for
+         months with nothing ever reading it. */
+      if (c.pinnedAttachments.length) {
+        const last = msgs.map((m) => m.role).lastIndexOf("user");
+        if (last >= 0) {
+          const blocks: string[] = [];
+          const needs: Omit<BinaryNeed, "message">[] = [];
+          for (const a of c.pinnedAttachments) carryInto(a, { ...base, age: 0 }, true, blocks, needs);
+          msgs[last] = { ...msgs[last], content: blocks.join("\n\n") + "\n\n" + msgs[last].content };
+          for (const n of needs) binary.push({ ...n, message: last });
+        }
+      }
+      return { messages: msgs, memories, binary };
     },
     []
   );
@@ -317,8 +383,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // Only run() makes the primary reply call. The cheaper maybeFollowups()
       // below reuses buildMessages too, but a suggestion request isn't what
       // "used" should mean here, so it does not record.
-      const { messages, memories } = buildMessages(c, upToIndex);
-      for (const m of memories) memoryStore.recordUsage(m.id);
+      const built = buildMessages(c, upToIndex);
+      for (const m of built.memories) memoryStore.recordUsage(m.id);
       const budget = budgetFor(resolveEffort(c, store.get().projects[c.projectId]).value);
       const replyScale = budget.replyScale;
 
@@ -330,6 +396,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       let agentProposed: NonNullable<Variant["agentProposed"]> | undefined;
 
       try {
+        /* Pictures and files are read out of the file store here, at send
+           time, rather than inside buildMessages — that also runs for
+           follow-up suggestions, which never carry bytes. */
+        const messages = await hydrate(built.messages, built.binary);
+        const engine = store.settings().pdfEngine;
+        const pdfEngine = built.binary.some((b) => b.kind === "file") && engine && engine !== "local" ? engine : undefined;
         let full: string;
         const mode = c.mode === "agent" || c.mode === "deep" ? c.mode : "direct";
         if (mode !== "direct") {
@@ -403,6 +475,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             signal: controller.signal,
             label: "chat",
             actions: c.actions,
+            pdfEngine,
             onToken: (_t, a) => {
               acc = a;
               setStreaming(a);
@@ -606,6 +679,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const body = text.trim();
       if (!body && !attachments?.length) return;
 
+      /* A pinned attachment is kept on the conversation as well as on its
+         turn: the turn records when it was sent, the conversation is what
+         keeps it in front of the model on every message after. */
+      const pinned = (attachments || []).filter((a) => a.pinned);
+      if (pinned.length) {
+        const have = new Set(c.pinnedAttachments.map((a) => a.id));
+        c.pinnedAttachments = [...c.pinnedAttachments, ...pinned.filter((a) => !have.has(a.id))];
+      }
       chatStore.addTurn(c, chatStore.makeTurn("user", body, attachments));
       const assistant = blankAssistantTurn();
       c.turns.push(assistant);

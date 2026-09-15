@@ -171,11 +171,33 @@ function dedupeCitations(list: Citation[]): Citation[] {
 
 /* ----------------------------------------------------------- tool calling */
 
+/** A message with pictures or files, as the OpenAI content array OpenRouter,
+ *  Groq and the compatible servers read. Text first — OpenRouter's own
+ *  guidance. A file part is only ever built for OpenRouter (lib/files/carry.ts),
+ *  the one backend that reads them. */
+function wireParts(m: ChatMessage): unknown[] {
+  return (m.parts || []).map((p) =>
+    p.type === "text"
+      ? { type: "text", text: p.text }
+      : p.type === "image"
+        ? { type: "image_url", image_url: { url: `data:${p.mime};base64,${p.data}` } }
+        : { type: "file", file: { filename: p.name, file_data: `data:${p.mime};base64,${p.data}` } }
+  );
+}
+
+/** Ollama's own message shape: pictures ride as a bare list of base64 strings
+ *  beside the text. It has no file part, and none is ever built for it. */
+function toOllama(m: ChatMessage): Record<string, unknown> {
+  const { parts, ...rest } = m;
+  const images = (parts || []).flatMap((p) => (p.type === "image" ? [p.data] : []));
+  return images.length ? { ...rest, images } : rest;
+}
+
 /** Our ChatMessage translated to the OpenAI wire shape. The tool fields are
  *  omitted entirely when absent rather than sent as undefined — some strict
  *  gateways reject a null `tool_calls` on a plain assistant message. */
 function toWire(m: ChatMessage): Record<string, unknown> {
-  const out: Record<string, unknown> = { role: m.role, content: m.content };
+  const out: Record<string, unknown> = { role: m.role, content: m.parts?.length ? wireParts(m) : m.content };
   if (m.toolCalls?.length) {
     out.tool_calls = m.toolCalls.map((c) => ({
       id: c.id,
@@ -478,6 +500,13 @@ function openAICompatible(
          can actually do. `stream_options: {include_usage:true}` used to be set
          here; OpenRouter deprecated it and returns usage unconditionally. */
       applyActions(body, opts.actions, id, ctx.model);
+      /* A PDF sent as a file always names its parser. Left unnamed, OpenRouter
+         reads it with its paid OCR engine — a bill nobody chose. Merged into
+         the plugin list rather than replacing it, because web search lives
+         there too. */
+      if (opts.pdfEngine && id === "openrouter" && messages.some((m) => m.parts?.some((p) => p.type === "file"))) {
+        body.plugins = [...(Array.isArray(body.plugins) ? (body.plugins as unknown[]) : []), { id: "file-parser", pdf: { engine: opts.pdfEngine } }];
+      }
 
       /* Tracks whether anything has reached the caller, so the retry loop can
          refuse to restart a stream that has already put text on the screen. */
@@ -762,7 +791,7 @@ export const BACKENDS: Record<BackendType, BackendDef> = {
       const url = ctx.baseUrl + "/api/chat";
       const body: Record<string, unknown> = {
         model: ctx.model,
-        messages,
+        messages: messages.map(toOllama),
         stream: !!opts.onToken,
         options: { temperature: opts.temperature == null ? 0.4 : opts.temperature }
       };

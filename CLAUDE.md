@@ -281,6 +281,26 @@ the whole picture. Four things bite:
   re-registered only when the palette or drawer moves and otherwise holds a
   first-render closure.
 
+**Attachments are read here, kept apart, and carried by rule.** Every file —
+the chat composer, project knowledge, journal capture — goes through
+`services/files/ingest.ts`, which sniffs the bytes (`lib/files/sniff.ts`),
+refuses with a sentence, and returns an `Attachment` whose `text` is what the
+model reads. Originals (pictures, PDFs, rendered scan pages) live in their own
+IndexedDB, `drill-files` — not a `drill-chat` store, for the version-bump reason
+the speech cache gives — but unlike that cache every write goes through
+`persistence.guard`, because a photo you attached is your work. Three rules.
+**What an attachment sends on a turn is `lib/files/carry.ts`'s decision**:
+pictures ride as themselves on the newest two user turns (one at low effort)
+and pinned ones always, older ones as a line; capability is `lib/modality.ts`'s
+three-state verdict, never a model name. **A PDF sent as a file always names its
+OpenRouter parser** (`ChatOpts.pdfEngine`) — unnamed, OpenRouter uses its paid
+OCR — and Agent/Deep read PDFs locally because the loop cannot name one. **The
+run transcript never holds base64** (`forTranscript`). The parsers are dynamic
+imports and none may reach the review loop's entry chunk. Dropped files are
+*taken* from a queue (`takeDropped`), never passed as a prop: the composer
+remounts when the first message creates a conversation, and a prop holding the
+files attached every one of them again.
+
 **Reading aloud is one player, two engines, and a cache that is not your
 data.** `services/speech/player.ts` is the singleton the Listen button, the bar
 above the composer and the sentence highlight all read, and it takes its engine

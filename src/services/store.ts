@@ -83,7 +83,8 @@ export const DEFAULT_SETTINGS: Settings = {
   railCollapsed: false,
   textScale: 1,
   sessionSize: 10,
-  speech: { engine: "", rate: 1, follow: true, cacheMB: 25, voices: {} }
+  speech: { engine: "", rate: 1, follow: true, cacheMB: 25, voices: {} },
+  pdfEngine: "local"
 };
 
 let db: DrillDB = null as unknown as DrillDB;
@@ -180,6 +181,7 @@ function normSettings(st: Settings): Settings {
   st.lang = normLang(st.lang);
   if (!st.creds || typeof st.creds !== "object") st.creds = {};
   st.speech = normSpeech(st.speech);
+  if (!PDF_ENGINES.includes(st.pdfEngine)) st.pdfEngine = "local";
 
   const successor = RETIRED_BACKENDS[st.backend];
   if (successor) {
@@ -201,6 +203,7 @@ function normLang(v: unknown): "english" | "hinglish" {
 }
 
 const SPEECH_ENGINES: SpeechEngineId[] = ["device", "openrouter", "groq", "custom"];
+const PDF_ENGINES: import("@/types").PdfEngine[] = ["local", "cloudflare-ai", "mistral-ocr", "native"];
 
 /**
  * The listening settings, field by field.

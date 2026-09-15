@@ -76,7 +76,7 @@ export const CHAT_ACTIONS: Record<ChatActionId, ChatAction> = {
       /* The plugin form rather than the `model:online` suffix: the suffix
          would have to be spliced into the model id, which then no longer
          matches the pricing catalogue or the model picker. */
-      body.plugins = [{ id: "web" }];
+      body.plugins = [...(Array.isArray(body.plugins) ? (body.plugins as unknown[]) : []), { id: "web" }];
     }
   },
 

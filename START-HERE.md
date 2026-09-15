@@ -37,7 +37,7 @@
 ### v3 — Later
 | 11 | Auto-backup to disk | not started |
 | 12 | Agent loop behind high effort | **done** — see §13 |
-| 13 | Period reports, mind maps, richer media | not started |
+| 13 | Period reports, mind maps, richer media | **in progress** — files and attachments (pictures, PDF, Word, Excel, CSV, pinning, capture, knowledge, backup) done 2026-09-15; visuals next |
 
 **Phase 0 notes for whoever picks this up:**
 

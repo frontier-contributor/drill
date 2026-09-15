@@ -32,12 +32,20 @@ import type { Conversation } from "@/types/chat";
 import type { JournalEntry, PeriodRollup } from "@/types/journal";
 import type { Exam } from "@/types/exam";
 import type { UsageDay } from "./usageLog";
+import * as filesDb from "./files/db";
+import { base64ToBlob, blobToBase64 } from "./files/bytes";
 
 const KIND = "drill-full-backup";
 
 /* ----------------------------------------------------------------- export -- */
 
-export async function collect(): Promise<FullBackup> {
+export interface CollectOptions {
+  /** Attached pictures and PDFs, as base64. Off unless asked for: they can be
+   *  most of the file's size, and a backup too big to make is one nobody makes. */
+  includeFiles?: boolean;
+}
+
+export async function collect(opts: CollectOptions = {}): Promise<FullBackup> {
   /* Flush anything still sitting in the debounce queue, or the newest turn of
      the conversation you are looking at would be missing from its own backup. */
   chatStore.flushAll();
@@ -71,12 +79,25 @@ export async function collect(): Promise<FullBackup> {
     journal,
     rollups,
     exams,
-    usage
+    usage,
+    ...(opts.includeFiles ? { files: await collectFiles() } : {})
   };
 }
 
-export async function exportEverything(): Promise<string> {
-  return JSON.stringify(await collect(), null, 1);
+/** One file at a time, so a backup of a thousand photos holds one photo's
+ *  base64 in memory at once rather than all of them. */
+async function collectFiles(): Promise<NonNullable<FullBackup["files"]>> {
+  const out: NonNullable<FullBackup["files"]> = [];
+  for (const meta of await filesDb.list()) {
+    const rec = await filesDb.get(meta.id);
+    if (!rec) continue;
+    out.push({ id: rec.id, name: rec.name, mime: rec.mime, size: rec.size, created: rec.created, data: await blobToBase64(rec.blob) });
+  }
+  return out;
+}
+
+export async function exportEverything(opts: CollectOptions = {}): Promise<string> {
+  return JSON.stringify(await collect(opts), null, 1);
 }
 
 /** Filename carries the date so a folder of these sorts sensibly. */
@@ -86,8 +107,8 @@ export function backupFilename(at = Date.now()): string {
   return `drill-backup-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.json`;
 }
 
-export async function downloadEverything(): Promise<void> {
-  const json = await exportEverything();
+export async function downloadEverything(opts: CollectOptions = {}): Promise<void> {
+  const json = await exportEverything(opts);
   U.download(backupFilename(), json, "application/json");
 }
 
@@ -124,7 +145,8 @@ export function parse(text: string): FullBackup {
     journal: Array.isArray(b.journal) ? b.journal : [],
     rollups: Array.isArray(b.rollups) ? b.rollups : [],
     exams: Array.isArray(b.exams) ? b.exams : [],
-    usage: Array.isArray(b.usage) ? b.usage : []
+    usage: Array.isArray(b.usage) ? b.usage : [],
+    files: Array.isArray(b.files) ? b.files : undefined
   };
 }
 
@@ -146,7 +168,8 @@ export function summarise(b: FullBackup): BackupSummary {
     memories: b.memories.length,
     candidates: b.candidates.length,
     journal: b.journal.length,
-    exams: b.exams.length
+    exams: b.exams.length,
+    files: b.files?.length || 0
   };
 }
 
@@ -186,6 +209,14 @@ export async function restoreEverything(b: FullBackup): Promise<BackupSummary> {
     idbBulkPut(STORE_EXAMS, b.exams),
     idbBulkPut(STORE_USAGE, b.usage)
   ]);
+  /* Files only when the backup carries them. One made without them leaves
+     this browser's own copies where they are rather than emptying the store,
+     so a restored conversation pointing at a picture still here can show it. */
+  if (b.files?.length) {
+    await filesDb.replaceAll(
+      b.files.map((f) => ({ id: f.id, name: f.name, mime: f.mime, size: f.size, created: f.created, blob: base64ToBlob(f.data, f.mime) }))
+    );
+  }
   await Promise.all([
     chatStore.rebuildIndex(),
     memoryStore.reload(),

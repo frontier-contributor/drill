@@ -18,6 +18,7 @@ import { catalogueEntry, loadPricing, loadSpeechCatalogue, priceForModel, speech
 import { costOf } from "@/lib/tokens";
 import { memoryBrief, type BriefOpts } from "@/lib/memoryBrief";
 import { cleanTitle } from "@/lib/title";
+import { forTranscript } from "@/lib/files/parts";
 import { planBudget } from "@/lib/budget";
 import { thinkingSupport } from "@/lib/thinking";
 import { BACKENDS, BACKEND_ORDER, isAbort } from "./backends";
@@ -131,7 +132,16 @@ export function chat(messages: ChatMessage[], opts: ChatOpts = {}, override?: Ov
 
   return r.backend.chat(messages, wrapped, r).then(
     (res) => {
-      transcript.record({ at: started, label, model: r.model, messages, response: res, error: null, usage, elapsedMs: Date.now() - started });
+      transcript.record({
+        at: started,
+        label,
+        model: r.model,
+        messages: forTranscript(messages),
+        response: res,
+        error: null,
+        usage,
+        elapsedMs: Date.now() - started
+      });
       meter(false);
       return res;
     },
@@ -141,7 +151,7 @@ export function chat(messages: ChatMessage[], opts: ChatOpts = {}, override?: Ov
           at: started,
           label,
           model: r.model,
-          messages,
+          messages: forTranscript(messages),
           response: null,
           error: (err as Error)?.message || String(err),
           usage,

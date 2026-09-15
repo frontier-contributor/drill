@@ -41,16 +41,41 @@ export type Usage = TokenUsage;
 
 export type TurnRole = "user" | "assistant";
 
+/** What an attachment is. The first five are text the app already had or that
+ *  was pasted; the last four came from a file and were read in this browser. */
+export type AttachmentKind = "file" | "selection" | "card" | "note" | "deck" | "image" | "pdf" | "doc" | "sheet";
+
 /** A file or snippet pulled into a turn. The text is inlined into the wire
- *  message when sending; this record exists so the UI can show a chip and so
+ *  message when sending; this record exists so the UI can show a card and so
  *  an edited turn can be rebuilt without re-reading the file. */
 export interface Attachment {
   id: string;
   name: string;
-  kind: "file" | "selection" | "card" | "note" | "deck";
-  /** bytes for files, characters otherwise — for the chip's subtitle */
+  kind: AttachmentKind;
+  /** bytes for files, characters otherwise — for the card's subtitle */
   size: number;
+  /** What the model reads. The extracted text for a PDF, a Word file or a
+   *  spreadsheet; empty for an image, which is sent as itself. */
   text: string;
+  /** The original bytes, kept in the `drill-files` database — never inline
+   *  here, because a conversation record is rewritten whole on every message
+   *  and a photograph inside it would be rewritten with it. */
+  fileId?: string;
+  mime?: string;
+  /** Pages in a PDF, sheets in a workbook. */
+  pages?: number;
+  /** PDF pages with no text layer — scans — numbered from 1. */
+  scanned?: number[];
+  /** Those scanned pages rendered as pictures, for a model that can see. */
+  pageImages?: string[];
+  /** A small JPEG data URL drawn in this browser, for the card. */
+  thumb?: string;
+  /** An image's size as it will be sent, after downscaling. */
+  dims?: { w: number; h: number };
+  /** The extracted text was cut at the limit. */
+  truncated?: boolean;
+  /** Ride on every message in this conversation, not only the one it came with. */
+  pinned?: boolean;
 }
 
 /** What a save-to-memory request did, recorded on the turn that caused it so

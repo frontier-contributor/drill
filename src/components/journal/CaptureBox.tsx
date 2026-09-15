@@ -4,6 +4,10 @@
  * Never calls the API: saves instantly, works offline, and appends rather
  * than replaces, so logging twice in a day just adds to that day's entry.
  * That last rule matters more than it looks — see START-HERE.md §4 Stage 1.
+ *
+ * Files go through the same reader chat uses (services/files/ingest), for text
+ * only: a PDF, a Word document or a spreadsheet lands in today's raw log as the
+ * text in it. Reading a file is local, so that rule still holds.
  * ========================================================================== */
 import { useRef, useState } from "react";
 import * as journalStore from "@/services/journalStore";
@@ -11,12 +15,13 @@ import { useToast } from "@/context/ToastContext";
 import { ago } from "@/lib/util";
 import type { JournalEntry } from "@/types/journal";
 
-const ACCEPT = /\.(md|txt)$/i;
+const ACCEPT = ".md,.txt,.pdf,.docx,.xlsx,.csv,.tsv,.json,.tex,text/*";
 
 export default function CaptureBox({ entry }: { entry: JournalEntry }) {
   const toast = useToast();
   const [text, setText] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  const [reading, setReading] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   function save() {
@@ -27,30 +32,34 @@ export default function CaptureBox({ entry }: { entry: JournalEntry }) {
     toast("Added to today's log");
   }
 
-  function readFile(f: File) {
-    if (!ACCEPT.test(f.name)) {
-      toast("Only .md or .txt files");
-      return;
+  async function readFiles(list: FileList | File[]) {
+    const files = Array.from(list);
+    if (!files.length) return;
+    const { ingest } = await import("@/services/files/ingest");
+    for (const f of files) {
+      setReading(f.name);
+      try {
+        const a = await ingest(f, { purpose: "text" });
+        journalStore.appendRaw(entry, "file", a.name, a.text);
+        toast(`Added ${a.name} to today's log${a.truncated ? " (clipped at the limit)" : ""}`);
+      } catch (e) {
+        toast((e as Error).message || `Could not read ${f.name}`, 8000);
+      } finally {
+        setReading(null);
+      }
     }
-    const rd = new FileReader();
-    rd.onload = () => {
-      journalStore.appendRaw(entry, "file", f.name, String(rd.result));
-      toast("Added " + f.name + " to today's log");
-    };
-    rd.readAsText(f);
   }
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
+    const files = e.target.files ? Array.from(e.target.files) : [];
     e.target.value = "";
-    if (f) readFile(f);
+    void readFiles(files);
   }
 
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragOver(false);
-    const f = e.dataTransfer.files?.[0];
-    if (f) readFile(f);
+    if (e.dataTransfer.files?.length) void readFiles(e.dataTransfer.files);
   }
 
   return (
@@ -67,7 +76,7 @@ export default function CaptureBox({ entry }: { entry: JournalEntry }) {
       <textarea
         className="fi"
         style={{ minHeight: 100 }}
-        placeholder="what you did, what you read, what confused you, links, anything — drop a .md/.txt file too"
+        placeholder="what you did, what you read, what confused you, links, anything — drop a PDF, Word, Excel or text file too"
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
@@ -78,11 +87,11 @@ export default function CaptureBox({ entry }: { entry: JournalEntry }) {
         <button className="btn pri" onClick={save}>
           Add to today's log
         </button>
-        <button className="btn sm" onClick={() => fileRef.current?.click()}>
-          Attach a file…
+        <button className="btn sm" disabled={!!reading} onClick={() => fileRef.current?.click()}>
+          {reading ? `Reading ${reading}…` : "Attach a file…"}
         </button>
       </div>
-      <input ref={fileRef} type="file" accept=".md,.txt,text/plain,text/markdown" style={{ display: "none" }} onChange={onFile} />
+      <input ref={fileRef} type="file" multiple accept={ACCEPT} className="hidden-file" onChange={onFile} />
 
       {entry.raw.length > 0 && (
         <div className="jrnl-rawlist">

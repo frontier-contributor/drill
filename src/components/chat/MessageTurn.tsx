@@ -24,7 +24,8 @@ import { formatCost, formatTokens } from "@/lib/tokens";
 import * as AI from "@/services/ai";
 import * as chatStore from "@/services/chatStore";
 import { useToast } from "@/context/ToastContext";
-import type { Conversation, Turn } from "@/types/chat";
+import type { Attachment, Conversation, Turn } from "@/types/chat";
+import AttachmentCard from "./AttachmentCard";
 import type { BackendType } from "@/types";
 import Icon from "../ui/Icon";
 
@@ -51,6 +52,7 @@ interface Props {
   onStar: () => void;
   onDelete: () => void;
   onRetry: () => void;
+  onOpenAttachment?: (a: Attachment) => void;
 }
 
 export default function MessageTurn({
@@ -68,7 +70,8 @@ export default function MessageTurn({
   onVariant,
   onStar,
   onDelete,
-  onRetry
+  onRetry,
+  onOpenAttachment
 }: Props) {
   const toast = useToast();
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -219,9 +222,7 @@ export default function MessageTurn({
       {!!turn.attachments?.length && (
         <div className="att-row">
           {turn.attachments.map((a) => (
-            <span key={a.id} className="att-chip" title={`${a.text.length.toLocaleString()} characters`}>
-              <Icon name="paperclip" size={11} /> {a.name}
-            </span>
+            <AttachmentCard key={a.id} a={a} onOpen={onOpenAttachment ? () => onOpenAttachment(a) : undefined} />
           ))}
         </div>
       )}

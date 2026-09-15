@@ -47,6 +47,7 @@ export type IconName =
   | "pause"
   | "skip-back"
   | "skip-forward"
+  | "pin"
   | "github";
 
 /* Every path is drawn on a 24-grid, stroked, never filled — except the two
@@ -136,6 +137,9 @@ const PATHS: Record<IconName, { d: string; fill?: boolean }[]> = {
   pause: [{ d: "M8.5 5.5v13M15.5 5.5v13" }],
   "skip-back": [{ d: "M6 5.5v13" }, { d: "M18 6.2v11.6a.6.6 0 0 1-.9.5l-7.7-5.8a.6.6 0 0 1 0-1l7.7-5.8a.6.6 0 0 1 .9.5Z" }],
   "skip-forward": [{ d: "M18 5.5v13" }, { d: "M6 6.2v11.6a.6.6 0 0 0 .9.5l7.7-5.8a.6.6 0 0 0 0-1L6.9 5.7a.6.6 0 0 0-.9.5Z" }],
+  /* A pushpin: what an attachment pinned to a conversation is, and the one
+     thing a paperclip beside it could not also mean. */
+  pin: [{ d: "M9.5 3.5h5l-.8 6 3.3 3.2v1.3H7v-1.3l3.3-3.2Z" }, { d: "M12 14v6.5" }],
   /* The one glyph in this set that is a fixed logo rather than a drawn
      concept — the Octocat silhouette, filled rather than stroked like
      star-filled, because approximating it in strokes on a 24-grid reads as

@@ -198,6 +198,15 @@ export const SECTIONS = sections({
     sub: "Both of these buy convenience with a second call. They are listed together because that is the only thing they have in common, and it is the thing that costs money.",
     finds: ["follow-ups", "followups", "suggestions", "suggested questions", "auto title", "naming", "titles", "cost", "extra calls"]
   },
+  "chat.files": {
+    cat: "chat",
+    title: "Files you attach",
+    sub: "Pictures go to a model that can see; everything else is read in this browser first, so the model gets text it can quote. Where a PDF is read is the one choice.",
+    finds: [
+      "files", "attach", "attachments", "upload", "pdf", "ocr", "scanned", "scan", "images", "pictures", "photos",
+      "screenshots", "vision", "word", "docx", "excel", "xlsx", "csv", "spreadsheet", "mistral", "cloudflare", "parser"
+    ]
+  },
 
   /* --------------------------------------------------------------- listening -- */
   "listening.voice": {
@@ -344,6 +353,12 @@ export const SECTIONS = sections({
       "disappeared", "gone", "wiped", "cleared", "safe", "keep my data", "how much", "size", "origin", "port",
       "incognito", "private window", "save failed", "cannot save"
     ]
+  },
+  "data.files": {
+    cat: "data",
+    title: "Attached files",
+    sub: "Pictures and PDFs you attach are kept in this browser beside the conversations that use them — only their text lives inside the chat itself.",
+    finds: ["attached files", "attachments", "uploads", "pictures", "images", "pdf", "unused", "clean up", "free space", "disk"]
   },
   "data.backup": {
     cat: "data",

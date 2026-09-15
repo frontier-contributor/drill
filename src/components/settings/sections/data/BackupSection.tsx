@@ -13,8 +13,11 @@
  * alone — you want to see what you are about to lose next to what you are
  * about to gain.
  * ========================================================================== */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as backup from "@/services/backup";
+import * as filesDb from "@/services/files/db";
+import { size } from "@/lib/files/limits";
+import SwitchRow from "../../../ui/SwitchRow";
 import { useToast } from "@/context/ToastContext";
 import { useMaybeReview } from "@/context/ReviewContext";
 import Section from "../../Section";
@@ -31,6 +34,7 @@ export function describe(s: BackupSummary): string {
     s.notes + " note" + (s.notes === 1 ? "" : "s")
   ];
   if (s.memories) bits.push(s.memories + " memories");
+  if (s.files) bits.push(s.files + " attached file" + (s.files === 1 ? "" : "s"));
   return bits.join(" · ");
 }
 
@@ -50,12 +54,24 @@ export default function BackupSection() {
     incoming: BackupSummary;
     current: BackupSummary;
   } | null>(null);
+  const [withFiles, setWithFiles] = useState(false);
+  const [kept, setKept] = useState<{ count: number; bytes: number } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void filesDb.list().then((all) => {
+      if (alive) setKept({ count: all.length, bytes: all.reduce((n, f) => n + f.size, 0) });
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   function saveEverything() {
     setBusy(true);
     setErr(null);
     backup
-      .downloadEverything()
+      .downloadEverything({ includeFiles: withFiles })
       .then(() => toast("Backup saved"))
       .catch((e: Error) => setErr(e.message))
       .finally(() => setBusy(false));
@@ -116,6 +132,14 @@ export default function BackupSection() {
           onClick={() => fileRef.current?.click()}
         />
       </div>
+      {!!kept?.count && (
+        <SwitchRow
+          title="Include attached files"
+          sub={`${kept.count} picture${kept.count === 1 ? "" : "s"} and PDFs, ${size(kept.bytes)} — written as base64, so the backup grows by about a third more than that. Without them, chats keep their text but not the originals.`}
+          on={withFiles}
+          onToggle={() => setWithFiles((v) => !v)}
+        />
+      )}
       <input ref={fileRef} type="file" accept=".json,application/json" className="hidden-file" onChange={onFile} />
 
       {busy && !pending && <p className="sset-note">Working…</p>}

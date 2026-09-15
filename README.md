@@ -25,6 +25,15 @@ openrouter.ai.
   whole deck, or your insight log. Context is rebuilt from your real progress
   every time you send, so a thread you return to next week reflects next
   week's gaps.
+- **Attach what you are studying from** — pictures and screenshots (paste,
+  drop anywhere on the chat, or pick), PDFs, Word, Excel, CSV, text and code.
+  Everything is read in your browser first: a PDF's text with page numbers, a
+  spreadsheet as CSV, a Word file with its headings and tables. Pictures go to
+  a model that can see, downscaled and with their location data stripped; a
+  card warns *before* you send when the model you picked cannot see them.
+  Scanned PDF pages are sent as pictures, or read by OpenRouter's parser if you
+  choose it in Settings → Chat. Pin a file to keep it on every message in that
+  thread; click any card to see exactly what the model was given.
 - **Any reply becomes flashcards** — one click on a message, or select a
   paragraph first. Pick the deck, untick the weak ones, done.
 - **Any reply becomes a note** — straight into the insight log.
@@ -32,7 +41,9 @@ openrouter.ai.
   Explainer, Feynman check (you explain, it finds the holes), ML researcher,
   Code, or a raw model with no system prompt.
 - **Slash commands** — `/quiz` on what's due, `/weak` to attack what you keep
-  failing, `/cards`, `/explain`, `/feynman`, `/note`, `/export`.
+  failing, `/cards`, `/explain`, `/feynman`, `/note`, `/export`, and
+  `/remember` — with a fact after it to save that fact, or alone to pull what
+  is worth keeping out of the conversation.
 - **Proper rendering** — Markdown, LaTeX via KaTeX, syntax-highlighted code
   with copy buttons, tables.
 - **The usual platform things** — streaming with a stop button, regenerate
@@ -387,6 +398,9 @@ src/
     personas.ts             the chat modes and their system prompts
     chatContext.ts          decks/weak cards/notes -> a system-prompt block
     tokens.ts               token estimation and cost formatting
+    budget.ts               how many tokens a one-shot operation gets, and the retry
+    files/                  attachments, pure: what a file really is, limits, CSV and
+                             Word text, and what each attachment sends on each turn
     speech/                 what a reply sounds like: maths to words, sentences,
                              chunking, and which voice can speak (all pure but
                              segment.ts, which reads the rendered reply)
@@ -403,6 +417,9 @@ src/
     speech/              reading aloud: the one player, its two engines (the
                          browser's voice, hosted audio) and the capped cache,
                          which is its own IndexedDB and never in a backup
+    files/               attachments: one reader for every file (pdf.js, mammoth,
+                         read-excel-file, all loaded on demand), the drill-files
+                         store for originals, and the sweep for unused ones
     ai/
       backends.ts         one adapter per inference provider (+ abort, usage)
       index.ts            resolve() + chat() + card writing / marking / titles.

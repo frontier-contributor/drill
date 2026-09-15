@@ -6,7 +6,7 @@
  * where chat reaches into the drill half of the app and it is worth having
  * that wiring in one readable list rather than scattered through components.
  * ========================================================================== */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import * as chatStore from "@/services/chatStore";
 import * as store from "@/services/store";
 import * as AI from "@/services/ai";
@@ -14,6 +14,10 @@ import * as memoryCapture from "@/services/memoryCapture";
 import { poolFor } from "@/lib/memoryBrief";
 import { parseRememberArg, wrapUpWindow } from "@/lib/rememberArg";
 import type { ChatMessage } from "@/types";
+import type { Attachment } from "@/types/chat";
+import { catalogueEntry } from "@/services/pricing";
+import { canTake, imageWarning, scannedWarning } from "@/lib/modality";
+import { resolveBackend, resolveModel } from "@/lib/resolveSetting";
 import { useChat } from "@/context/ChatContext";
 import { useRoute } from "@/context/RouteContext";
 import { useSettings } from "@/context/SettingsContext";
@@ -39,6 +43,7 @@ import ModelChip from "./ModelChip";
 import ToolsMenu from "./ToolsMenu";
 import ListenBar from "./ListenBar";
 import ErrorGuard from "../ui/ErrorGuard";
+import AttachmentPreview from "./AttachmentPreview";
 
 /* Imported here rather than in main.tsx so both stylesheets ride along with
    the lazy chat chunk instead of blocking the review loop's first paint. */
@@ -51,6 +56,11 @@ import "katex/dist/katex.min.css";
 const MAX_REMEMBER_CHARS = 48_000;
 /** And of any one turn, so a pasted paper does not spend the whole budget. */
 const MAX_REMEMBER_TURN_CHARS = 12_000;
+
+/** A drag carrying files, as opposed to text or a link being dragged about. */
+function carriesFiles(e: DragEvent): boolean {
+  return Array.from(e.dataTransfer?.types || []).includes("Files");
+}
 
 export default function ChatView() {
   const chat = useChat();
@@ -65,6 +75,22 @@ export default function ChatView() {
   const [palette, setPalette] = useState(false);
   const [cardSource, setCardSource] = useState<string | null>(null);
   const [seed, setSeed] = useState<{ text: string; nonce: number } | null>(null);
+  /* Files dropped anywhere on the column — the whole column rather than the
+     text box, because the text box at rest is one line tall and aiming a file
+     at it is a skill. They wait in a queue the composer empties, and a nonce
+     tells it to look; see Composer's `takeDropped` for why not a prop. */
+  const dropQueue = useRef<File[]>([]);
+  const [dropNonce, setDropNonce] = useState(0);
+  const takeDropped = useCallback(() => {
+    const files = dropQueue.current;
+    dropQueue.current = [];
+    return files;
+  }, []);
+  const [dragging, setDragging] = useState(false);
+  /* dragenter and dragleave fire for every child crossed on the way in and
+     out; a count is what tells leaving the column from moving within it. */
+  const dragDepth = useRef(0);
+  const [preview, setPreview] = useState<Attachment | null>(null);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pinnedToBottom = useRef(true);
@@ -263,6 +289,28 @@ export default function ChatView() {
     }
   }, [c, toast, hangReceipt]);
 
+  /* What an attachment's card should warn about, for the model that will
+     actually answer: the conversation's own, inherited through its project,
+     or the one picked on the empty screen. The same lookup the send path
+     makes, so the card cannot promise what the request does not do. */
+  const warnFor = useCallback(
+    (a: Attachment): string | null => {
+      const project = c ? store.get().projects[c.projectId] : undefined;
+      const target = c
+        ? AI.resolve({ backend: resolveBackend(c, project).value, model: resolveModel(c, project).value })
+        : AI.resolve(chat.draftModel ? { model: chat.draftModel } : undefined);
+      const image = canTake(catalogueEntry(target.model)?.inputModalities, "image");
+      if (a.kind === "image") return imageWarning(target.model, image);
+      if (a.kind === "pdf") {
+        const mode = c ? c.mode || "direct" : chat.draftMode;
+        const engine = mode === "direct" ? store.settings().pdfEngine || "local" : "local";
+        return scannedWarning(target.model, image, a.scanned?.length || 0, engine, target.type);
+      }
+      return null;
+    },
+    [c, chat.draftModel, chat.draftMode]
+  );
+
   /* ----------------------------------------------------- slash commands -- */
 
   const commands: SlashCommand[] = useMemo(
@@ -407,7 +455,40 @@ export default function ChatView() {
        none of which agreed with the rest of the app; what is left below is
        only the conversation itself. */
     <Shell current="chat" sidebar={<ChatSidebar onNew={newChat} />} aside={<ChatRail conversation={c} />} asideLabel="Context">
-      <div className="chat-main">
+      <div
+        className="chat-main"
+        onDragEnter={(e) => {
+          if (!carriesFiles(e)) return;
+          e.preventDefault();
+          dragDepth.current++;
+          setDragging(true);
+        }}
+        onDragOver={(e) => {
+          if (carriesFiles(e)) e.preventDefault();
+        }}
+        onDragLeave={(e) => {
+          if (!carriesFiles(e)) return;
+          dragDepth.current = Math.max(0, dragDepth.current - 1);
+          if (!dragDepth.current) setDragging(false);
+        }}
+        onDrop={(e) => {
+          if (!carriesFiles(e)) return;
+          e.preventDefault();
+          dragDepth.current = 0;
+          setDragging(false);
+          if (!readiness.ok) {
+            toast(readiness.why || "Set up a model first");
+            return;
+          }
+          dropQueue.current.push(...Array.from(e.dataTransfer.files));
+          setDropNonce((n) => n + 1);
+        }}
+      >
+        {dragging && (
+          <div className="chat-drop" aria-hidden="true">
+            <span>Drop to attach — pictures, PDFs, Word, Excel, text and code</span>
+          </div>
+        )}
         <div className="chat-head">
           {c ? (
             <>
@@ -480,6 +561,26 @@ export default function ChatView() {
           </div>
         )}
 
+        {c && c.pinnedAttachments.length > 0 && (
+          <div className="ctxbar">
+            <span className="lbl">Pinned</span>
+            {c.pinnedAttachments.map((a) => (
+              <span key={a.id} className="ctxchip pinchip">
+                <button className="pinchip-name" onClick={() => setPreview(a)} title="Preview">
+                  {a.name}
+                </button>
+                <button
+                  onClick={() => chat.update({ pinnedAttachments: c.pinnedAttachments.filter((x) => x.id !== a.id) })}
+                  aria-label={`Unpin ${a.name}`}
+                  title="Unpin — stop sending this with every message"
+                >
+                  <Icon name="close" size={11} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
         <ReadProgress
           scrollRef={scrollRef}
           busy={chat.busy}
@@ -536,6 +637,7 @@ export default function ChatView() {
                     chat.update({});
                   }}
                   onRetry={() => void chat.retry()}
+                  onOpenAttachment={setPreview}
                 />
               ))}
 
@@ -568,6 +670,10 @@ export default function ChatView() {
           tools={<ToolsMenu />}
           trailing={<ModelChip conversation={c} draftModel={chat.draftModel} onDraftModel={chat.setDraftModel} />}
           seed={seed}
+          droppedNonce={dropNonce}
+          takeDropped={takeDropped}
+          warnFor={warnFor}
+          onPreview={setPreview}
           placeholder={readiness.ok ? "Ask anything — / for commands" : readiness.why}
           onSend={(text, attachments) => void chat.send(text, attachments)}
           onStop={chat.stop}
@@ -576,6 +682,7 @@ export default function ChatView() {
 
       {palette && <CommandPalette actions={paletteActions} onClose={() => setPalette(false)} />}
       {cardSource && <CardsModal source={cardSource} onClose={() => setCardSource(null)} />}
+      {preview && <AttachmentPreview a={preview} onClose={() => setPreview(null)} onMakeCards={(t) => setCardSource(t)} />}
     </Shell>
   );
 }

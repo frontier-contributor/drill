@@ -165,6 +165,8 @@ export interface Settings {
    *  store.normSettings fills its fields — the load-time merge is shallow and
    *  would otherwise hand an older database a half-empty object. */
   speech: SpeechSettings;
+  /** Where an attached PDF is read. See PdfEngine. */
+  pdfEngine: PdfEngine;
 }
 
 /* --------------------------------------------------------------- speech -- */
@@ -358,9 +360,25 @@ export interface WireToolCall {
   args: Record<string, unknown>;
 }
 
+/** One piece of a message that is not only words. The text is also kept in
+ *  `content`, so every text-only reader — the run transcript, the token
+ *  estimate, a backend that cannot see — still has it. `data` is base64 with no
+ *  data-URL prefix; each adapter spells the envelope its own way. */
+export type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image"; mime: string; data: string; name: string }
+  | { type: "file"; mime: string; data: string; name: string };
+
+/** Where a PDF is read. `local` is this browser, with pdf.js, and works on every
+ *  backend; the other three are OpenRouter's file parser, and only it has them. */
+export type PdfEngine = "local" | "cloudflare-ai" | "mistral-ocr" | "native";
+
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+  /** Pictures and files sent with this message. Absent on text-only messages,
+   *  which is every message except a user turn with something attached. */
+  parts?: ContentPart[];
   /** Assistant messages that requested tools. Additive: every existing caller
    *  builds `{role, content}` and still typechecks. */
   toolCalls?: WireToolCall[];
@@ -427,6 +445,10 @@ export interface ChatOpts {
    *  services/ai/structured.ts tell "ran out of room" from "said something
    *  unparseable". */
   onFinish?: (info: FinishInfo) => void;
+  /** Which of OpenRouter's parsers reads a PDF sent as a file. Always named
+   *  when a file goes out: left unset, OpenRouter's documented default is its
+   *  paid OCR engine. Ignored by every other backend, which is never sent one. */
+  pdfEngine?: Exclude<PdfEngine, "local">;
 }
 
 /** The reasoning levels this app sends. OpenRouter accepts more; these are the

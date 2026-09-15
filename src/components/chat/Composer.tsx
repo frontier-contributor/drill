@@ -8,13 +8,18 @@
  *
  * "@" is the other half. A slash command *does* something; an "@" points at
  * something you already have — a journal entry, a book on the project shelf,
- * a deck, a card, a memory — and rides along with this one message. It is the
- * file-attach gesture every chat app has, except the things being attached
- * are yours and already in the app, so there is nothing to upload.
+ * a deck, a card, a memory — and rides along with this one message.
+ *
+ * Files are the third way in: pictures, PDFs, Word, Excel, text and code, by
+ * the paperclip, by pasting a screenshot, or by dropping anywhere on the chat
+ * column (ChatView hands those in as `dropped`). Every one goes through
+ * services/files/ingest, which reads it in this browser before anything is
+ * sent — so the card can say what the model will get, and Send waits until
+ * there is something to send.
  *
  * Note the difference from conversation context, which is standing policy
- * attached to every message in the thread. A reference is for the sentence
- * you are writing now.
+ * attached to every message in the thread. A reference or an attachment is for
+ * the sentence you are writing now — unless it is pinned.
  *
  * The composer earns its height. At rest it is one line - the box and Send,
  * nothing else - because on a laptop window this bar was 172px of a 522px
@@ -27,10 +32,13 @@
  * ========================================================================== */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as U from "@/lib/util";
-import { estimateTokens } from "@/lib/tokens";
 import { KIND_LABEL, search, toAttachment, type Reference } from "@/lib/references";
+import { attachmentTokens, fileIdsOf } from "@/lib/files/parts";
+import { ingest } from "@/services/files/ingest";
+import * as filesDb from "@/services/files/db";
 import type { Attachment } from "@/types/chat";
 import Icon from "../ui/Icon";
+import AttachmentCard, { type PendingFile } from "./AttachmentCard";
 
 export interface SlashCommand {
   cmd: string;
@@ -60,13 +68,45 @@ interface Props {
   onStop: () => void;
   /** set to a string to overwrite the draft from outside (follow-up chips) */
   seed?: { text: string; nonce: number } | null;
+  /** Files dropped anywhere on the chat column. `droppedNonce` says new ones
+   *  are waiting and `takeDropped` hands them over exactly once. A prop that
+   *  held the files themselves was read again by the composer that mounts when
+   *  the first message creates a conversation — every dropped file attached a
+   *  second time, and a third under StrictMode — so the files are taken, not
+   *  passed. */
+  droppedNonce?: number;
+  takeDropped?: () => File[];
+  /** What an attachment's card should warn about the model on the other end —
+   *  "cannot see images". Asked of the caller, because the composer knows
+   *  nothing about models. */
+  warnFor?: (a: Attachment) => string | null;
+  onPreview?: (a: Attachment) => void;
 }
 
-const MAX_FILE_BYTES = 400_000;
+/** What the file picker offers. A hint only — services/files/ingest reads the
+ *  bytes and decides for itself. */
+const ACCEPT =
+  "image/*,.pdf,.docx,.xlsx,.xlsm,.csv,.tsv,.txt,.md,.markdown,.tex,.bib,.json,.jsonl,.ipynb,.py,.js,.ts,.tsx,.jsx,.html,.css,.xml,.yml,.yaml,.toml,.r,.sql,.java,.kt,.c,.h,.cpp,.cs,.go,.rs,.rb,.php,.swift,.sh,.log,text/*";
 
-export default function Composer({ disabled, busy, placeholder, commands, references, tools, trailing, onSend, onStop, seed }: Props) {
+export default function Composer({
+  disabled,
+  busy,
+  placeholder,
+  commands,
+  references,
+  tools,
+  trailing,
+  onSend,
+  onStop,
+  seed,
+  droppedNonce,
+  takeDropped,
+  warnFor,
+  onPreview
+}: Props) {
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [pending, setPending] = useState<PendingFile[]>([]);
   const [slashSel, setSlashSel] = useState(0);
   const [refSel, setRefSel] = useState(0);
   /** Where the caret was when the last change happened. The "@" token is
@@ -81,6 +121,18 @@ export default function Composer({ disabled, busy, placeholder, commands, refere
   const [refOff, setRefOff] = useState(false);
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  /** One controller for every file being read in this composer. Aborted when
+   *  the composer goes away — it is keyed on the conversation, so switching
+   *  threads mid-PDF stops reading it — and cleared, so StrictMode's second
+   *  mount starts a fresh one rather than inheriting an aborted signal. */
+  const ingestCtl = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      ingestCtl.current?.abort();
+      ingestCtl.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (seed?.text) {
@@ -88,6 +140,11 @@ export default function Composer({ disabled, busy, placeholder, commands, refere
       ref.current?.focus();
     }
   }, [seed?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const files = takeDropped?.() || [];
+    if (files.length) addFiles(files);
+  }, [droppedNonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Autosize. An empty box is left at its one-row default rather than
      measured: Chrome counts a wrapped *placeholder* in scrollHeight, so on a
@@ -132,6 +189,10 @@ export default function Composer({ disabled, busy, placeholder, commands, refere
 
   useEffect(() => setSlashSel(0), [slashQuery]);
 
+  /** Still reading a file — Send waits, rather than sending a message whose
+   *  attachment arrives a second after it. A failed file does not block. */
+  const reading = pending.some((p) => !p.error);
+
   /** Swap the "@query" token for a readable label and attach the material.
    *  The label stays in the text so the sentence still reads as a sentence
    *  when you look at it later — "compare @[journal: 2026-9-1] with today". */
@@ -162,7 +223,7 @@ export default function Composer({ disabled, busy, placeholder, commands, refere
   }
 
   function submit() {
-    if (busy || disabled) return;
+    if (busy || disabled || reading) return;
     const body = text.trim();
     if (!body && !attachments.length) return;
 
@@ -180,6 +241,7 @@ export default function Composer({ disabled, busy, placeholder, commands, refere
     onSend(body, attachments);
     setText("");
     setAttachments([]);
+    setPending([]);
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -232,26 +294,59 @@ export default function Composer({ disabled, busy, placeholder, commands, refere
     }
   }
 
-  async function addFiles(files: FileList | File[]) {
-    const next: Attachment[] = [];
-    for (const f of Array.from(files)) {
-      if (f.size > MAX_FILE_BYTES) {
-        next.push({
-          id: U.uid("a"),
-          name: f.name + " (too large)",
-          kind: "file",
-          size: f.size,
-          text: `[skipped: ${Math.round(f.size / 1024)}KB exceeds the ${MAX_FILE_BYTES / 1024}KB limit]`
+  function addFiles(list: FileList | File[]) {
+    const incoming = Array.from(list);
+    if (!incoming.length) return;
+    if (!ingestCtl.current) ingestCtl.current = new AbortController();
+    const signal = ingestCtl.current.signal;
+    for (const file of incoming) {
+      const id = U.uid("p");
+      setPending((p) => [...p, { id, name: file.name || "file", label: "Reading" }]);
+      ingest(file, {
+        signal,
+        onProgress: (pr) =>
+          setPending((p) => p.map((x) => (x.id === id ? { ...x, label: pr.label, done: pr.done, total: pr.total } : x)))
+      })
+        .then((a) => {
+          if (signal.aborted) return;
+          setPending((p) => p.filter((x) => x.id !== id));
+          setAttachments((prev) => [...prev, a]);
+        })
+        .catch((e: unknown) => {
+          if (signal.aborted) return;
+          const message = (e as Error)?.message || "This file could not be read.";
+          setPending((p) => p.map((x) => (x.id === id ? { ...x, error: message } : x)));
         });
-        continue;
-      }
-      const text = await f.text().catch(() => "");
-      next.push({ id: U.uid("a"), name: f.name, kind: "file", size: f.size, text });
     }
-    setAttachments((prev) => [...prev, ...next]);
+  }
+
+  /** Removing an attachment that was never sent also removes its kept bytes —
+   *  nothing else will ever point at them. */
+  function removeAttachment(a: Attachment) {
+    setAttachments((p) => p.filter((x) => x.id !== a.id));
+    const ids = fileIdsOf(a);
+    if (ids.length) void filesDb.remove(ids);
+  }
+
+  function togglePin(id: string) {
+    setAttachments((p) => p.map((x) => (x.id === id ? { ...x, pinned: !x.pinned } : x)));
   }
 
   function onPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    /* A screenshot on the clipboard arrives as a file called "image.png", every
+       time — named here so three pasted screenshots are not three identical
+       cards. */
+    const files = Array.from(e.clipboardData.files || []);
+    if (files.length) {
+      e.preventDefault();
+      const stamp = new Date().toTimeString().slice(0, 8).replace(/:/g, "");
+      addFiles(
+        files.map((f, i) =>
+          f.name && f.name !== "image.png" ? f : new File([f], `screenshot-${stamp}${i ? "-" + (i + 1) : ""}.png`, { type: f.type })
+        )
+      );
+      return;
+    }
     const pasted = e.clipboardData.getData("text");
     // A very large paste is a document, not a sentence: file it as an
     // attachment so the composer stays readable.
@@ -264,11 +359,11 @@ export default function Composer({ disabled, busy, placeholder, commands, refere
     }
   }
 
-  const attachedTokens = attachments.reduce((n, a) => n + estimateTokens(a.text), 0);
+  const attachedTokens = attachments.reduce((n, a) => n + attachmentTokens(a), 0);
   /* Focus alone opens the tool row (CSS :focus-within); this keeps it open
      once there is something to send, so it does not shut under your hands
      when you tab away mid-draft. */
-  const armed = !!text || attachments.length > 0;
+  const armed = !!text || attachments.length > 0 || pending.length > 0;
 
   return (
     <div className="composer">
@@ -305,15 +400,24 @@ export default function Composer({ disabled, busy, placeholder, commands, refere
         )}
 
         <div className={"composer-box" + (armed ? " armed" : "")}>
-          {attachments.length > 0 && (
+          {(attachments.length > 0 || pending.length > 0) && (
             <div className="att-row">
               {attachments.map((a) => (
-                <span key={a.id} className="att-chip">
-                  <Icon name="paperclip" size={11} /> {a.name}
-                  <span className="x" onClick={() => setAttachments((p) => p.filter((x) => x.id !== a.id))}>
-                    <Icon name="close" size={11} />
-                  </span>
-                </span>
+                <AttachmentCard
+                  key={a.id}
+                  a={a}
+                  warn={warnFor?.(a) ?? null}
+                  onOpen={onPreview ? () => onPreview(a) : undefined}
+                  onPin={() => togglePin(a.id)}
+                  onRemove={() => removeAttachment(a)}
+                />
+              ))}
+              {pending.map((p) => (
+                <AttachmentCard
+                  key={p.id}
+                  pending={p}
+                  onRemove={p.error ? () => setPending((x) => x.filter((y) => y.id !== p.id)) : undefined}
+                />
               ))}
             </div>
           )}
@@ -336,12 +440,6 @@ export default function Composer({ disabled, busy, placeholder, commands, refere
               onClick={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
               onKeyDown={onKeyDown}
               onPaste={onPaste}
-              onDrop={(e) => {
-                if (e.dataTransfer.files.length) {
-                  e.preventDefault();
-                  void addFiles(e.dataTransfer.files);
-                }
-              }}
             />
             {busy ? (
               <button className="csend stop" onClick={onStop} title="Stop generating" aria-label="Stop generating">
@@ -351,8 +449,8 @@ export default function Composer({ disabled, busy, placeholder, commands, refere
               <button
                 className="csend"
                 onClick={submit}
-                disabled={disabled || (!text.trim() && !attachments.length)}
-                title="Send  (enter)"
+                disabled={disabled || reading || (!text.trim() && !attachments.length)}
+                title={reading ? "Still reading the attached file" : "Send  (enter)"}
                 aria-label="Send"
               >
                 <Icon name="send" size={15} />
@@ -372,8 +470,9 @@ export default function Composer({ disabled, busy, placeholder, commands, refere
               <button
                 className="cbtn ghost attach-btn"
                 onClick={() => fileRef.current?.click()}
-                title="Attach a text file"
-                aria-label="Attach a text file"
+                disabled={disabled}
+                title="Attach files — pictures, PDFs, Word, Excel, text and code"
+                aria-label="Attach files"
               >
                 <Icon name="paperclip" size={13} />
               </button>
@@ -381,10 +480,10 @@ export default function Composer({ disabled, busy, placeholder, commands, refere
                 ref={fileRef}
                 type="file"
                 multiple
-                accept=".txt,.md,.json,.csv,.py,.js,.ts,.tsx,.jsx,.html,.css,.yml,.yaml,.r,.sql,.java,.c,.cpp,.go,.rs,text/*"
-                style={{ display: "none" }}
+                accept={ACCEPT}
+                className="hidden-file"
                 onChange={(e) => {
-                  if (e.target.files) void addFiles(e.target.files);
+                  if (e.target.files) addFiles(e.target.files);
                   e.target.value = "";
                 }}
               />

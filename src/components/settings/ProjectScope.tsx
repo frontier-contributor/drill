@@ -54,16 +54,22 @@ export default function ProjectScope({ projectId: given }: { projectId?: string 
     toast("Added to project knowledge");
   }
 
-  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+  /* The same reader chat uses, for text only: a PDF, a Word document or a
+     spreadsheet becomes knowledge as the text in it. Knowledge rides on every
+     message, so a picture — which would too — is refused with a sentence. */
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     e.target.value = "";
     if (!f) return;
-    const rd = new FileReader();
-    rd.onload = () => {
-      projects.addKnowledge(projectId, f.name, "file", String(rd.result));
-      toast("Added " + f.name);
-    };
-    rd.readAsText(f);
+    toast(`Reading ${f.name}…`, 30_000);
+    try {
+      const { ingest } = await import("@/services/files/ingest");
+      const a = await ingest(f, { purpose: "text" });
+      projects.addKnowledge(projectId, a.name, "file", a.text);
+      toast(`Added ${a.name}${a.truncated ? " (clipped at the limit)" : ""}`);
+    } catch (err) {
+      toast((err as Error).message || `Could not read ${f.name}`, 8000);
+    }
   }
 
   const decks = store.decksOf(projectId);
@@ -206,7 +212,13 @@ export default function ProjectScope({ projectId: given }: { projectId?: string 
             Add a file…
           </button>
         </div>
-        <input ref={fileRef} type="file" accept=".md,.txt,text/plain,text/markdown" className="hidden-file" onChange={onFile} />
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".pdf,.docx,.xlsx,.csv,.tsv,.md,.txt,.json,.tex,text/*"
+          className="hidden-file"
+          onChange={(e) => void onFile(e)}
+        />
       </Section>
 
       {/* The personal space is not meant to own decks and starts with none —

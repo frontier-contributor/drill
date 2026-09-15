@@ -13,6 +13,7 @@
  * "can I lose all this" is a settings question and always was.
  * ========================================================================== */
 import StorageFacts from "./data/StorageFacts";
+import FilesSection from "./data/FilesSection";
 import BackupSection from "./data/BackupSection";
 import TransferSection from "./data/TransferSection";
 import ExamplesSection from "./data/ExamplesSection";
@@ -21,6 +22,7 @@ export default function Data() {
   return (
     <>
       <StorageFacts />
+      <FilesSection />
       <BackupSection />
       <TransferSection />
       <ExamplesSection />

@@ -223,12 +223,17 @@ export interface FullBackup {
   exams: unknown[];
   /** Absent in backups written before the usage ledger existed. */
   usage: unknown[];
+  /** Attached pictures and PDFs, base64 — only when the backup was made with
+   *  them included, and absent in every backup made before files existed. */
+  files?: { id: string; name: string; mime: string; size: number; created: number; data: string }[];
 }
 
 /** What a backup contains, for the confirmation shown before restoring. */
 export interface BackupSummary {
   exportedAt: number;
   dbVersion: number;
+  /** Attached files carried in the backup. */
+  files?: number;
   projects: number;
   decks: number;
   cards: number;

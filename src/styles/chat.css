@@ -813,6 +813,191 @@
   color: var(--red);
 }
 
+/* ------------------------------------------------------ attachment cards -- */
+/* A card rather than a chip: a thumbnail or a type, the name, and one line
+   saying what the model will get — or, in amber, why it will not. */
+.attcard {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  max-width: 100%;
+  min-width: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-2);
+  padding: 3px var(--s-1) 3px 3px;
+  transition: border-color var(--fast), background var(--fast);
+}
+.attcard.pinned {
+  border-color: var(--accent-45);
+}
+.attcard.warn {
+  border-color: var(--amber);
+}
+.attcard.bad {
+  border-color: var(--red);
+}
+.attcard-main {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.attcard-main:disabled {
+  cursor: default;
+}
+.attcard-thumb,
+.attcard-badge {
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  border-radius: var(--r-1);
+}
+.attcard-thumb {
+  object-fit: cover;
+  background: var(--page-2);
+}
+.attcard-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  letter-spacing: var(--track-caps);
+  color: var(--ink-2);
+  background: var(--page-2);
+  border: 1px solid var(--rule-soft);
+}
+.attcard.busy .attcard-badge {
+  color: var(--ink-3);
+  animation: att-pulse 1.4s var(--ease) infinite;
+}
+.attcard.bad .attcard-badge {
+  color: var(--red);
+}
+.attcard-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+.attcard-name,
+.attcard-meta {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 16rem;
+}
+.attcard-name {
+  font-size: var(--t-2xs);
+  color: var(--ink);
+}
+.attcard-meta {
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  color: var(--ink-3);
+}
+.attcard.warn .attcard-meta {
+  color: var(--amber);
+}
+.attcard.bad .attcard-meta {
+  color: var(--red);
+  white-space: normal;
+}
+.attcard-act {
+  background: none;
+  border: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  padding: var(--s-1);
+  display: inline-flex;
+  border-radius: var(--r-1);
+  transition: color var(--fast), background var(--fast);
+}
+.attcard-act:hover {
+  color: var(--ink);
+  background: var(--page-2);
+}
+.attcard-act.on {
+  color: var(--accent);
+}
+@keyframes att-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* Drop a file anywhere on the chat column. The overlay takes no pointer events,
+   so the drop still lands on the column underneath it. */
+.chat-main {
+  position: relative;
+}
+.chat-drop {
+  position: absolute;
+  inset: var(--s-2);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--s-4);
+  border: 2px dashed var(--accent-45);
+  border-radius: var(--r-3);
+  background: var(--accent-10);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: var(--t-md);
+  pointer-events: none;
+}
+
+/* What was attached, and what the model reads of it. */
+.attprev {
+  max-width: 52rem;
+}
+.attprev-img {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  margin: 0 auto var(--s-4);
+  border-radius: var(--r-2);
+}
+.attprev-page {
+  display: block;
+  max-width: 7rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-1);
+  margin-bottom: var(--s-3);
+}
+.attprev-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--mono);
+  font-size: var(--t-2xs);
+  color: var(--ink-2);
+  background: var(--page-2);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-2);
+  padding: var(--s-3);
+  max-height: 50vh;
+  overflow: auto;
+  margin: 0 0 var(--s-4);
+}
+.ctxchip .pinchip-name {
+  opacity: 1;
+  font: inherit;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* turn actions */
 .turn-acts {
   display: flex;
