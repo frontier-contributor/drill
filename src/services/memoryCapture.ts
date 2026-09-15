@@ -106,6 +106,28 @@ export function isEmpty(r: CaptureResult): boolean {
 }
 
 /**
+ * What a save did, in words that match where things went.
+ *
+ * `/remember` used to say "3 to memory" when all three had gone to the tray,
+ * which reads as success and then shows nothing in memory — exactly what
+ * "/remember does not work" looks like from the chair.
+ */
+export function describe(r: CaptureResult): string {
+  const parts: string[] = [];
+  if (r.committed.length) parts.push(`${r.committed.length} saved to memory`);
+  if (r.queued.length) parts.push(`${r.queued.length} waiting in the tray (Settings → Memory)`);
+  let s = parts.length
+    ? parts.join(" · ")
+    : r.skipped.length
+      ? r.skipped.length === 1
+        ? "Already knew that — memory left alone"
+        : "Already knew all of that — memory left alone"
+      : "Nothing to save";
+  if (r.atCap) s += " · global memory is full, worth tidying";
+  return s;
+}
+
+/**
  * Fold a new save into one already recorded on the same turn.
  *
  * `/remember` hangs its result on the last assistant turn, which may already

@@ -14,11 +14,14 @@ import * as CFG from "@/lib/config";
 import * as store from "@/services/store";
 import * as transcript from "@/services/transcript";
 import * as usageLog from "@/services/usageLog";
-import { loadPricing, loadSpeechCatalogue, priceForModel, speechPriceFor } from "@/services/pricing";
+import { catalogueEntry, loadPricing, loadSpeechCatalogue, priceForModel, speechPriceFor } from "@/services/pricing";
 import { costOf } from "@/lib/tokens";
 import { memoryBrief, type BriefOpts } from "@/lib/memoryBrief";
 import { cleanTitle } from "@/lib/title";
+import { planBudget } from "@/lib/budget";
+import { thinkingSupport } from "@/lib/thinking";
 import { BACKENDS, BACKEND_ORDER, isAbort } from "./backends";
+import { makeStructured, type StructuredEnv } from "./structured";
 import type {
   AIContext,
   BackendType,
@@ -149,6 +152,31 @@ export function chat(messages: ChatMessage[], opts: ChatOpts = {}, override?: Ov
       throw err;
     }
   );
+}
+
+/* ------------------------------------------------------- one-shot calls -- */
+
+/** What the budget planner needs to know about the model a call will reach. */
+function describeModel(override?: Override): StructuredEnv {
+  const r = resolve(override);
+  return {
+    backend: r.type,
+    model: r.model,
+    verdict: thinkingSupport(r.model).verdict,
+    maxOutput: catalogueEntry(r.model)?.maxOutput
+  };
+}
+
+/** Every one-shot operation below goes through this rather than calling chat()
+ *  with a fixed max_tokens: sized for the model it reaches, and given one more
+ *  go with more room when the reply was cut off. See services/ai/structured.ts. */
+const structured = makeStructured<Override>(chat, describeModel);
+
+/** The first attempt's room on its own, for the two garnish calls — titles and
+ *  follow-ups — that already fail soft and are not worth a second request. */
+function firstRoom(answerTokens: number, override?: Override): number {
+  const m = describeModel(override);
+  return planBudget({ answerTokens, verdict: m.verdict, backend: m.backend, maxOutput: m.maxOutput, attempt: 1 }).maxTokens;
 }
 
 export function listModels(override?: Override): Promise<string[]> {
@@ -375,11 +403,14 @@ export function generateCards(mode: "topic" | "notes", payload: string, n: numbe
       : "Turn this into " + n + " cards. Keep what is worth remembering, drop the filler.\n\nSOURCE:\n" + payload) +
     (focus ? "\n\nExtra instruction: " + focus : "");
   const sys = withMemory(styleSystem(), payload + " " + (focus || ""));
-  return chat([{ role: "system", content: sys }, { role: "user", content: user }], {
+  return structured({
+    messages: [{ role: "system", content: sys }, { role: "user", content: user }],
+    label: "cards",
+    what: "card writer",
+    answerTokens: 4096,
     temperature: 0.5,
-    maxTokens: 4096,
-    label: "cards"
-  }).then(parseCards);
+    parse: parseCards
+  });
 }
 
 export function splitCard(card: Card, lapses?: number): Promise<Card[]> {
@@ -392,11 +423,14 @@ export function splitCard(card: Card, lapses?: number): Promise<Card[]> {
     "\n\nBACK:\n" +
     card.a;
   const sys = withMemory(styleSystem(), card.q + " " + card.a);
-  return chat([{ role: "system", content: sys }, { role: "user", content: usr }], {
+  return structured({
+    messages: [{ role: "system", content: sys }, { role: "user", content: usr }],
+    label: "split card",
+    what: "card splitter",
+    answerTokens: 3072,
     temperature: 0.4,
-    maxTokens: 3072,
-    label: "split card"
-  }).then(parseCards);
+    parse: parseCards
+  });
 }
 
 /* ------------------------------------------------------------ recall marking */
@@ -453,12 +487,14 @@ export async function markRecall(card: Card, attempt: string, history?: RecallHi
     attempt +
     prior;
   const sys = withMemory(MARK_SYS, U.stripTags(card.q) + " " + U.stripTags(card.a));
-  const out = await chat([{ role: "system", content: sys }, { role: "user", content: usr }], {
+  return structured({
+    messages: [{ role: "system", content: sys }, { role: "user", content: usr }],
+    label: "mark recall",
+    what: "recall marker",
+    answerTokens: 512,
     temperature: 0.1,
-    maxTokens: 512,
-    label: "mark recall"
+    parse: parseMarkResult
   });
-  return parseMarkResult(out);
 }
 
 /* ---------------------------------------------------------------- shared JSON parsing */
@@ -575,21 +611,24 @@ export async function wrapUp(turns: ChatMessage[], alreadyKnown: string[] = []):
     transcript;
 
   const sys = withMemory(WRAPUP_SYS, "", { memories: false });
-  const out = await chat([{ role: "system", content: sys }, { role: "user", content: usr }], {
+  return structured({
+    messages: [{ role: "system", content: sys }, { role: "user", content: usr }],
+    label: "wrap up",
+    what: "memory extraction",
+    answerTokens: 1200,
     temperature: 0.3,
-    maxTokens: 1200,
-    label: "wrap up"
+    parse: (out) => {
+      const j = extractJSON<{ items?: Record<string, unknown>[] }>(out);
+      return (j.items || [])
+        .filter((it) => it && typeof it.text === "string" && it.text.trim())
+        .map((it) => ({
+          scope: (it.scope === "global" ? "global" : "project") as MemoryScope,
+          type: normMemType(it.type),
+          text: String(it.text).trim(),
+          stated: it.stated === true
+        }));
+    }
   });
-
-  const j = extractJSON<{ items?: Record<string, unknown>[] }>(out);
-  return (j.items || [])
-    .filter((it) => it && typeof it.text === "string" && it.text.trim())
-    .map((it) => ({
-      scope: (it.scope === "global" ? "global" : "project") as MemoryScope,
-      type: normMemType(it.type),
-      text: String(it.text).trim(),
-      stated: it.stated === true
-    }));
 }
 
 /* -------------------------------------------------------------- journal -- */
@@ -612,12 +651,14 @@ export async function writeJournal(rawText: string, project: Project): Promise<J
   const usr =
     "PROJECT: " + project.name + (project.goals ? " — goal: " + project.goals : "") + "\n\nTODAY'S RAW LOG:\n" + rawText;
   const sys = withMemory(JOURNAL_SYS, rawText, { goals: false, projectId: project.id });
-  const out = await chat([{ role: "system", content: sys }, { role: "user", content: usr }], {
+  const j = await structured({
+    messages: [{ role: "system", content: sys }, { role: "user", content: usr }],
+    label: "journal",
+    what: "journal writer",
+    answerTokens: 1600,
     temperature: 0.4,
-    maxTokens: 1600,
-    label: "journal"
+    parse: (out) => extractJSON<Partial<JournalSummary> & { resources?: unknown }>(out)
   });
-  const j = extractJSON<Partial<JournalSummary> & { resources?: unknown }>(out);
   const resources = Array.isArray(j.resources)
     ? (j.resources as Record<string, unknown>[])
         .filter((r) => r && (r.label || r.url))
@@ -682,12 +723,14 @@ export async function distill(
     .filter(Boolean)
     .join("\n\n");
   const sys = withMemory(DISTILL_SYS, "", { memories: false, projectId: project.id });
-  const out = await chat([{ role: "system", content: sys }, { role: "user", content: usr }], {
+  const j = await structured({
+    messages: [{ role: "system", content: sys }, { role: "user", content: usr }],
+    label: "distill",
+    what: "distill",
+    answerTokens: 2600,
     temperature: 0.4,
-    maxTokens: 2600,
-    label: "distill"
+    parse: (out) => extractJSON<{ memories?: Record<string, unknown>[]; cards?: Record<string, unknown>[] }>(out)
   });
-  const j = extractJSON<{ memories?: Record<string, unknown>[]; cards?: Record<string, unknown>[] }>(out);
   const memories = (j.memories || [])
     .filter((m) => m && typeof m.text === "string" && m.text.trim())
     .map((m) => ({ type: normMemType(m.type), text: String(m.text).trim() }));
@@ -703,7 +746,8 @@ const ROLLUP_SYS =
   "These are a learner's daily journal entries for this period. Write the period summary: the themes that " +
   "actually recurred, what changed in their understanding, and what is still open. Then propose updates to " +
   "project memory: new entries worth keeping, merges of entries that are now known to be the same thing, and " +
-  "retirements of anything these entries have superseded. Invent nothing not present in the entries.\n\n" +
+  "retirements of anything these entries have superseded. Invent nothing not present in the entries. Propose at " +
+  "most twelve memory changes — the ones that matter most, not every one that is possible.\n\n" +
   "Memories marked [PINNED] are off limits: never merge them, never retire them. Reference only ids that appear " +
   "in the list below — a diff line naming an id that is not there does nothing at all.\n\n" +
   'Reply ONLY with JSON: {"narrative":"...","themes":["..."],"stillOpen":["..."],' +
@@ -754,12 +798,14 @@ export async function rollup(entries: JournalEntry[], project: Project, existing
   ]
     .filter(Boolean)
     .join("\n\n");
-  const out = await chat([{ role: "system", content: ROLLUP_SYS }, { role: "user", content: usr }], {
+  const j = await structured({
+    messages: [{ role: "system", content: ROLLUP_SYS }, { role: "user", content: usr }],
+    label: "rollup",
+    what: "weekly rollup",
+    answerTokens: 2400,
     temperature: 0.4,
-    maxTokens: 2400,
-    label: "rollup"
+    parse: (out) => extractJSON<{ narrative?: string; themes?: unknown; stillOpen?: unknown; diff?: unknown[] }>(out)
   });
-  const j = extractJSON<{ narrative?: string; themes?: unknown; stillOpen?: unknown; diff?: unknown[] }>(out);
   const diff = Array.isArray(j.diff) ? (j.diff.map(normalizeDiffLine).filter((x): x is MemoryDiffLine => !!x)) : [];
   return { narrative: String(j.narrative || "").trim(), themes: strArr(j.themes), stillOpen: strArr(j.stillOpen), diff };
 }
@@ -789,12 +835,14 @@ const CONSOLIDATE_SYS =
 export async function consolidateMemory(memories: Memory[], project: Project): Promise<MemoryDiffLine[]> {
   const shown = [...memories].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, MAX_CONSOLIDATE);
   const usr = "PROJECT: " + project.name + "\n\nMEMORY:\n" + shown.map(memoryLine).join("\n");
-  const out = await chat([{ role: "system", content: CONSOLIDATE_SYS }, { role: "user", content: usr }], {
+  const j = await structured({
+    messages: [{ role: "system", content: CONSOLIDATE_SYS }, { role: "user", content: usr }],
+    label: "consolidate",
+    what: "memory tidy-up",
+    answerTokens: 1600,
     temperature: 0.3,
-    maxTokens: 1600,
-    label: "consolidate"
+    parse: (out) => extractJSON<{ diff?: unknown[] }>(out)
   });
-  const j = extractJSON<{ diff?: unknown[] }>(out);
   return Array.isArray(j.diff) ? j.diff.map(normalizeDiffLine).filter((x): x is MemoryDiffLine => !!x) : [];
 }
 
@@ -840,12 +888,14 @@ export async function generateExam(material: string, level: Difficulty, exclude:
      memory for whatever else happened to ride along in the material, which
      defeats the point of naming a topic at all. */
   const sys = withMemory(EXAM_SYS, t || material);
-  const out = await chat([{ role: "system", content: sys }, { role: "user", content: usr }], {
+  const j = await structured({
+    messages: [{ role: "system", content: sys }, { role: "user", content: usr }],
+    label: "exam generation",
+    what: "exam generator",
+    answerTokens: 3200,
     temperature: 0.5,
-    maxTokens: 3200,
-    label: "exam generation"
+    parse: (out) => extractJSON<Record<string, unknown>[]>(out, "[")
   });
-  const j = extractJSON<Record<string, unknown>[]>(out, "[");
   const out2 = (Array.isArray(j) ? j : []).filter((q) => q && typeof q.prompt === "string" && typeof q.expected === "string");
   if (!out2.length) throw new Error("No well-grounded questions came back. Try a wider scope.");
   return out2.map((q) => ({
@@ -875,12 +925,14 @@ const EXAM_MARK_SYS =
 export async function markExamAnswer(prompt: string, expected: string, attempt: string): Promise<MarkResult> {
   const usr = "QUESTION:\n" + prompt + "\n\nWHAT A CORRECT ANSWER MUST CONTAIN:\n" + expected + "\n\nTHEIR ANSWER:\n" + attempt;
   const sys = withMemory(EXAM_MARK_SYS, prompt + " " + expected);
-  const out = await chat([{ role: "system", content: sys }, { role: "user", content: usr }], {
+  return structured({
+    messages: [{ role: "system", content: sys }, { role: "user", content: usr }],
+    label: "exam grading",
+    what: "exam grader",
+    answerTokens: 512,
     temperature: 0.1,
-    maxTokens: 512,
-    label: "exam grading"
+    parse: parseMarkResult
   });
-  return parseMarkResult(out);
 }
 
 /* ------------------------------------------------------------------ tutor */
@@ -925,7 +977,7 @@ export async function generateTitle(userMsg: string, assistantMsg: string, overr
       },
       { role: "user", content: `USER: ${userMsg.slice(0, 800)}\n\nASSISTANT: ${assistantMsg.slice(0, 800)}` }
     ],
-    { temperature: 0.2, maxTokens: 192, label: "title" },
+    { temperature: 0.2, maxTokens: firstRoom(192, override), label: "title" },
     override
   );
   return cleanTitle(out);
@@ -962,7 +1014,7 @@ export async function suggestFollowups(
         },
         { role: "user", content: tail.map((m) => `${m.role.toUpperCase()}: ${m.content.slice(0, 1200)}`).join("\n\n") }
       ],
-      { temperature: 0.7, maxTokens: 200, signal, label: "followups" },
+      { temperature: 0.7, maxTokens: firstRoom(200, override), signal, label: "followups" },
       override
     );
     const a = out.indexOf("[");

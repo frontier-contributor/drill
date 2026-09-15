@@ -224,4 +224,9 @@ export interface ModelPrice {
    *  known, same convention as `reasoning`; ["text"] means text-only. Read
    *  today, acted on later: nothing in the app sends an attachment yet. */
   inputModalities?: string[];
+  /** The most the model will write in one reply, from the catalogue's
+   *  `top_provider.max_completion_tokens`. Absent means not known — which is
+   *  also how a price cached before the field existed reads. lib/budget.ts
+   *  clamps to it, because a max_tokens above it is refused by some providers. */
+  maxOutput?: number;
 }

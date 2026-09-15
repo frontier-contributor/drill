@@ -33,6 +33,7 @@ export default function JournalRail({ projectId, onOpenDay }: { projectId: strin
   const written = entries.filter((e) => e.summary);
   const undistilled = written.filter((e) => !e.distilled.at);
   const unrolled = journalStore.unrolledEntries(projectId);
+  const weeksWaiting = journalStore.unrolledWeeks(projectId).length;
 
   /* Open threads, newest first and deduplicated — the same question asked on
      three days is one thing you have not resolved, not three. */
@@ -92,7 +93,10 @@ export default function JournalRail({ projectId, onOpenDay }: { projectId: strin
               />
             )}
             {unrolled.length > 0 && (
-              <RailItem mark="→" text={`${unrolled.length} not in a weekly rollup`} />
+              <RailItem
+                mark="→"
+                text={`${unrolled.length} not in a weekly rollup${weeksWaiting > 1 ? ` · ${weeksWaiting} weeks` : ""}`}
+              />
             )}
           </RailList>
         </RailGroup>

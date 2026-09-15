@@ -13,6 +13,7 @@ import { useRoute } from "@/context/RouteContext";
 import { useToast } from "@/context/ToastContext";
 import { today } from "@/lib/util";
 import { parseDayKey } from "@/lib/when";
+import { partLabel } from "@/lib/weeks";
 import Shell from "../Shell";
 import JournalRail from "../rail/JournalRail";
 import CaptureBox from "./CaptureBox";
@@ -57,31 +58,42 @@ export default function JournalView() {
 
   const entry = journalStore.byDay(projectId, day);
   const unrolled = journalStore.unrolledEntries(projectId);
+  const weeks = journalStore.unrolledWeeks(projectId);
+  const nextWeek = weeks[0];
   const rollups = journalStore.listRollups(projectId);
 
+  /* One week per press, oldest first. It used to fold every unrolled entry
+     into one request however many weeks that spanned, which is half of why it
+     kept hitting the token cap. And each week's memory diff is reviewed before
+     the next one is written, so a later week's merges and retirements are
+     proposed against memory as it now stands rather than as it stood before
+     the first diff was accepted. */
   function runRollup() {
-    if (!unrolled.length) {
+    const week = nextWeek;
+    if (!week) {
       toast("Nothing new to roll up");
       return;
     }
     setRollupBusy(true);
     const existingMem = memoryStore.list({ scope: "project", projectId, activeOnly: true });
-    AI.rollup(unrolled, project, existingMem)
+    AI.rollup(week.items, project, existingMem)
       .then((r) => {
+        const label = partLabel(week.label, rollups.map((x) => x.label));
         journalStore.createRollup({
           projectId,
-          from: Math.min(...unrolled.map((e) => e.created)),
-          to: Math.max(...unrolled.map((e) => e.updated)),
-          label: `${unrolled.length} ${unrolled.length === 1 ? "entry" : "entries"}`,
-          entryIds: unrolled.map((e) => e.id),
+          from: week.start,
+          to: week.end,
+          label,
+          entryIds: week.items.map((e) => e.id),
           narrative: r.narrative,
           themes: r.themes,
           stillOpen: r.stillOpen
         });
         setRollupDiff(r.diff);
-        toast("Rollup written");
+        const left = weeks.length - 1;
+        toast(left > 0 ? `${label} rolled up · ${left} more week${left === 1 ? "" : "s"} waiting` : `${label} rolled up`, 5000);
       })
-      .catch((e: Error) => toast(e.message, 5000))
+      .catch((e: Error) => toast(e.message, 9000))
       .finally(() => setRollupBusy(false));
   }
 
@@ -127,8 +139,21 @@ export default function JournalView() {
                 }}
               />
               <div className="btnrow" style={{ marginBottom: 22 }}>
-                <button className="btn sm" disabled={rollupBusy || !unrolled.length} onClick={runRollup}>
-                  {rollupBusy ? "Writing rollup…" : `Weekly rollup (${unrolled.length} new)`}
+                <button
+                  className="btn sm"
+                  disabled={rollupBusy || !nextWeek}
+                  onClick={runRollup}
+                  title={
+                    weeks.length > 1
+                      ? `${weeks.length - 1} more week${weeks.length === 2 ? "" : "s"} waiting after this one`
+                      : undefined
+                  }
+                >
+                  {rollupBusy
+                    ? "Writing rollup…"
+                    : nextWeek
+                      ? `Roll up ${nextWeek.label.replace(/^Week/, "week")} · ${nextWeek.items.length} ${nextWeek.items.length === 1 ? "entry" : "entries"}`
+                      : "Weekly rollup · nothing new"}
                 </button>
               </div>
               {rollups.length > 0 && (

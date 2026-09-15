@@ -12,6 +12,7 @@ import * as store from "@/services/store";
 import * as AI from "@/services/ai";
 import * as memoryCapture from "@/services/memoryCapture";
 import { poolFor } from "@/lib/memoryBrief";
+import { parseRememberArg, wrapUpWindow } from "@/lib/rememberArg";
 import type { ChatMessage } from "@/types";
 import { useChat } from "@/context/ChatContext";
 import { useRoute } from "@/context/RouteContext";
@@ -43,6 +44,13 @@ import ErrorGuard from "../ui/ErrorGuard";
    the lazy chat chunk instead of blocking the review loop's first paint. */
 import "@/styles/chat.css";
 import "katex/dist/katex.min.css";
+
+/** How much of a conversation one bare /remember reads — about twelve thousand
+ *  tokens, well inside any model worth extracting memory with. A longer thread
+ *  is read in more than one pass rather than refused. */
+const MAX_REMEMBER_CHARS = 48_000;
+/** And of any one turn, so a pasted paper does not spend the whole budget. */
+const MAX_REMEMBER_TURN_CHARS = 12_000;
 
 export default function ChatView() {
   const chat = useChat();
@@ -143,59 +151,117 @@ export default function ChatView() {
     toast("Exported");
   }, [c, toast]);
 
+  /** Set while a bare /remember is reading, so a second one cannot start a
+   *  second extraction over the same turns and save everything twice. A ref,
+   *  because the guard has to hold between two presses inside one render. */
+  const remembering = useRef(false);
+
+  /** Hang a save's outcome on the newest reply, so it renders inline the same
+   *  way the natural-language path's receipt does. With no reply to hang it
+   *  on, the toast is the whole receipt. */
+  const hangReceipt = useCallback(
+    (result: memoryCapture.CaptureResult) => {
+      if (!c) return;
+      const target = [...c.turns].reverse().find((t) => t.role === "assistant" && t.variants.length);
+      if (!target) return;
+      const v = target.variants[target.active];
+      v.saved = memoryCapture.merge(v.saved, memoryCapture.summarise(result));
+    },
+    [c]
+  );
+
   /**
-   * The deliberate save. Unlike the natural-language path — which rides along
-   * in a normal reply for free — this is its own extraction pass, so it fires
-   * whether or not the model noticed you asking.
+   * `/remember <fact>` — the learner's own sentence, saved as they wrote it.
    *
-   * Only turns since `rolledUpThrough` are sent, so running it twice does not
-   * re-mine the same conversation.
+   * No request, and no conversation needed: this is the one save that works on
+   * the empty chat screen. It used to discard the sentence and run the
+   * extraction below instead. See lib/rememberArg.ts.
+   */
+  const rememberFact = useCallback(
+    (arg: string) => {
+      const fact = parseRememberArg(arg);
+      if (!fact) {
+        toast("Write the fact after the command — /remember I prefer the intuition before the formula", 6000);
+        return;
+      }
+      const lastTurn = c?.turns[c.turns.length - 1];
+      const result = memoryCapture.capture(
+        [{ ...fact, stated: true }],
+        c ? { conversationId: c.id, turnId: lastTurn?.id || "" } : null
+      );
+      memoryCapture.logToJournal(result, "Saved from chat");
+      if (c) {
+        hangReceipt(result);
+        chatStore.persist(c, true);
+      }
+      toast(memoryCapture.describe(result), 5000);
+    },
+    [c, toast, hangReceipt]
+  );
+
+  /**
+   * Bare `/remember` — the deliberate save. Unlike the natural-language path,
+   * which rides along in a normal reply for free, this is its own extraction
+   * pass, so it fires whether or not the model noticed you asking.
+   *
+   * Reads forward from `rolledUpThrough`, up to a budget, and moves the marker
+   * only as far as it actually read — so running it twice never re-mines a turn
+   * and a long thread is finished in a second pass rather than refused.
    */
   const rememberConversation = useCallback(async () => {
-    if (!c) return;
-    const fresh = c.turns.slice(c.rolledUpThrough || 0);
-    if (!fresh.length) {
+    if (!c || !c.turns.length) {
+      toast("Nothing to read yet. To save one thing directly, write it after the command: /remember …", 6000);
+      return;
+    }
+    if (remembering.current) {
+      toast("Still reading this conversation");
+      return;
+    }
+    const from = Math.min(c.rolledUpThrough || 0, c.turns.length);
+    if (from >= c.turns.length) {
       toast("Nothing new since the last save");
       return;
     }
 
-    toast("Reading the conversation…");
-    try {
-      const msgs = fresh
-        .filter((t) => t.variants.length)
-        .map((t) => ({ role: t.role, content: markdownToText(chatStore.activeContent(t)) }) as ChatMessage);
+    const texts = c.turns.map((t) =>
+      t.variants.length ? markdownToText(chatStore.activeContent(t)).slice(0, MAX_REMEMBER_TURN_CHARS) : ""
+    );
+    const { end } = wrapUpWindow(
+      texts.map((s) => s.length),
+      from,
+      MAX_REMEMBER_CHARS
+    );
+    const msgs = c.turns
+      .slice(from, end)
+      .map((t, i) => ({ role: t.role, content: texts[from + i] }) as ChatMessage)
+      .filter((m) => m.content.trim());
+    const rest = end < c.turns.length ? " · run /remember again for the rest" : "";
 
+    remembering.current = true;
+    toast("Reading the conversation…", 60_000);
+    try {
       const known = poolFor("both", c.projectId).map((m) => m.text);
-      const items = await AI.wrapUp(msgs, known);
+      const items = msgs.length ? await AI.wrapUp(msgs, known) : [];
 
       if (!items.length) {
-        c.rolledUpThrough = c.turns.length;
+        c.rolledUpThrough = end;
         chatStore.persist(c, true);
-        toast("Nothing durable worth keeping — memory left alone");
+        toast("Nothing durable worth keeping — memory left alone" + rest, 5000);
         return;
       }
 
-      const lastTurn = c.turns[c.turns.length - 1];
-      const result = memoryCapture.capture(items, { conversationId: c.id, turnId: lastTurn?.id || "" });
+      const result = memoryCapture.capture(items, { conversationId: c.id, turnId: c.turns[end - 1]?.id || "" });
       memoryCapture.logToJournal(result, "Saved from chat");
-
-      /* Hang the outcome on the last assistant turn so it renders inline, the
-         same as the natural-language path. */
-      const target = [...c.turns].reverse().find((t) => t.role === "assistant" && t.variants.length);
-      if (target) {
-        const v = target.variants[target.active];
-        v.saved = memoryCapture.merge(v.saved, memoryCapture.summarise(result));
-      }
-
-      c.rolledUpThrough = c.turns.length;
+      hangReceipt(result);
+      c.rolledUpThrough = end;
       chatStore.persist(c, true);
-
-      const n = result.committed.length + result.queued.length;
-      toast(n ? `${n} to memory` : "Already knew all of that");
+      toast(memoryCapture.describe(result) + rest, 6000);
     } catch (e) {
-      toast((e as Error).message || "Could not read the conversation");
+      toast((e as Error).message || "Could not read the conversation", 9000);
+    } finally {
+      remembering.current = false;
     }
-  }, [c, toast]);
+  }, [c, toast, hangReceipt]);
 
   /* ----------------------------------------------------- slash commands -- */
 
@@ -298,8 +364,8 @@ export default function ChatView() {
       },
       {
         cmd: "/remember",
-        desc: "Save what this conversation is worth remembering",
-        run: () => void rememberConversation()
+        desc: "Save the fact you write after it — or, alone, what this conversation is worth keeping",
+        run: (arg: string) => (arg.trim() ? rememberFact(arg) : void rememberConversation())
       },
       {
         cmd: "/export",
@@ -312,7 +378,7 @@ export default function ChatView() {
         run: () => settings.open("conversation")
       }
     ],
-    [c, chat, saveNote, exportConversation, toast, settings]
+    [c, chat, saveNote, exportConversation, toast, settings, rememberFact, rememberConversation]
   );
 
   /* --------------------------------------------------- palette actions -- */

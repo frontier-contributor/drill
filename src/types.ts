@@ -415,6 +415,31 @@ export interface ChatOpts {
   /** Tools the model asked for. Called once per reply, before the promise
    *  settles, so a reply that is *only* tool calls still reports them. */
   onToolCalls?: (calls: WireToolCall[]) => void;
+  /** Reasoning, turned down for a one-shot operation that ran out of room —
+   *  lib/budget.ts decides when. Sent by the OpenRouter adapter only, and never
+   *  alongside the Think action, which owns reasoning for chat replies. */
+  reasoning?: { effort: ReasoningEffort };
+  /** Ollama's own thinking switch, for the same purpose and on the same
+   *  evidence. */
+  think?: boolean;
+  /** How the reply ended, reported once before the promise settles: whether
+   *  the token cap stopped it, and whether the model reasoned first. What lets
+   *  services/ai/structured.ts tell "ran out of room" from "said something
+   *  unparseable". */
+  onFinish?: (info: FinishInfo) => void;
+}
+
+/** The reasoning levels this app sends. OpenRouter accepts more; these are the
+ *  ones every reasoning family behind it understands. */
+export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
+
+export interface FinishInfo {
+  /** The provider's finish_reason (Ollama's done_reason), verbatim. */
+  reason?: string;
+  /** The model produced reasoning before, or instead of, its answer. */
+  reasoned: boolean;
+  /** Stopped by the token cap rather than by finishing. */
+  partial: boolean;
 }
 
 /** One source a web-search-backed reply drew on. `start`/`end` are character

@@ -9,6 +9,7 @@
 import * as U from "@/lib/util";
 import { idbAll, idbDelete, idbPut, STORE_JOURNAL, STORE_ROLLUPS } from "./idb";
 import * as persistence from "./persistence";
+import { groupByWeek, type WeekGroup } from "@/lib/weeks";
 import type { JournalEntry, JournalSummary, PeriodRollup, RawLog } from "@/types/journal";
 
 let entries: JournalEntry[] = [];
@@ -72,6 +73,13 @@ export function byDay(projectId: string, day: string): JournalEntry | undefined 
 /** Entries whose narrative has never been folded into a weekly rollup. */
 export function unrolledEntries(projectId: string): JournalEntry[] {
   return listForProject(projectId).filter((e) => !e.rolledUpIn && e.summary);
+}
+
+/** The same entries grouped by the week they belong to, oldest week first.
+ *  One group is what one rollup call is made of — see lib/weeks.ts for why
+ *  that bound exists. */
+export function unrolledWeeks(projectId: string): WeekGroup<JournalEntry>[] {
+  return groupByWeek(unrolledEntries(projectId));
 }
 
 /* -------------------------------------------------------------- mutation */

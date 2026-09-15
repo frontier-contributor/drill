@@ -22,6 +22,7 @@
  * ========================================================================== */
 import { CHAT_ACTIONS, availability, type ChatActionId } from "@/lib/chatActions";
 import { MAX_ATTEMPTS, jitter, planRetry } from "@/lib/retry";
+import { ReplyCutOff } from "@/lib/budget";
 import type {
   AIContext,
   BackendDef,
@@ -48,19 +49,27 @@ export function isAbort(e: unknown): boolean {
  * what comes back is an empty `content` with `finish_reason: "length"` and
  * possibly a full `reasoning` block. Reported as "the model said nothing" it
  * is unfixable; reported as this it takes one settings change.
+ *
+ * The two out-of-room shapes are a ReplyCutOff rather than a plain Error, so
+ * services/ai/structured.ts can give a one-shot operation more room instead of
+ * matching on this wording.
  */
 function emptyReplyError(label: string, finish: string | undefined, reasoning: string): Error {
   if (finish === "length") {
-    return new Error(
+    return new ReplyCutOff(
       label +
         " hit the token cap before writing an answer" +
         (reasoning ? " — it spent the whole budget thinking" : "") +
-        ". Pick a model with reasoning off, or a smaller task."
+        ". Pick a model with reasoning off, or a smaller task.",
+      finish,
+      !!reasoning
     );
   }
   if (reasoning) {
-    return new Error(
-      label + " returned only its reasoning and no answer. This model needs its reasoning output disabled, or a different model."
+    return new ReplyCutOff(
+      label + " returned only its reasoning and no answer. This model needs its reasoning output disabled, or a different model.",
+      finish,
+      true
     );
   }
   return new Error(label + " returned an empty reply" + (finish ? " (finish_reason: " + finish + ")" : "") + ".");
@@ -115,6 +124,19 @@ function applyActions(
     if (!availability(id, can, model).can) continue;
     CHAT_ACTIONS[id]?.apply(body, backend);
   }
+}
+
+/** A one-shot operation's reasoning control, from lib/budget.ts.
+ *
+ *  Never alongside the Think action: that switch is the learner's own word
+ *  about this reply, and a planner turning it down underneath them would be two
+ *  controls fighting over one parameter. OpenRouter and Ollama only — Groq
+ *  refuses a reasoning parameter on a model that has none, and the custom
+ *  backend has no dialect to guess (the same reasoning as lib/chatActions.ts). */
+function applyBudgetControls(body: Record<string, unknown>, opts: ChatOpts, backend: BackendType): void {
+  if (opts.actions?.includes("think")) return;
+  if (backend === "openrouter" && opts.reasoning) body.reasoning = { effort: opts.reasoning.effort };
+  if (backend === "ollama" && opts.think != null) body.think = opts.think;
 }
 
 /** OpenAI-shaped citation annotations, as OpenRouter returns them for a
@@ -451,6 +473,7 @@ function openAICompatible(
          rejected by some gateways and changes behaviour on others, so absent
          has to mean absent. */
       if (opts.tools?.length) body.tools = opts.tools;
+      applyBudgetControls(body, opts, id);
       /* Actions the caller asked for, filtered to what this backend and model
          can actually do. `stream_options: {include_usage:true}` used to be set
          here; OpenRouter deprecated it and returns usage unconditionally. */
@@ -473,21 +496,28 @@ function openAICompatible(
         const u = readOpenAIUsage(j);
         if (u && opts.onUsage) opts.onUsage(u);
         const choice = (j.choices && j.choices[0]) || {};
+        const message = choice.message || {};
         if (opts.onCitations) {
-          const cites = dedupeCitations(readCitations(choice.message));
+          const cites = dedupeCitations(readCitations(message));
           if (cites.length) opts.onCitations(cites);
         }
-        const toolCalls = readToolCalls(choice.message);
+        const toolCalls = readToolCalls(message);
         if (toolCalls.length && opts.onToolCalls) opts.onToolCalls(toolCalls);
-        const text = (choice.message && choice.message.content) || "";
+        const text = message.content || "";
+        const reasoning = String(message.reasoning || message.reasoning_content || "");
+        /* Reasoning shows up in any of three places depending on the model and
+           the provider behind the gateway — plain text, structured details, or
+           only as a count in usage — and each is evidence it happened. */
+        const reasoned =
+          !!reasoning ||
+          (Array.isArray(message.reasoning_details) && message.reasoning_details.length > 0) ||
+          (u?.reasoningTokens || 0) > 0;
+        opts.onFinish?.({ reason: choice.finish_reason, reasoned, partial: choice.finish_reason === "length" });
         /* A reply that is nothing but tool calls has empty content and is
            entirely correct — it is the normal shape of an agent step. Throwing
            "the model said nothing" here is what would break the loop on its
            first useful turn. */
-        if (!text && !toolCalls.length) {
-          const reasoning = String((choice.message && (choice.message.reasoning || choice.message.reasoning_content)) || "");
-          throw emptyReplyError(label, choice.finish_reason, reasoning);
-        }
+        if (!text && !toolCalls.length) throw emptyReplyError(label, choice.finish_reason, reasoned ? reasoning || "yes" : "");
         return text;
       }
       let out = "";
@@ -511,7 +541,7 @@ function openAICompatible(
         const d = choice.delta;
         if (!d) return;
         calls.add(d);
-        if (d.reasoning || d.reasoning_content) reasoned = true;
+        if (d.reasoning || d.reasoning_content || (Array.isArray(d.reasoning_details) && d.reasoning_details.length)) reasoned = true;
         if (d.content) {
           out += d.content;
           delivered = true;
@@ -519,6 +549,8 @@ function openAICompatible(
         }
       });
       if (usage && opts.onUsage) opts.onUsage(usage);
+      if ((usage as TokenUsage | undefined)?.reasoningTokens) reasoned = true;
+      opts.onFinish?.({ reason: finish, reasoned, partial: finish === "length" });
       if (opts.onCitations && cites.length) opts.onCitations(dedupeCitations(cites));
       const streamedCalls = calls.done();
       if (streamedCalls.length && opts.onToolCalls) opts.onToolCalls(streamedCalls);
@@ -735,6 +767,7 @@ export const BACKENDS: Record<BackendType, BackendDef> = {
         options: { temperature: opts.temperature == null ? 0.4 : opts.temperature }
       };
       if (opts.maxTokens) (body.options as Record<string, unknown>).num_predict = opts.maxTokens;
+      applyBudgetControls(body, opts, "ollama");
       applyActions(body, opts.actions, "ollama", ctx.model);
 
       /* Retried like the hosted backends, and not only for symmetry: a local
@@ -767,12 +800,20 @@ export const BACKENDS: Record<BackendType, BackendDef> = {
         const j = await res.json();
         reportOllamaUsage(j);
         const text = (j.message && j.message.content) || j.response || "";
-        if (!text) throw emptyReplyError("Ollama", j.done_reason, String((j.message && j.message.thinking) || ""));
+        const thinking = String((j.message && j.message.thinking) || "");
+        opts.onFinish?.({ reason: j.done_reason, reasoned: !!thinking, partial: j.done_reason === "length" });
+        if (!text) throw emptyReplyError("Ollama", j.done_reason, thinking);
         return text;
       }
       let out = "";
+      let thought = false;
+      let doneReason: string | undefined;
       await readNDJSON(res, (j) => {
-        if (j.done) reportOllamaUsage(j);
+        if (j.done) {
+          reportOllamaUsage(j);
+          doneReason = j.done_reason;
+        }
+        if (j.message && j.message.thinking) thought = true;
         const t = (j.message && j.message.content) || j.response;
         if (t) {
           out += t;
@@ -780,6 +821,10 @@ export const BACKENDS: Record<BackendType, BackendDef> = {
           opts.onToken!(t, out);
         }
       });
+      opts.onFinish?.({ reason: doneReason, reasoned: thought, partial: doneReason === "length" });
+      /* This used to return "" and leave the caller to say "empty reply",
+         which threw away the one fact that explains it. */
+      if (!out) throw emptyReplyError("Ollama", doneReason, thought ? "yes" : "");
       return out;
     },
 

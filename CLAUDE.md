@@ -21,10 +21,10 @@ especially its **Project layout** section. Do not restate it here.
 npm run dev     # vite; usually :5173, falls back to :5174 if taken
 npm run lint    # tsc --noEmit. The only lint there is
 npm test        # tsx --test src/**/*.test.ts
-                # 215 tests: fsrs, cardFormat, memory*, effort, title,
+                # 251 tests: fsrs, cardFormat, memory*, effort, title,
                 # thinking, agent/loop, settings/catalogue, logBudget,
-                # storage, activity, gaps, retry, speech/{words,
-                # availability, player}
+                # storage, activity, gaps, retry, budget, ai/structured,
+                # weeks, rememberArg, speech/{words, availability, player}
 npm run build   # tsc -b && vite build
 ```
 
@@ -178,6 +178,23 @@ everybody until the catalogue lands. Only a catalogue hit produces a "no".
 Ask `availability(id, supports, model)` in `lib/chatActions.ts` — never
 `backend.supports` directly — because the send path filters on the same call
 and the two must not disagree.
+
+**One-shot operations are sized, not capped.** Rollup, journal, distill, exam
+generation and grading, recall marking, card writing and `/remember` each make
+one request and parse the reply, and each used to pass a fixed `max_tokens`
+sized for a model that starts writing at once. A reasoning model spends that on
+its scratchpad and returns nothing with `finish_reason: "length"` — the weekly
+rollup failed that way every single time. They all go through `structured()`
+(`services/ai/structured.ts`) now: `lib/budget.ts` sizes the request from the
+catalogue's `reasoning` and `maxOutput`, and a reply cut off at the cap gets
+exactly one retry with twice the room, on the transcript as "<label> · retry".
+Two rules. **The first try never sends a reasoning control** — on a hybrid model
+such as Claude through OpenRouter that parameter switches thinking *on* — and
+the retry turns reasoning down only when the first reply actually reasoned
+(`ReplyCutOff.reasoned`, `FinishInfo`). A complete reply that will not parse is
+not retried; more room would not change it. Do not add a one-shot call that
+hands `chat()` a bare `maxTokens`. The rollup itself is one week per press
+(`lib/weeks.ts`), which bounds its input by construction.
 
 **Chat retries, but never a stream that has spoken.** `lib/retry.ts` owns the
 policy (retryable statuses, backoff, `Retry-After`); `postWithRetry` in
