@@ -301,6 +301,26 @@ imports and none may reach the review loop's entry chunk. Dropped files are
 remounts when the first message creates a conversation, and a prop holding the
 files attached every one of them again.
 
+**Figures are one catalogue, drawn two ways.** `lib/visuals/catalogue.ts`
+declares every kind — its fence, its Settings row, the line of prompt that
+teaches it, and the stand-in a card writer, a preview or a voice gets instead
+of the picture. Nothing is spelled out twice: `lib/visuals/protocol.ts`
+generates the prompt from it, so no fence name is ever typed into a prompt
+string; `lib/markdown.ts` matches fences against it and leaves a `.vis-slot`
+carrying only an index; and `MessageTurn` portals a `Visual` into each slot
+*once the reply has stopped streaming* — a half-written fence is a parse error,
+not a diagram. The two renderers are a safety argument, not a detail. A diagram
+or an SVG is sanitised and then shown as an `<img>` from a blob, because an SVG
+loaded as an image runs no script and fetches nothing, so a sanitiser miss
+still only draws. A chart has to be live — tooltips, and the slider a function
+plot exists for — so `services/visuals/chart.ts` refuses any spec that reaches
+outside itself (a `data.url`, an image mark) *before* Vega sees it, and also
+hands Vega a loader that says no to every URL: Vega treats a data file it
+cannot load as an empty dataset, so the block alone would draw an empty chart
+and explain nothing. Colours come from the tokens via
+`services/visuals/theme.ts`, which paints each oklch token into a one-pixel
+canvas — neither library can read oklch.
+
 **Reading aloud is one player, two engines, and a cache that is not your
 data.** `services/speech/player.ts` is the singleton the Listen button, the bar
 above the composer and the sentence highlight all read, and it takes its engine

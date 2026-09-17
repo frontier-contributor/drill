@@ -11,8 +11,13 @@
  * answer to that problem is borrowed directly: how long this is, what is in
  * it, and a way to turn straight to the part you wanted.
  * ========================================================================== */
-import { useEffect, useMemo, useRef, useState } from "react";
-import { renderMarkdown, markdownToText } from "@/lib/markdown";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import * as store from "@/services/store";
+import { renderReply, markdownToText } from "@/lib/markdown";
+import { kindsOn } from "@/lib/visuals/catalogue";
+import Visual from "./visuals/Visual";
+import ErrorGuard from "../ui/ErrorGuard";
 import MemorySaved from "./MemorySaved";
 import AgentTrace, { stepsFromTrace } from "./AgentTrace";
 import type { AgentLive } from "@/context/ChatContext";
@@ -53,6 +58,9 @@ interface Props {
   onDelete: () => void;
   onRetry: () => void;
   onOpenAttachment?: (a: Attachment) => void;
+  /** Send the model the reason one of its figures would not draw. An ordinary
+   *  message, so it costs what a message costs and nothing goes out unasked. */
+  onAskFix?: (message: string) => void;
 }
 
 export default function MessageTurn({
@@ -71,7 +79,8 @@ export default function MessageTurn({
   onStar,
   onDelete,
   onRetry,
-  onOpenAttachment
+  onOpenAttachment,
+  onAskFix
 }: Props) {
   const toast = useToast();
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -90,7 +99,25 @@ export default function MessageTurn({
   const content = streaming ? streamingText : chatStore.activeContent(turn);
   const variant = turn.variants[turn.active];
 
-  const html = useMemo(() => (isUser ? "" : renderMarkdown(content)), [content, isUser]);
+  /* Which kinds of figure are switched on. ChatView subscribes to the store,
+     so turning one off redraws every reply on screen. */
+  const kinds = kindsOn(store.settings().visualsOff);
+  const kindsKey = kinds.join(",");
+  const rendered = useMemo(
+    () => (isUser ? { html: "", visuals: [] } : renderReply(content, kinds)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [content, isUser, kindsKey]
+  );
+  const html = rendered.html;
+
+  /* The slots the markdown left for figures, read back off the DOM once it has
+     landed. Never while streaming: the fence is still open, so the block is
+     half written, and half a diagram is an error message. */
+  const [slots, setSlots] = useState<HTMLElement[]>([]);
+  useLayoutEffect(() => {
+    const root = mdRef.current;
+    setSlots(!root || streaming ? [] : Array.from(root.querySelectorAll<HTMLElement>(".vis-slot")));
+  }, [html, streaming]);
 
   /* Read off the rendered HTML rather than the markdown source, so the list
      and the headings it scrolls to are the same query over the same tree and
@@ -308,6 +335,21 @@ export default function MessageTurn({
             />
           ) : null}
           <span className="turn-md" ref={mdRef} dangerouslySetInnerHTML={{ __html: html }} />
+          {slots.map((slot) => {
+            const at = Number(slot.dataset.vis);
+            const block = rendered.visuals[at];
+            if (!block) return null;
+            /* Into the slot, not around it: the figure is a React subtree
+               mounted inside markup React does not own, which is the only way
+               a live chart can sit in the middle of rendered markdown. */
+            return createPortal(
+              <ErrorGuard fallback={<div className="vis-error">This figure could not be shown.</div>}>
+                <Visual block={block} onAskFix={busy ? undefined : onAskFix} onMakeCards={onMakeCards} />
+              </ErrorGuard>,
+              slot,
+              `vis-${at}`
+            );
+          })}
           {streaming && <span className="caret" />}
           {!streaming && variant?.citations?.length ? <Sources citations={variant.citations} /> : null}
           {!streaming && variant?.saved && <MemorySaved saved={variant.saved} />}

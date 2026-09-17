@@ -34,6 +34,12 @@ openrouter.ai.
   Scanned PDF pages are sent as pictures, or read by OpenRouter's parser if you
   choose it in Settings → Chat. Pin a file to keep it on every message in that
   thread; click any card to see exactly what the model was given.
+- **It can draw** — Mermaid diagrams, Vega-Lite charts, function plots with a
+  slider per parameter, and small SVG drawings, written by the model as text
+  and drawn here. No extra request, and it works on every backend including
+  Ollama. Each figure saves as SVG or PNG, opens full screen and can become
+  flashcards; one that will not draw says why and offers to send the error
+  back. Any kind can be switched off in Settings → Chat.
 - **Any reply becomes flashcards** — one click on a message, or select a
   paragraph first. Pick the deck, untick the weak ones, done.
 - **Any reply becomes a note** — straight into the insight log.
@@ -401,6 +407,8 @@ src/
     budget.ts               how many tokens a one-shot operation gets, and the retry
     files/                  attachments, pure: what a file really is, limits, CSV and
                              Word text, and what each attachment sends on each turn
+    visuals/                figures, pure: the catalogue of kinds, the prompt that
+                             teaches them, and the function-plot compiler
     speech/                 what a reply sounds like: maths to words, sentences,
                              chunking, and which voice can speak (all pure but
                              segment.ts, which reads the rendered reply)
@@ -420,6 +428,8 @@ src/
     files/               attachments: one reader for every file (pdf.js, mammoth,
                          read-excel-file, all loaded on demand), the drill-files
                          store for originals, and the sweep for unused ones
+    visuals/             figures: Mermaid and Vega-Lite loaded on first use, the
+                         colours read back from the tokens, and the SVG sanitiser
     ai/
       backends.ts         one adapter per inference provider (+ abort, usage)
       index.ts            resolve() + chat() + card writing / marking / titles.

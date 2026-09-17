@@ -638,6 +638,7 @@ export default function ChatView() {
                   }}
                   onRetry={() => void chat.retry()}
                   onOpenAttachment={setPreview}
+                  onAskFix={(message) => void chat.send(message)}
                 />
               ))}
 

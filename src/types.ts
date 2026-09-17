@@ -8,6 +8,7 @@
  * ========================================================================== */
 import type { Autonomy, Effort, Note, Project } from "@/types/core";
 import type { ChatActionId } from "@/lib/chatActions";
+import type { VisualKind } from "@/lib/visuals/catalogue";
 
 export type { Autonomy, Effort, Note, Project } from "@/types/core";
 export type {
@@ -167,6 +168,10 @@ export interface Settings {
   speech: SpeechSettings;
   /** Where an attached PDF is read. See PdfEngine. */
   pdfEngine: PdfEngine;
+  /** Kinds of figure switched off — see lib/visuals/catalogue.ts. A kind that
+   *  is off is never taught to the model and never drawn: its block shows as
+   *  code, which is what it is. */
+  visualsOff: VisualKind[];
 }
 
 /* --------------------------------------------------------------- speech -- */

@@ -23,6 +23,9 @@ import { useSettings } from "@/context/SettingsContext";
 import SwitchRow from "../../ui/SwitchRow";
 import SelectRow from "../../ui/SelectRow";
 import Section from "../Section";
+import { VISUALS, kindsOn, type VisualKind } from "@/lib/visuals/catalogue";
+import { visualProtocol } from "@/lib/visuals/protocol";
+import { estimateTokens } from "@/lib/tokens";
 import type { Effort, PdfEngine } from "@/types";
 
 /* Each says what it costs. Two of the four spend money, and one of those is
@@ -57,6 +60,10 @@ export default function ChatPrefs() {
   const { open } = useSettings();
   const effort: Effort = s.effort || "medium";
   const engine = PDF_ENGINES.find((e) => e.value === s.pdfEngine) || PDF_ENGINES[0];
+  const off = s.visualsOff || [];
+  const teaching = estimateTokens(visualProtocol(kindsOn(off)));
+  const toggleKind = (kind: VisualKind) =>
+    store.updateSettings({ visualsOff: off.includes(kind) ? off.filter((k) => k !== kind) : [...off, kind] });
 
   return (
     <>
@@ -105,6 +112,18 @@ export default function ChatPrefs() {
           The OpenRouter choices apply when chat is pointed at OpenRouter, in a Direct conversation. Everywhere else — Groq,
           Ollama, a custom server, Agent and Deep — PDFs are read in this browser. Pictures always go to a model that can see
           as themselves; Word, Excel and text files are always read here first.
+        </p>
+      </Section>
+
+      <Section id="chat.figures">
+        {VISUALS.map((v) => (
+          <SwitchRow key={v.kind} title={v.label} sub={v.blurb} on={!off.includes(v.kind)} onToggle={() => toggleKind(v.kind)} />
+        ))}
+        <p className="sset-note">
+          {teaching
+            ? `Teaching these adds about ${teaching} tokens to the instructions on every message.`
+            : "Nothing is taught, so nothing is drawn — a figure block shows as code."}{" "}
+          A figure can be saved as SVG or PNG, and turned into cards like any other part of a reply.
         </p>
       </Section>
     </>

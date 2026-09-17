@@ -16,6 +16,7 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import katex from "katex";
 import hljs from "highlight.js/lib/core";
+import { visualForFence, type VisualBlock, type VisualKind } from "@/lib/visuals/catalogue";
 
 import javascript from "highlight.js/lib/languages/javascript";
 import typescript from "highlight.js/lib/languages/typescript";
@@ -181,10 +182,27 @@ function restoreMath(html: string, hits: MathHit[]): string {
 
 /* ------------------------------------------------------------- renderer -- */
 
+/* Set for the length of one renderReply() call: which kinds of figure to draw,
+   and the blocks found so far. A module-level collector is exact here because
+   marked's renderer is a module-level singleton and parse() is synchronous. */
+let drawing: { kinds: Set<VisualKind>; found: VisualBlock[] } | null = null;
+
 const renderer = new marked.Renderer();
 
 renderer.code = function ({ text, lang }: { text: string; lang?: string }): string {
   const language = (lang || "").trim().split(/\s+/)[0].toLowerCase();
+
+  /* A figure, when this kind is switched on. The block is set aside and an
+     empty slot left in its place for MessageTurn to draw into — only an index
+     goes into the markup, so nothing a model wrote is ever parsed as HTML. */
+  if (drawing) {
+    const def = visualForFence(language);
+    if (def && drawing.kinds.has(def.kind)) {
+      const at = drawing.found.push({ kind: def.kind, lang: language, source: text }) - 1;
+      return `<div class="vis-slot" data-vis="${at}"></div>`;
+    }
+  }
+
   let body: string;
   let shown = language;
   if (language && hljs.getLanguage(language)) {
@@ -238,6 +256,23 @@ export function renderMarkdown(src: string): string {
   const html = marked.parse(text, { async: false }) as string;
   const clean = DOMPurify.sanitize(html, PURIFY_CONFIG) as unknown as string;
   return hits.length ? restoreMath(clean, hits) : clean;
+}
+
+/**
+ * Render a reply, drawing the figures in it.
+ *
+ * The HTML comes back with an empty slot where each figure goes, and the
+ * blocks beside it rather than inside it. `renderMarkdown` is unchanged for
+ * every other caller: there, a fenced block is a code block.
+ */
+export function renderReply(src: string, kinds: readonly VisualKind[]): { html: string; visuals: VisualBlock[] } {
+  if (!src) return { html: "", visuals: [] };
+  drawing = { kinds: new Set(kinds), found: [] };
+  try {
+    return { html: renderMarkdown(src), visuals: drawing.found };
+  } finally {
+    drawing = null;
+  }
 }
 
 /** Re-exported so chat components have one markdown import. Defined in

@@ -207,6 +207,16 @@ export const SECTIONS = sections({
       "screenshots", "vision", "word", "docx", "excel", "xlsx", "csv", "spreadsheet", "mistral", "cloudflare", "parser"
     ]
   },
+  "chat.figures": {
+    cat: "chat",
+    title: "Figures in replies",
+    sub: "Diagrams, charts, function plots and drawings. The model writes them as text and they are drawn here, so they cost no extra request and work on every backend.",
+    finds: [
+      "figures", "diagram", "diagrams", "mermaid", "flowchart", "sequence", "mind map", "charts", "graphs", "plot",
+      "plots", "vega", "vega-lite", "function plot", "sliders", "svg", "drawings", "visuals", "visualisation",
+      "visualization", "pictures"
+    ]
+  },
 
   /* --------------------------------------------------------------- listening -- */
   "listening.voice": {

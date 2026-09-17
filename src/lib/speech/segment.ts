@@ -110,6 +110,16 @@ export function segmentReply(root: Element): ReadSentence[] {
     const el = node as Element;
     const tag = el.tagName.toUpperCase();
 
+    /* A figure is announced and skipped, the way a code block is: reading a
+       diagram's shapes aloud is noise, and the prose beside it carries the
+       point — which the protocol that teaches drawing insists on. */
+    if (el.classList.contains("vis-slot")) {
+      flush();
+      const figure = document.createRange();
+      figure.selectNode(el);
+      out.push({ spoken: "A figure, skipped.", range: figure });
+      return;
+    }
     if (el.classList.contains("codeblock")) {
       flush();
       const range = document.createRange();

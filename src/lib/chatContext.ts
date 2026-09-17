@@ -17,6 +17,8 @@ import * as journalStore from "@/services/journalStore";
 import * as U from "@/lib/util";
 import { retrieve, type RetrievalTrace } from "@/lib/memoryRetrieval";
 import { learnerBlocks, memoryLine, poolFor, wrapLearner } from "@/lib/memoryBrief";
+import { kindsOn } from "@/lib/visuals/catalogue";
+import { visualProtocol } from "@/lib/visuals/protocol";
 import { renderToday } from "@/lib/dayBrief";
 import type { ContextSource } from "@/types/chat";
 import type { Card, Deck, Memory, MemoryScope, SRSState } from "@/types";
@@ -298,11 +300,17 @@ export function buildContext(
      under three caps; everything else about the learner comes from there. */
   const { blocks: learner } = learnerBlocks({ projectId, memories: false });
 
-  if (!blocks.length && !learner.length) return { system: persona + "\n\n" + SAVE_PROTOCOL, memories };
+  /* How to draw, straight after the persona: the front of the system message
+     is where anything that does not change between sends belongs (START-HERE
+     §8's cache discipline). A kind switched off is never taught. */
+  const figures = visualProtocol(kindsOn(store.settings().visualsOff));
+  const head = [persona, figures].filter(Boolean).join("\n\n");
+
+  if (!blocks.length && !learner.length) return { system: head + "\n\n" + SAVE_PROTOCOL, memories };
   const context =
     wrapLearner([...learner, ...blocks]) +
     "Do not mention that you were given it unless they ask what you can see.";
-  const system = (persona ? persona + "\n\n" + context : context) + "\n\n" + SAVE_PROTOCOL;
+  const system = (head ? head + "\n\n" + context : context) + "\n\n" + SAVE_PROTOCOL;
   return { system, memories };
 }
 

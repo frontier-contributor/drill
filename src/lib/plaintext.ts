@@ -6,11 +6,15 @@
  * conversation store and sidebar previews need. Keeping them apart is what
  * stops ~450KB of rendering machinery landing in the review loop's bundle.
  * ========================================================================== */
+import { visualForFence } from "./visuals/catalogue";
 
 /** Strip markdown syntax for previews, search snippets, clipboard text and
  *  anything handed to the card writer. Not a parser — it does not need to be. */
 export function markdownToText(src: string): string {
   return String(src || "")
+    /* A figure is described, not transcribed. The card writer, handed forty
+       lines of Mermaid, writes cards about Mermaid. */
+    .replace(/```([\w-]+)[^\n]*\n([\s\S]*?)```/g, (m, lang: string, body: string) => visualForFence(lang)?.standIn(body) ?? m)
     .replace(/```[\s\S]*?```/g, (m) => m.replace(/```\w*\n?/g, ""))
     .replace(/`([^`]+)`/g, "$1")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")

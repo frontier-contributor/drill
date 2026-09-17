@@ -12,6 +12,7 @@
  * ========================================================================== */
 import * as U from "@/lib/util";
 import * as FSRS from "@/lib/fsrs";
+import { normVisualsOff } from "@/lib/visuals/catalogue";
 import * as CFG from "@/lib/config";
 import * as storage from "./storage";
 import * as logBudget from "@/lib/logBudget";
@@ -84,7 +85,8 @@ export const DEFAULT_SETTINGS: Settings = {
   textScale: 1,
   sessionSize: 10,
   speech: { engine: "", rate: 1, follow: true, cacheMB: 25, voices: {} },
-  pdfEngine: "local"
+  pdfEngine: "local",
+  visualsOff: []
 };
 
 let db: DrillDB = null as unknown as DrillDB;
@@ -182,6 +184,7 @@ function normSettings(st: Settings): Settings {
   if (!st.creds || typeof st.creds !== "object") st.creds = {};
   st.speech = normSpeech(st.speech);
   if (!PDF_ENGINES.includes(st.pdfEngine)) st.pdfEngine = "local";
+  st.visualsOff = normVisualsOff(st.visualsOff);
 
   const successor = RETIRED_BACKENDS[st.backend];
   if (successor) {
