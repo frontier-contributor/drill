@@ -21,8 +21,64 @@ function dropLocalConfig() {
   };
 }
 
+/* Excalidraw's hand-drawn fonts are fetched at runtime, and left to itself it
+ * fetches them from a CDN (esm.run) — a request to a third party every time a
+ * whiteboard opens, from an app that otherwise talks only to the inference
+ * backend you pointed it at. Serving them ourselves is the whole fix:
+ * components/chat/board/excalidraw.ts sets window.EXCALIDRAW_ASSET_PATH to
+ * `${BASE_URL}excalidraw/` before the library loads, and this puts the files
+ * there in both dev and the build.
+ *
+ * Xiaolai is left behind deliberately: it is 13MB of the 14MB, it is the CJK
+ * fallback, and shipping it would triple the size of a deploy to cover text
+ * that falls back to a system font legibly anyway. */
+function excalidrawFonts() {
+  const source = path.resolve(__dirname, "node_modules/@excalidraw/excalidraw/dist/prod/fonts");
+  const skip = /(^|[\\/])Xiaolai([\\/]|$)/;
+
+  function copyInto(from: string, to: string) {
+    for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+      const at = path.join(from, entry.name);
+      if (skip.test(at)) continue;
+      const out = path.join(to, entry.name);
+      if (entry.isDirectory()) {
+        fs.mkdirSync(out, { recursive: true });
+        copyInto(at, out);
+      } else {
+        fs.copyFileSync(at, out);
+      }
+    }
+  }
+
+  return {
+    name: "drill-excalidraw-fonts",
+    configureServer(server: { middlewares: { use: (path: string, fn: unknown) => void } }) {
+      server.middlewares.use(
+        "/excalidraw/fonts",
+        (req: { url?: string }, res: { setHeader: (k: string, v: string) => void; end: (b?: unknown) => void; statusCode: number }, next: () => void) => {
+          /* Only ever a file under the fonts directory: the URL is resolved and
+             then checked to still be inside it, so a "../.." cannot read the
+             machine this is running on. */
+          const rel = decodeURIComponent((req.url || "").split("?")[0]).replace(/^\/+/, "");
+          const file = path.resolve(source, rel);
+          if (!file.startsWith(source) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return next();
+          res.setHeader("Content-Type", file.endsWith(".woff2") ? "font/woff2" : "application/octet-stream");
+          res.setHeader("Cache-Control", "max-age=86400");
+          res.end(fs.readFileSync(file));
+        }
+      );
+    },
+    closeBundle() {
+      if (!fs.existsSync(source)) return;
+      const out = path.resolve(__dirname, "dist/excalidraw/fonts");
+      fs.mkdirSync(out, { recursive: true });
+      copyInto(source, out);
+    }
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), dropLocalConfig()],
+  plugins: [react(), dropLocalConfig(), excalidrawFonts()],
   // Honour PORT so several dev servers can run side by side without each one
   // needing its own hardcoded flag. Falls back to Vite's default.
   server: process.env.PORT ? { port: Number(process.env.PORT) } : undefined,

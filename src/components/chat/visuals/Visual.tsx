@@ -36,6 +36,8 @@ interface Props {
   history?: CanvasVersion[];
   onAskFix?: (message: string) => void;
   onMakeCards?: (text: string) => void;
+  /** Diagrams only: the same shapes, editable, on a whiteboard. */
+  onOpenBoard?: (from: { mermaid: string; title: string }) => void;
 }
 
 function parseSpec(source: string): Record<string, unknown> {
@@ -69,7 +71,7 @@ function saveHref(name: string, href: string): void {
   setTimeout(() => a.remove(), 1500);
 }
 
-export default function Visual({ block, history, onAskFix, onMakeCards }: Props) {
+export default function Visual({ block, history, onAskFix, onMakeCards, onOpenBoard }: Props) {
   useDrillStore();
   const s = store.settings();
   const themeKey = `${s.theme}:${s.accent}`;
@@ -238,6 +240,23 @@ export default function Visual({ block, history, onAskFix, onMakeCards }: Props)
           {drawn && (
             <button type="button" className="tact" onClick={() => void figRef.current?.requestFullscreen?.()}>
               Full screen
+            </button>
+          )}
+          {onOpenBoard && block.kind === "diagram" && (
+            <button
+              type="button"
+              className="tact"
+              onClick={() =>
+                onOpenBoard({
+                  mermaid: block.source,
+                  title: def
+                    .standIn(block.source, block.info)
+                    .replace(/^\[|\]$/g, "")
+                    .replace(/^diagram:\s*/, "")
+                })
+              }
+            >
+              Whiteboard
             </button>
           )}
           {onMakeCards && (

@@ -21,10 +21,11 @@ especially its **Project layout** section. Do not restate it here.
 npm run dev     # vite; usually :5173, falls back to :5174 if taken
 npm run lint    # tsc --noEmit. The only lint there is
 npm test        # tsx --test src/**/*.test.ts
-                # 251 tests: fsrs, cardFormat, memory*, effort, title,
+                # 254 tests: fsrs, cardFormat, memory*, effort, title,
                 # thinking, agent/loop, settings/catalogue, logBudget,
                 # storage, activity, gaps, retry, budget, ai/structured,
-                # weeks, rememberArg, speech/{words, availability, player}
+                # weeks, rememberArg, visuals/srcdoc (the sandbox walls),
+                # speech/{words, availability, player}
 npm run build   # tsc -b && vite build
 ```
 
@@ -348,6 +349,23 @@ source, because marked drops the fence's last newline and the transcript scan
 keeps it. And `collapseCanvases` leaves only the newest of each in the history
 that is replayed, since a fifth revision would otherwise pay to resend the
 first four.
+
+**The whiteboard is Excalidraw, and two of its defaults are switched off.**
+It is loaded on demand through `services/boards/library.ts`, which sets
+`window.EXCALIDRAW_ASSET_PATH` **before** the import — left alone the library
+fetches its hand-drawn fonts from a CDN the moment a board opens, so the
+`drill-excalidraw-fonts` plugin in `vite.config.ts` serves and copies them
+instead (all but Xiaolai, which is 13MB of the 14MB and is the CJK fallback).
+`validateEmbeddable={false}` and `onLinkOpen` is intercepted: a board can be
+written by a model, and an embedded frame or a clickable link you did not type
+is not something a drawing surface should produce on its own. Everything
+arriving from anywhere but the person drawing goes through `boards.safeScene`,
+which drops element links and any image that is not already a data: URL. A
+board saves itself on a timer through the write guard — nothing about drawing
+says "now save" — and lives in the `boards` store of `drill-files`, not in the
+conversation, which is rewritten whole on every message. **Sending a board to
+chat sends two things**: the PNG, and `lib/visuals/boardText.ts`'s reading of
+it ("forward → loss"), so the question works on a model that cannot see.
 
 **Reading aloud is one player, two engines, and a cache that is not your
 data.** `services/speech/player.ts` is the singleton the Listen button, the bar

@@ -2858,3 +2858,45 @@
 .vis:fullscreen .vis-canvas {
   height: calc(100vh - 3rem) !important;
 }
+
+/* ---------------------------------------------------------- whiteboard -- */
+/* A board wants the whole sheet: it is a canvas with its own toolbars, and a
+   drawing surface the size of a dialog is not one you can think on. */
+.board-sheet {
+  max-width: none;
+  width: 96vw;
+  height: 92vh;
+  max-height: none;
+}
+.board-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--r-1);
+  padding: var(--s-1) var(--s-2);
+  font: inherit;
+  font-size: var(--t-4);
+  font-weight: 600;
+  color: var(--ink);
+}
+.board-title:hover {
+  border-color: var(--rule-soft);
+}
+.board-title:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.board-acts {
+  display: flex;
+  gap: var(--s-2);
+  flex: 0 0 auto;
+}
+.board-surface {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.board-surface .excalidraw {
+  --zIndex-layerUI: 4;
+}

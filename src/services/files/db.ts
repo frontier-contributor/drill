@@ -11,12 +11,21 @@
  * The conversation keeps an attachment's text, thumbnail and id; this keeps the
  * original. Nothing counts references — services/files/sweep.ts reads every
  * conversation to decide what is still in use.
+ *
+ * Whiteboards live here too, in a second store. A board is the same kind of
+ * thing by every measure that decided where files go: it is work you made, it
+ * is far too big for localStorage, and it is rewritten far too often to sit
+ * inside the conversation record, which is serialised whole on every message.
+ * One database means one version line to reason about rather than two.
  * ========================================================================== */
 import * as persistence from "@/services/persistence";
 
 const DB_NAME = "drill-files";
-const DB_VERSION = 1;
+/* 2 added the boards store. A bump blocks while another tab holds the old
+   version open, which is why this database is small and rarely changed. */
+const DB_VERSION = 2;
 const BLOBS = "blobs";
+const BOARDS = "boards";
 
 export interface StoredFile {
   id: string;
@@ -42,6 +51,7 @@ function open(): Promise<IDBDatabase> {
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(BLOBS)) db.createObjectStore(BLOBS, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(BOARDS)) db.createObjectStore(BOARDS, { keyPath: "id" });
     };
     req.onsuccess = () => {
       const db = req.result;
@@ -140,6 +150,89 @@ export async function replaceAll(files: StoredFile[]): Promise<void> {
       const store = tx.objectStore(BLOBS);
       store.clear();
       for (const f of files) store.put(f);
+      await committed(tx);
+    })()
+  );
+}
+
+/* ------------------------------------------------------------------ boards -- */
+
+/** A whiteboard: Excalidraw's own scene, plus what it takes to show it in a
+ *  list. `elements` and `files` are whatever the library handed over — this
+ *  module does not interpret either, it keeps them. */
+export interface StoredBoard {
+  id: string;
+  title: string;
+  projectId: string;
+  /** The conversation it was opened from, when it was opened from one. */
+  conversationId?: string;
+  created: number;
+  updated: number;
+  elements: unknown[];
+  /** Images pasted into the board, in Excalidraw's own BinaryFiles shape. */
+  files?: Record<string, unknown>;
+  /** Only the parts of the app state worth keeping: a scroll position and a
+   *  background, never the whole thing, which carries pointers and cursors. */
+  view?: Record<string, unknown>;
+}
+
+export async function putBoard(board: StoredBoard): Promise<boolean> {
+  const ok = await persistence.guard(
+    "whiteboard",
+    (async () => {
+      const db = await open();
+      const tx = db.transaction(BOARDS, "readwrite");
+      tx.objectStore(BOARDS).put(board);
+      await committed(tx);
+      return true as const;
+    })()
+  );
+  return ok === true;
+}
+
+export async function getBoard(id: string): Promise<StoredBoard | undefined> {
+  try {
+    const db = await open();
+    return await result<StoredBoard | undefined>(db.transaction(BOARDS, "readonly").objectStore(BOARDS).get(id));
+  } catch {
+    return undefined;
+  }
+}
+
+export async function listBoards(): Promise<StoredBoard[]> {
+  try {
+    const db = await open();
+    const all = await result<StoredBoard[]>(db.transaction(BOARDS, "readonly").objectStore(BOARDS).getAll());
+    return all.sort((a, b) => b.updated - a.updated);
+  } catch {
+    return [];
+  }
+}
+
+export async function removeBoards(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  await persistence.guard(
+    "whiteboard",
+    (async () => {
+      const db = await open();
+      const tx = db.transaction(BOARDS, "readwrite");
+      const store = tx.objectStore(BOARDS);
+      for (const id of ids) store.delete(id);
+      await committed(tx);
+    })()
+  );
+}
+
+/** For restoring a backup that carries boards. */
+export async function replaceAllBoards(boards: StoredBoard[]): Promise<void> {
+  await persistence.guard(
+    "whiteboard",
+    (async () => {
+      const db = await open();
+      const tx = db.transaction(BOARDS, "readwrite");
+      const store = tx.objectStore(BOARDS);
+      store.clear();
+      for (const b of boards) store.put(b);
       await committed(tx);
     })()
   );

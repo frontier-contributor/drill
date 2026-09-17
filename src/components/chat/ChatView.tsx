@@ -6,13 +6,17 @@
  * where chat reaches into the drill half of the app and it is worth having
  * that wiring in one readable list rather than scattered through components.
  * ========================================================================== */
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import * as chatStore from "@/services/chatStore";
 import * as store from "@/services/store";
 import * as AI from "@/services/ai";
 import * as memoryCapture from "@/services/memoryCapture";
+import * as memoryStore from "@/services/memoryStore";
+import * as boards from "@/services/boards";
 import { poolFor } from "@/lib/memoryBrief";
 import { parseRememberArg, wrapUpWindow } from "@/lib/rememberArg";
+import { conceptMap, mappable } from "@/lib/visuals/conceptMap";
+import { gapsFrom } from "@/lib/gaps";
 import type { ChatMessage } from "@/types";
 import type { Attachment } from "@/types/chat";
 import { catalogueEntry } from "@/services/pricing";
@@ -44,6 +48,10 @@ import ToolsMenu from "./ToolsMenu";
 import ListenBar from "./ListenBar";
 import ErrorGuard from "../ui/ErrorGuard";
 import AttachmentPreview from "./AttachmentPreview";
+
+/* Excalidraw and its stylesheet are about half a megabyte for a surface most
+   sessions never open, so the whiteboard arrives only when one is asked for. */
+const BoardSheet = lazy(() => import("./board/BoardSheet"));
 
 /* Imported here rather than in main.tsx so both stylesheets ride along with
    the lazy chat chunk instead of blocking the review loop's first paint. */
@@ -91,6 +99,7 @@ export default function ChatView() {
      out; a count is what tells leaving the column from moving within it. */
   const dragDepth = useRef(0);
   const [preview, setPreview] = useState<Attachment | null>(null);
+  const [board, setBoard] = useState<boards.StoredBoard | null>(null);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pinnedToBottom = useRef(true);
@@ -311,6 +320,31 @@ export default function ChatView() {
     [c, chat.draftModel, chat.draftMode]
   );
 
+  /* --------------------------------------------------------- whiteboard -- */
+
+  /** Open a board: empty, or with a diagram from a reply converted into shapes
+   *  you can move. The conversion is the library's own, so a diagram type it
+   *  cannot lay out comes in as a picture rather than failing. */
+  const openBoard = useCallback(
+    async (from?: { mermaid?: string; title?: string }) => {
+      const projectId = store.get().activeProjectId;
+      try {
+        const scene = from?.mermaid ? await boards.fromMermaid(from.mermaid) : undefined;
+        const made = boards.newBoard({
+          projectId,
+          conversationId: c?.id,
+          title: from?.title || "Whiteboard",
+          scene
+        });
+        await boards.save(made);
+        setBoard(made);
+      } catch (e) {
+        toast(`The whiteboard could not open — ${String((e as Error)?.message || e)}`, 8000);
+      }
+    },
+    [c, toast]
+  );
+
   /* ----------------------------------------------------- slash commands -- */
 
   const commands: SlashCommand[] = useMemo(
@@ -416,6 +450,54 @@ export default function ChatView() {
         run: (arg: string) => (arg.trim() ? rememberFact(arg) : void rememberConversation())
       },
       {
+        cmd: "/board",
+        desc: "Open a whiteboard you can draw on, and send back",
+        run: (arg: string) => void openBoard(arg.trim() ? { title: arg.trim().slice(0, 60) } : undefined)
+      },
+      {
+        cmd: "/map",
+        desc: "A mind map of what this project knows and keeps getting wrong",
+        run: () => {
+          /* Built here from memories and the review log — no request, so this
+             works with no key at all. It lands as a reply so it is drawn by
+             the figure renderer, can be opened in the whiteboard, and stays in
+             the conversation as something to talk about. */
+          const projectId = store.get().activeProjectId;
+          const project = store.get().projects[projectId];
+          const topics = memoryStore.topics({ projectId }).slice(0, 8);
+          const input = {
+            project: project?.name || "This project",
+            topics: topics.map((t) => ({
+              topic: t.topic,
+              items: memoryStore
+                .list({ projectId, activeOnly: true })
+                .filter((m) => m.topic === t.topic)
+                .slice(0, 6)
+                .map((m) => m.text)
+            })),
+            loose: memoryStore
+              .list({ projectId, activeOnly: true })
+              .filter((m) => !m.topic)
+              .slice(0, 6)
+              .map((m) => m.text),
+            gaps: gapsFrom(store.logOf(store.decksOf(projectId)), { limit: 6 }).map((g) => g.text)
+          };
+          if (!mappable(input)) {
+            toast("Nothing to map yet — memories and review history are what it draws");
+            return;
+          }
+          const body = `Here is what this project holds so far.
+
+\`\`\`mermaid
+${conceptMap(input)}
+\`\`\`
+
+It is built from your memories and what the review loop says you keep getting wrong, so nothing was asked of a model.`;
+          const target = c || chat.newConversation({ title: "Concept map" });
+          if (target) chatStore.addTurn(target, chatStore.makeTurn("assistant", body));
+        }
+      },
+      {
         cmd: "/export",
         desc: "Download this conversation as markdown",
         run: exportConversation
@@ -426,7 +508,7 @@ export default function ChatView() {
         run: () => settings.open("conversation")
       }
     ],
-    [c, chat, saveNote, exportConversation, toast, settings, rememberFact, rememberConversation]
+    [c, chat, saveNote, exportConversation, toast, settings, rememberFact, rememberConversation, openBoard]
   );
 
   /* --------------------------------------------------- palette actions -- */
@@ -639,6 +721,7 @@ export default function ChatView() {
                   onRetry={() => void chat.retry()}
                   onOpenAttachment={setPreview}
                   onAskFix={(message) => void chat.send(message)}
+                  onOpenBoard={(from) => void openBoard(from)}
                 />
               ))}
 
@@ -684,6 +767,17 @@ export default function ChatView() {
       {palette && <CommandPalette actions={paletteActions} onClose={() => setPalette(false)} />}
       {cardSource && <CardsModal source={cardSource} onClose={() => setCardSource(null)} />}
       {preview && <AttachmentPreview a={preview} onClose={() => setPreview(null)} onMakeCards={(t) => setCardSource(t)} />}
+      {board && (
+        <ErrorGuard>
+          <Suspense fallback={<div className="sheet" />}>
+            <BoardSheet
+              board={board}
+              onSend={(text, attachments) => void chat.send(text, attachments)}
+              onClose={() => setBoard(null)}
+            />
+          </Suspense>
+        </ErrorGuard>
+      )}
     </Shell>
   );
 }

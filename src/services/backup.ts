@@ -80,6 +80,7 @@ export async function collect(opts: CollectOptions = {}): Promise<FullBackup> {
     rollups,
     exams,
     usage,
+    boards: await filesDb.listBoards(),
     ...(opts.includeFiles ? { files: await collectFiles() } : {})
   };
 }
@@ -146,7 +147,8 @@ export function parse(text: string): FullBackup {
     rollups: Array.isArray(b.rollups) ? b.rollups : [],
     exams: Array.isArray(b.exams) ? b.exams : [],
     usage: Array.isArray(b.usage) ? b.usage : [],
-    files: Array.isArray(b.files) ? b.files : undefined
+    files: Array.isArray(b.files) ? b.files : undefined,
+    boards: Array.isArray(b.boards) ? b.boards : []
   };
 }
 
@@ -217,6 +219,10 @@ export async function restoreEverything(b: FullBackup): Promise<BackupSummary> {
       b.files.map((f) => ({ id: f.id, name: f.name, mime: f.mime, size: f.size, created: f.created, blob: base64ToBlob(f.data, f.mime) }))
     );
   }
+  /* Boards, unlike files, are replaced whenever the backup carries the field
+     at all — including empty, which is what "this browser had no boards when
+     I exported" means. A backup from before boards leaves them alone. */
+  if (Array.isArray(b.boards)) await filesDb.replaceAllBoards(b.boards as never);
   await Promise.all([
     chatStore.rebuildIndex(),
     memoryStore.reload(),

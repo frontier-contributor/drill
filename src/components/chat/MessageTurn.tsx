@@ -59,6 +59,8 @@ interface Props {
   onDelete: () => void;
   onRetry: () => void;
   onOpenAttachment?: (a: Attachment) => void;
+  /** Hands a diagram to the whiteboard, where it becomes shapes you can move. */
+  onOpenBoard?: (from: { mermaid: string; title: string }) => void;
   /** Send the model the reason one of its figures would not draw. An ordinary
    *  message, so it costs what a message costs and nothing goes out unasked. */
   onAskFix?: (message: string) => void;
@@ -81,6 +83,7 @@ export default function MessageTurn({
   onDelete,
   onRetry,
   onOpenAttachment,
+  onOpenBoard,
   onAskFix
 }: Props) {
   const toast = useToast();
@@ -362,6 +365,7 @@ export default function MessageTurn({
                   history={block.kind === "canvas" ? canvases?.get(canvasId(block.info)) : undefined}
                   onAskFix={busy ? undefined : onAskFix}
                   onMakeCards={onMakeCards}
+                  onOpenBoard={onOpenBoard}
                 />
               </ErrorGuard>,
               slot,

@@ -136,7 +136,9 @@ interface ChatState {
   update: (patch: Partial<Conversation>) => void;
   setContext: (sources: ContextSource[]) => void;
   clearError: () => void;
-  newConversation: (opts?: chatStore.CreateOpts, firstMessage?: string) => void;
+  /** Returns what it made, so a caller that writes into a brand-new thread
+   *  (/map draws its mind map into one) does not have to wait for the route. */
+  newConversation: (opts?: chatStore.CreateOpts, firstMessage?: string) => Conversation;
   /** The model chosen on the empty screen, before a conversation exists to
    *  pin it to. Applied when the first message lazily creates one. */
   draftModel: string;
@@ -798,6 +800,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           void run(c, assistant, c.turns.length - 2);
         }, 0);
       }
+      return c;
     },
     [openChat, run, withDrafts]
   );

@@ -48,6 +48,16 @@ openrouter.ai.
   back through them, restart it, or save it as an HTML file you can open
   anywhere. Only the newest version is sent back to the model, so a canvas you
   have rewritten five times does not cost five canvases on every message.
+- **A whiteboard, both ways** — `/board` opens one to draw on, and any diagram
+  in a reply opens as shapes you can move rather than a picture you cannot.
+  Send it back and the model gets two things: the picture, and the board read
+  out as "forward → loss", so "what is wrong with my diagram" works on a model
+  that cannot see. Its fonts are served from this app, so opening one makes no
+  request to anybody.
+- **`/map`** — a mind map of what the project holds: the subjects your memories
+  are filed under, and what the review loop says you keep getting wrong. Built
+  here from what is already known, so it costs nothing and works with no key at
+  all — and it opens in the whiteboard.
 - **Any reply becomes flashcards** — one click on a message, or select a
   paragraph first. Pick the deck, untick the weak ones, done.
 - **Any reply becomes a note** — straight into the insight log.
@@ -417,7 +427,8 @@ src/
                              Word text, and what each attachment sends on each turn
     visuals/                figures, pure: the catalogue of kinds, the prompt that
                              teaches them, the function-plot compiler, the page a
-                             canvas runs in and the canvas versions in a thread
+                             canvas runs in, the canvas versions in a thread, a
+                             whiteboard read out as text, and the concept map
     speech/                 what a reply sounds like: maths to words, sentences,
                              chunking, and which voice can speak (all pure but
                              segment.ts, which reads the rendered reply)
@@ -439,6 +450,9 @@ src/
                          store for originals, and the sweep for unused ones
     visuals/             figures: Mermaid and Vega-Lite loaded on first use, the
                          colours read back from the tokens, and the SVG sanitiser
+    boards/              whiteboards: Excalidraw loaded on demand with its fonts
+                         served from here, and what a board is made from and
+                         turned into
     ai/
       backends.ts         one adapter per inference provider (+ abort, usage)
       index.ts            resolve() + chat() + card writing / marking / titles.

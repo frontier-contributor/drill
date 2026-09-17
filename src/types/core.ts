@@ -226,6 +226,9 @@ export interface FullBackup {
   /** Attached pictures and PDFs, base64 — only when the backup was made with
    *  them included, and absent in every backup made before files existed. */
   files?: { id: string; name: string; mime: string; size: number; created: number; data: string }[];
+  /** Whiteboards. JSON already, so unlike files they cost nothing to carry and
+   *  ride in every backup. Absent in backups made before boards existed. */
+  boards?: unknown[];
 }
 
 /** What a backup contains, for the confirmation shown before restoring. */
