@@ -198,7 +198,7 @@ renderer.code = function ({ text, lang }: { text: string; lang?: string }): stri
   if (drawing) {
     const def = visualForFence(language);
     if (def && drawing.kinds.has(def.kind)) {
-      const at = drawing.found.push({ kind: def.kind, lang: language, source: text }) - 1;
+      const at = drawing.found.push({ kind: def.kind, lang: language, info: (lang || "").trim(), source: text }) - 1;
       return `<div class="vis-slot" data-vis="${at}"></div>`;
     }
   }

@@ -321,6 +321,34 @@ and explain nothing. Colours come from the tokens via
 `services/visuals/theme.ts`, which paints each oklch token into a one-pixel
 canvas — neither library can read oklch.
 
+**A canvas is code the model wrote, and it is run. Two walls, both in
+`lib/visuals/srcdoc.ts`.** The frame is `sandbox="allow-scripts"` and nothing
+else: without `allow-same-origin` it has an opaque origin, so it cannot read
+this origin's `localStorage` — **where the API key lives** — its IndexedDB, its
+cookies or its DOM. **Never add `allow-same-origin`**; with it the second wall
+is the only one left, and `srcdoc.test.ts` fails the build if either goes. The
+second is the policy inside the document, `connect-src 'none'` and
+`default-src 'none'`, so a canvas can draw what it was written with but cannot
+fetch anything or send anywhere — which is also why the protocol tells the
+model up front that there is no CDN and no web font. The bridge **talks and is
+never talked to**: it posts its height and what it threw, and `CanvasView`
+reads a message only after `event.source === iframe.contentWindow`. It measures
+the *body*, never `document.documentElement`, whose `scrollHeight` is at least
+the frame's own viewport — ask the root element how tall the content is and a
+frame answers "as tall as I already am", so a canvas can grow and never shrink.
+
+**A canvas is not stored anywhere; it is the fenced block that wrote it.**
+Branching, regenerating, export, backup and restore therefore carry it with no
+code of their own, and a rewrite is simply another block with the same title,
+so the versions are the blocks in order (`lib/visuals/artifacts.ts`, derived —
+§2.6). Two rules fall out. A figure opens on **the version its own reply
+wrote**, not the newest, or a thread that revised a canvas three times draws
+the same picture under three different explanations — matched on the trimmed
+source, because marked drops the fence's last newline and the transcript scan
+keeps it. And `collapseCanvases` leaves only the newest of each in the history
+that is replayed, since a fifth revision would otherwise pay to resend the
+first four.
+
 **Reading aloud is one player, two engines, and a cache that is not your
 data.** `services/speech/player.ts` is the singleton the Listen button, the bar
 above the composer and the sentence highlight all read, and it takes its engine

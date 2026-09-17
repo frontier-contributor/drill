@@ -123,7 +123,8 @@ export default function ChatPrefs() {
           {teaching
             ? `Teaching these adds about ${teaching} tokens to the instructions on every message.`
             : "Nothing is taught, so nothing is drawn — a figure block shows as code."}{" "}
-          A figure can be saved as SVG or PNG, and turned into cards like any other part of a reply.
+          A figure can be saved — SVG or PNG for the drawn ones, an HTML file for a canvas — and turned into cards like any
+          other part of a reply. A canvas runs with no network at all, so nothing it was written with can leave this browser.
         </p>
       </Section>
     </>

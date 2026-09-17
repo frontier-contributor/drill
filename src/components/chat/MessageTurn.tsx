@@ -16,6 +16,7 @@ import { createPortal } from "react-dom";
 import * as store from "@/services/store";
 import { renderReply, markdownToText } from "@/lib/markdown";
 import { kindsOn } from "@/lib/visuals/catalogue";
+import { canvasId, canvasVersions } from "@/lib/visuals/artifacts";
 import Visual from "./visuals/Visual";
 import ErrorGuard from "../ui/ErrorGuard";
 import MemorySaved from "./MemorySaved";
@@ -109,6 +110,18 @@ export default function MessageTurn({
     [content, isUser, kindsKey]
   );
   const html = rendered.html;
+
+  /* Every version of every canvas in the thread, so one shown in this reply
+     can offer the ones written before it. Derived from the transcript, which
+     is where a canvas lives; only worked out when this reply has one. */
+  const canvases = useMemo(
+    () =>
+      rendered.visuals.some((v) => v.kind === "canvas")
+        ? canvasVersions(conversation.turns.map((t) => t.variants[t.active]?.content || ""))
+        : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rendered, conversation.turns.length]
+  );
 
   /* The slots the markdown left for figures, read back off the DOM once it has
      landed. Never while streaming: the fence is still open, so the block is
@@ -344,7 +357,12 @@ export default function MessageTurn({
                a live chart can sit in the middle of rendered markdown. */
             return createPortal(
               <ErrorGuard fallback={<div className="vis-error">This figure could not be shown.</div>}>
-                <Visual block={block} onAskFix={busy ? undefined : onAskFix} onMakeCards={onMakeCards} />
+                <Visual
+                  block={block}
+                  history={block.kind === "canvas" ? canvases?.get(canvasId(block.info)) : undefined}
+                  onAskFix={busy ? undefined : onAskFix}
+                  onMakeCards={onMakeCards}
+                />
               </ErrorGuard>,
               slot,
               `vis-${at}`

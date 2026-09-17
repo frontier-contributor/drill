@@ -38,6 +38,7 @@ import { runAgentTurn } from "@/services/agent";
 import { hydrate, type BinaryNeed } from "@/services/files/wire";
 import { canTake } from "@/lib/modality";
 import { carry, windowFor, type CarryContext } from "@/lib/files/carry";
+import { collapseCanvases } from "@/lib/visuals/artifacts";
 import type { AgentPlan, AgentTrace, ToolCall, ToolRun } from "@/types/agent";
 import type { ChatActionId } from "@/lib/chatActions";
 import type { BackendType, ChatMessage, Citation, Memory } from "@/types";
@@ -348,6 +349,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           for (const n of needs) binary.push({ ...n, message: last });
         }
       }
+      /* Only the newest version of a canvas carries its code; the ones it
+         replaced become a line saying so. A thread that revised one four times
+         would otherwise send all four on every message after. */
+      const collapsed = collapseCanvases(msgs.map((m) => m.content));
+      for (let i = 0; i < msgs.length; i++) {
+        if (collapsed[i] !== msgs[i].content) msgs[i] = { ...msgs[i], content: collapsed[i] };
+      }
+
       return { messages: msgs, memories, binary };
     },
     []

@@ -17,12 +17,16 @@
  * Pure.
  * ========================================================================== */
 
-export type VisualKind = "diagram" | "chart" | "plot" | "svg";
+import { canvasTitle } from "./artifacts";
+
+export type VisualKind = "diagram" | "chart" | "plot" | "svg" | "canvas";
 
 /** One figure found in a reply, as lib/markdown.ts hands it to the renderer. */
 export interface VisualBlock {
   kind: VisualKind;
   lang: string;
+  /** The whole info string, so a fence can carry a title and an id. */
+  info: string;
   source: string;
 }
 
@@ -36,8 +40,10 @@ export interface VisualDef {
   blurb: string;
   /** For the model: what it is for, and what the block must contain. */
   teach: string;
-  /** Said instead of the figure — to the card writer, in previews, aloud. */
-  standIn: (source: string) => string;
+  /** Said instead of the figure — to the card writer, in previews, aloud.
+   *  `info` is the rest of the fence line, which is where a canvas's title
+   *  lives; the kinds that name themselves from their own source ignore it. */
+  standIn: (source: string, info?: string) => string;
 }
 
 export const VISUALS: VisualDef[] = [
@@ -74,6 +80,19 @@ export const VISUALS: VisualDef[] = [
       '"labels" names each function. Functions may use x, the params, + - * / ^, parentheses, sin cos tan exp log sqrt abs ' +
       "sigmoid relu tanh softplus min max, pi and e. For how a function behaves and what a parameter does to it.",
     standIn: (src) => `[plot: ${jsonTitle(src) || "functions of x"}]`
+  },
+  {
+    kind: "canvas",
+    fences: ["drill-canvas"],
+    label: "Canvas",
+    blurb: "Interactive pages the model writes — simulations, steppers, animations — run in a sandbox that can reach nothing.",
+    teach:
+      'a small interactive page as self-contained HTML, with its CSS and JavaScript inline: ```drill-canvas title="Gradient ' +
+      'descent". For something worth playing with rather than looking at — a simulation, a stepper, an animation, a widget ' +
+      "with controls. It runs sandboxed with no network at all: no external scripts, fonts, images or requests of any kind, " +
+      "so write plain JavaScript and draw with Canvas, SVG or the DOM. Keep it to about two hundred lines. To revise one you " +
+      "already wrote, send it again whole under the same title.",
+    standIn: (src, info) => `[canvas: ${canvasTitle(info || "", src)}]`
   },
   {
     kind: "svg",

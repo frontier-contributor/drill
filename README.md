@@ -40,6 +40,14 @@ openrouter.ai.
   Ollama. Each figure saves as SVG or PNG, opens full screen and can become
   flashcards; one that will not draw says why and offers to send the error
   back. Any kind can be switched off in Settings → Chat.
+- **It can build something you can poke at** — ask for a simulation, a stepper
+  or a widget and the reply carries a small interactive page, running in the
+  conversation. It runs in a sandbox with **no network at all** and no reach
+  into the app around it, so nothing it was written with can leave this
+  browser. Revise it in conversation and the figure keeps every version: step
+  back through them, restart it, or save it as an HTML file you can open
+  anywhere. Only the newest version is sent back to the model, so a canvas you
+  have rewritten five times does not cost five canvases on every message.
 - **Any reply becomes flashcards** — one click on a message, or select a
   paragraph first. Pick the deck, untick the weak ones, done.
 - **Any reply becomes a note** — straight into the insight log.
@@ -408,7 +416,8 @@ src/
     files/                  attachments, pure: what a file really is, limits, CSV and
                              Word text, and what each attachment sends on each turn
     visuals/                figures, pure: the catalogue of kinds, the prompt that
-                             teaches them, and the function-plot compiler
+                             teaches them, the function-plot compiler, the page a
+                             canvas runs in and the canvas versions in a thread
     speech/                 what a reply sounds like: maths to words, sentences,
                              chunking, and which voice can speak (all pure but
                              segment.ts, which reads the rendered reply)
