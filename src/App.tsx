@@ -7,6 +7,7 @@ import * as candidates from "@/services/candidates";
 import * as journalStore from "@/services/journalStore";
 import * as examStore from "@/services/examStore";
 import * as usageLog from "@/services/usageLog";
+import * as figures from "@/services/figures";
 import * as storage from "@/services/storage";
 import { applyAppearance } from "@/lib/theme";
 import { useDrillStore } from "@/hooks/useDrillStore";
@@ -39,6 +40,7 @@ const CardsView = lazy(() => import("@/components/cards/CardsView"));
 const ChatView = lazy(() => import("@/components/chat/ChatView"));
 const JournalView = lazy(() => import("@/components/journal/JournalView"));
 const ExamView = lazy(() => import("@/components/exam/ExamView"));
+const FiguresView = lazy(() => import("@/components/figures/FiguresView"));
 
 /** Shown twice: while the store loads at cold start, and again for the half
  *  second a lazy view takes to arrive. Set as a title page rather than a
@@ -106,6 +108,14 @@ function Views() {
     );
   }
 
+  if (view === "figures") {
+    return (
+      <Suspense fallback={<LoadingShell />}>
+        <FiguresView />
+      </Suspense>
+    );
+  }
+
   return (
     <SheetProvider>
       <ReviewProvider>
@@ -134,6 +144,10 @@ export default function App() {
         void journalStore.init();
         void examStore.init();
         void usageLog.init();
+        /* Kept figures load at boot rather than with their section, because
+           the Keep button in every reply has to know whether this figure is
+           already on the shelf before you press it. */
+        void figures.init();
         // Ask the browser not to evict us. Chrome usually grants it silently,
         // Firefox prompts, Safari decides for itself — a refusal is normal and
         // only means the export in Import/export matters more.

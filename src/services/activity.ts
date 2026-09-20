@@ -1,7 +1,7 @@
 /* ============================================================================
  * activity.ts — what a project has actually had happen in it.
  *
- * The one place that reads across all six sections at once, and the answer to
+ * The one place that reads across every section at once, and the answer to
  * a question the app could not previously answer: "was today a day I did
  * something?" It used to be able to answer only "did I grade a card", because
  * db.log was the sole input to the calendar and the streak — so an evening of
@@ -20,7 +20,9 @@ import * as chatStore from "./chatStore";
 import * as journalStore from "./journalStore";
 import * as examStore from "./examStore";
 import * as memoryStore from "./memoryStore";
+import * as figures from "./figures";
 import { daysFrom, emptySource, type ActivitySource, type DayActivity } from "@/lib/activity";
+import { allVersions } from "@/lib/visuals/keep";
 
 /**
  * The project's days, ready to draw — and the function everything should call.
@@ -40,7 +42,8 @@ export function daysFor(projectId: string): Map<string, DayActivity> {
     chatStore.getVersion(),
     journalStore.getVersion(),
     examStore.getVersion(),
-    memoryStore.getVersion()
+    memoryStore.getVersion(),
+    figures.getVersion()
   ].join(":");
   if (cached && cached.key === key) return cached.days;
   const days = daysFrom(sourceFor(projectId));
@@ -106,6 +109,14 @@ export function sourceFor(projectId: string): ActivitySource {
   /* Memory, project-scoped. Global memories belong to no project and would
      light up every project's calendar with the same day. */
   for (const m of memoryStore.list({ scope: "project", projectId })) src.memory.push(m.created);
+
+  /* Figures kept, and whiteboards drawn. Every version of a kept figure is a
+     separate moment — `at` is when that source was put on the shelf — because
+     coming back and keeping the revision is the same act as keeping it the
+     first time. A board counts on the day it was made and not on every day it
+     was saved: it saves itself on a timer while you draw. */
+  for (const f of figures.list(projectId)) for (const v of allVersions(f)) src.figure.push(v.at);
+  for (const b of figures.boards(projectId)) src.figure.push(b.created);
 
   return src;
 }

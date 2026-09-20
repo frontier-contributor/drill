@@ -34,7 +34,7 @@ function reasonFor(comp: ScoreComponents): string {
 }
 
 export default function ConversationScope() {
-  /* Settings is one panel opened from all six sections, and this page is the
+  /* Settings is one panel opened from every section, and this page is the
      one that needs a context only chat mounts. The registry keeps it out of
      the list elsewhere; asking rather than demanding means a mistake there
      costs an empty page instead of a white screen. */

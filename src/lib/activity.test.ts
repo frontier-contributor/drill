@@ -170,7 +170,10 @@ test("a day is described in words, singular and plural, and only what happened",
 test("a long day is truncated rather than allowed to run off a tooltip", () => {
   const busy = daysFrom(src(Object.fromEntries(ACTIVITY_KINDS.map((k) => [k, [daysAgo(0)]]))) as ActivitySource);
   const text = describeDay(today(busy), 3);
-  assert.match(text, /\+4 more$/);
+  /* Counted off the list rather than written down: this said "+4 more" until
+     the day a kind was added, at which point the assertion failed for the one
+     reason that was not a bug. */
+  assert.ok(text.endsWith(`+${ACTIVITY_KINDS.length - 3} more`), text);
   assert.equal(describeDay(today(busy)).includes("more"), false, "and is complete when it is allowed to be");
 });
 

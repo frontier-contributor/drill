@@ -1,9 +1,15 @@
 /* ============================================================================
- * BoardSheet — the whiteboard, over the conversation it belongs to.
+ * BoardSheet — the whiteboard, over whatever it was opened from.
  *
  * Excalidraw is loaded on demand (services/boards/library.ts) and mounted in a
- * sheet like every other chat dialog, rather than in a pane: a pane is a review
- * dialog in this codebase, and the board has to open from chat.
+ * sheet rather than in a pane: a pane is a review dialog in this codebase, and
+ * a board opens from chat and from the Figures section, neither of which is
+ * the review loop.
+ *
+ * `onSend` is optional because of that second caller. From a conversation
+ * there is somewhere to send the board; from the shelf there is not, and a
+ * button that would have to invent a thread to send it to is worse than no
+ * button — you open the board from chat when sending it is what you wanted.
  *
  * Three things here are rules rather than choices:
  *
@@ -29,20 +35,23 @@ import { excalidraw } from "@/services/boards/library";
 import { ingest } from "@/services/files/ingest";
 import type { BoardElement } from "@/lib/visuals/boardText";
 import type { Attachment } from "@/types/chat";
-import Icon from "../../ui/Icon";
+import Icon from "../ui/Icon";
 
 const SAVE_AFTER = 900;
 
 interface Props {
   board: boards.StoredBoard;
-  /** Sends the board as a message: a picture, and the board read out. */
-  onSend: (text: string, attachments: Attachment[]) => void;
+  /** Sends the board as a message: a picture, and the board read out. Absent
+   *  when the board was not opened from a conversation. */
+  onSend?: (text: string, attachments: Attachment[]) => void;
+  /** Throws the board away. Absent where there is no list to throw it out of. */
+  onDelete?: () => void;
   onClose: () => void;
 }
 
 type Scene = { elements: BoardElement[]; files: Record<string, unknown> };
 
-export default function BoardSheet({ board, onSend, onClose }: Props) {
+export default function BoardSheet({ board, onSend, onDelete, onClose }: Props) {
   useDrillStore();
   const dark = store.settings().theme !== "day";
 
@@ -130,6 +139,7 @@ export default function BoardSheet({ board, onSend, onClose }: Props) {
   }
 
   async function send() {
+    if (!onSend) return;
     setBusy("Rendering");
     try {
       const clean = boards.safeScene(scene.current);
@@ -186,12 +196,19 @@ export default function BoardSheet({ board, onSend, onClose }: Props) {
           />
           <span className="sub">{saved ? `saved ${new Date(saved).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "not saved yet"}</span>
           <span className="board-acts">
-            <button className="btn sm" onClick={() => void send()} disabled={!!busy}>
-              {busy || "Send to chat"}
-            </button>
+            {onSend && (
+              <button className="btn sm" onClick={() => void send()} disabled={!!busy}>
+                {busy || "Send to chat"}
+              </button>
+            )}
             <button className="btn sm" onClick={() => void savePng()} disabled={!!busy}>
-              PNG
+              {onSend ? "PNG" : busy || "PNG"}
             </button>
+            {onDelete && (
+              <button className="btn sm danger" onClick={onDelete} disabled={!!busy}>
+                Delete
+              </button>
+            )}
           </span>
           <button className="iconbtn" onClick={onClose} aria-label="Close">
             <Icon name="close" />

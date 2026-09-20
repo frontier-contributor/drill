@@ -23,10 +23,10 @@
  * ========================================================================== */
 import { dayKey } from "@/lib/util";
 
-/** The six sections plus the two things they make. Ordered as a day reads:
- *  what you drilled, what you made of it, what you wrote, who you asked, what
- *  you were tested on, what was remembered. */
-export const ACTIVITY_KINDS = ["review", "card", "note", "journal", "chat", "exam", "memory"] as const;
+/** Every section, plus the things they make. Ordered as a day reads: what you
+ *  drilled, what you made of it, what you wrote, who you asked, what you were
+ *  tested on, what was remembered, what you kept. */
+export const ACTIVITY_KINDS = ["review", "card", "note", "journal", "chat", "exam", "memory", "figure"] as const;
 
 export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
 
@@ -38,7 +38,8 @@ export const KIND_LABEL: Record<ActivityKind, [string, string]> = {
   journal: ["journal entry", "journal entries"],
   chat: ["conversation", "conversations"],
   exam: ["exam", "exams"],
-  memory: ["memory saved", "memories saved"]
+  memory: ["memory saved", "memories saved"],
+  figure: ["figure kept", "figures kept"]
 };
 
 /** Every timestamp the project produced, by kind. Built by
@@ -47,7 +48,7 @@ export const KIND_LABEL: Record<ActivityKind, [string, string]> = {
 export type ActivitySource = Record<ActivityKind, number[]>;
 
 export function emptySource(): ActivitySource {
-  return { review: [], card: [], note: [], journal: [], chat: [], exam: [], memory: [] };
+  return { review: [], card: [], note: [], journal: [], chat: [], exam: [], memory: [], figure: [] };
 }
 
 export interface DayActivity {
@@ -58,7 +59,7 @@ export interface DayActivity {
 }
 
 function blankCounts(): Record<ActivityKind, number> {
-  return { review: 0, card: 0, note: 0, journal: 0, chat: 0, exam: 0, memory: 0 };
+  return { review: 0, card: 0, note: 0, journal: 0, chat: 0, exam: 0, memory: 0, figure: 0 };
 }
 
 /* Days are stepped with the calendar, never with `+ 86400000`. Adding a fixed

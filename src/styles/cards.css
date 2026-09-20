@@ -5,6 +5,12 @@
  * `.home-rule`, `.home-sec`) rather than inventing a second one: the two are
  * the same kind of page — read, not operated — and should open identically.
  * What is here is only the library's own furniture.
+ *
+ * The Figures section imports this file too, for the chapter opening, the
+ * toolbar (`.cards-tools`) and the filter pills (`.cfilter`). Two sets of
+ * pills that looked almost the same would be worse than one shared set, so
+ * these are not Cards' private property — check that section before renaming
+ * one of them.
  * ========================================================================== */
 @import "./home.css";
 

@@ -33,6 +33,7 @@ export type IconName =
   | "cards"
   | "journal"
   | "exam"
+  | "figure"
   | "paperclip"
   | "bubble"
   | "check"
@@ -102,6 +103,9 @@ const PATHS: Record<IconName, { d: string; fill?: boolean }[]> = {
     { d: "M14.5 5h2.5a1 1 0 0 1 1 1v13.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h2.5" },
     { d: "m9.5 13 1.8 1.8 3.4-3.6" }
   ],
+  /* A figure, framed and hung: the Figures section, where a diagram, a chart
+     or a canvas goes when it is worth coming back to. */
+  figure: [{ d: "M4 5.5h16v13H4z" }, { d: "M7 15.2l3.4-3.9 2.5 2.5L17 9.2" }],
   paperclip: [
     { d: "m21.4 11.6-8.5 8.5a5.6 5.6 0 0 1-7.9-7.9l8.5-8.5a3.8 3.8 0 0 1 5.3 5.3l-8.5 8.5a1.9 1.9 0 0 1-2.7-2.7l7.8-7.8" }
   ],

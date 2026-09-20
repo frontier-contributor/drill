@@ -18,7 +18,7 @@ import { useRoute } from "@/context/RouteContext";
 import { useSettings } from "@/context/SettingsContext";
 
 export default function TodayStrip({ day }: { day: DayActivity }) {
-  const { openDrill, openCards, openChat, openJournal, openExam } = useRoute();
+  const { openDrill, openCards, openChat, openJournal, openExam, openFigures } = useRoute();
   const settings = useSettings();
 
   /* Every tile goes somewhere true. Notes land on Cards because that is the
@@ -32,7 +32,8 @@ export default function TodayStrip({ day }: { day: DayActivity }) {
     journal: () => openJournal(),
     chat: () => openChat(null),
     exam: () => openExam(null),
-    memory: () => settings.open("memory", "memory.store")
+    memory: () => settings.open("memory", "memory.store"),
+    figure: () => openFigures(null)
   };
 
   const done = ACTIVITY_KINDS.filter((k) => day.by[k] > 0);

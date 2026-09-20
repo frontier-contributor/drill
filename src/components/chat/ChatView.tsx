@@ -51,11 +51,14 @@ import AttachmentPreview from "./AttachmentPreview";
 
 /* Excalidraw and its stylesheet are about half a megabyte for a surface most
    sessions never open, so the whiteboard arrives only when one is asked for. */
-const BoardSheet = lazy(() => import("./board/BoardSheet"));
+const BoardSheet = lazy(() => import("../visuals/BoardSheet"));
 
 /* Imported here rather than in main.tsx so both stylesheets ride along with
    the lazy chat chunk instead of blocking the review loop's first paint. */
 import "@/styles/chat.css";
+/* The figure frame, which the Figures section draws with too — that is why it
+   is not in chat.css any more. */
+import "@/styles/figures.css";
 import "katex/dist/katex.min.css";
 
 /** How much of a conversation one bare /remember reads — about twelve thousand
@@ -72,7 +75,7 @@ function carriesFiles(e: DragEvent): boolean {
 
 export default function ChatView() {
   const chat = useChat();
-  const { conversationId, openDrill } = useRoute();
+  const { conversationId, openDrill, openFigures } = useRoute();
   const toast = useToast();
   /* Chat had its own settings drawer — a second navigation over the same
      settings, with a scope tab strip the sidebar's panel did not have. It
@@ -498,6 +501,11 @@ It is built from your memories and what the review loop says you keep getting wr
         }
       },
       {
+        cmd: "/figures",
+        desc: "The figures and whiteboards you have kept",
+        run: () => openFigures(null)
+      },
+      {
         cmd: "/export",
         desc: "Download this conversation as markdown",
         run: exportConversation
@@ -508,7 +516,7 @@ It is built from your memories and what the review loop says you keep getting wr
         run: () => settings.open("conversation")
       }
     ],
-    [c, chat, saveNote, exportConversation, toast, settings, rememberFact, rememberConversation, openBoard]
+    [c, chat, saveNote, exportConversation, toast, settings, rememberFact, rememberConversation, openBoard, openFigures]
   );
 
   /* --------------------------------------------------- palette actions -- */

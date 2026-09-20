@@ -17,12 +17,23 @@
  *
  * The printing is read at draw time, and everything draws again when it
  * changes: a night-printed picture on a day page is a dark rectangle.
+ *
+ * It is no longer chat's alone: the Figures section draws a kept figure with
+ * this same component, from the same fenced block, which is the reason there
+ * is no second renderer to keep in step with this one. `keep` is what tells
+ * the two apart — inside a reply a figure can be put on the shelf, and on the
+ * shelf it is already there.
  * ========================================================================== */
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as store from "@/services/store";
+import * as figures from "@/services/figures";
 import { useDrillStore } from "@/hooks/useDrillStore";
+import { useStoreSync } from "@/hooks/useStoreSync";
+import { useRoute } from "@/context/RouteContext";
+import { useToast } from "@/context/ToastContext";
 import { visualDef, type VisualBlock } from "@/lib/visuals/catalogue";
 import { canvasTitle, type CanvasVersion } from "@/lib/visuals/artifacts";
+import { holds } from "@/lib/visuals/keep";
 import { compilePlot } from "@/lib/visuals/plot";
 import { download } from "@/lib/util";
 import { figureTheme } from "@/services/visuals/theme";
@@ -34,6 +45,9 @@ interface Props {
   block: VisualBlock;
   /** Every version of this canvas in the thread, oldest first. Canvas only. */
   history?: CanvasVersion[];
+  /** Where a kept copy of this figure would be filed. Present in a reply,
+   *  absent in the Figures section — a figure on the shelf has no Keep. */
+  keep?: { projectId: string; conversationId?: string; conversationTitle?: string };
   onAskFix?: (message: string) => void;
   onMakeCards?: (text: string) => void;
   /** Diagrams only: the same shapes, editable, on a whiteboard. */
@@ -71,8 +85,11 @@ function saveHref(name: string, href: string): void {
   setTimeout(() => a.remove(), 1500);
 }
 
-export default function Visual({ block, history, onAskFix, onMakeCards, onOpenBoard }: Props) {
+export default function Visual({ block, history, keep, onAskFix, onMakeCards, onOpenBoard }: Props) {
   useDrillStore();
+  useStoreSync(figures);
+  const toast = useToast();
+  const { openFigures } = useRoute();
   const s = store.settings();
   const themeKey = `${s.theme}:${s.accent}`;
   const def = visualDef(block.kind);
@@ -185,6 +202,28 @@ export default function Visual({ block, history, onAskFix, onMakeCards, onOpenBo
     }
   }
 
+  /* Whether this exact block is on the shelf already. Matched on the source
+     rather than on the record's key, because a canvas you have kept and then
+     had rewritten shares its key with the new version while plainly not being
+     it — reading the key alone would have left you unable to keep the
+     revision, with a button that said you already had. */
+  const shelved = keep ? figures.keptFor({ kind: block.kind, info: block.info, source }, keep) : undefined;
+  const isKept = !!shelved && holds(shelved, source);
+
+  function onKeep(): void {
+    if (!keep) return;
+    if (shelved && isKept) {
+      openFigures(shelved.id);
+      return;
+    }
+    const { figure, status } = figures.keep({ block: { kind: block.kind, info: block.info, source }, ...keep });
+    toast(
+      status === "revised"
+        ? `Kept — “${figure.title}” is now v${figure.versions.length + 1}, and the earlier ones are still there`
+        : `Kept in Figures — “${figure.title}”`
+    );
+  }
+
   const drawn = view === "figure" && !error && (live || isCanvas || !!image);
   const askFix = (what: string) =>
     onAskFix?.(`The ${def.label.toLowerCase()} in your reply ${what}. Send the whole block again, corrected.`);
@@ -217,6 +256,20 @@ export default function Visual({ block, history, onAskFix, onMakeCards, onOpenBo
           <button type="button" className="tact" onClick={() => void navigator.clipboard?.writeText(source)}>
             Copy
           </button>
+          {/* Nothing keeps itself. A figure worth coming back to is one you
+              said was, which is the same bargain every other generated thing
+              in Drill makes (locked decision 4). Once it is on the shelf the
+              button stops offering and starts pointing. */}
+          {keep && (
+            <button
+              type="button"
+              className={"tact" + (isKept ? " on" : "")}
+              onClick={onKeep}
+              title={isKept ? "On the shelf — open it in Figures" : "Keep this figure in the Figures section"}
+            >
+              {isKept ? "Kept" : "Keep"}
+            </button>
+          )}
           {drawn && isCanvas && (
             <>
               <button type="button" className="tact" onClick={() => setRunNonce((n) => n + 1)}>

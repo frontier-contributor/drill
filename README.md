@@ -48,6 +48,9 @@ openrouter.ai.
   back through them, restart it, or save it as an HTML file you can open
   anywhere. Only the newest version is sent back to the model, so a canvas you
   have rewritten five times does not cost five canvases on every message.
+- **Keep the good ones** — every figure in a reply has a **Keep** button, and
+  what it keeps is the block itself, on a shelf of its own. See **Figures**
+  below.
 - **A whiteboard, both ways** — `/board` opens one to draw on, and any diagram
   in a reply opens as shapes you can move rather than a picture you cannot.
   Send it back and the model gets two things: the picture, and the board read
@@ -65,9 +68,9 @@ openrouter.ai.
   Explainer, Feynman check (you explain, it finds the holes), ML researcher,
   Code, or a raw model with no system prompt.
 - **Slash commands** — `/quiz` on what's due, `/weak` to attack what you keep
-  failing, `/cards`, `/explain`, `/feynman`, `/note`, `/export`, and
-  `/remember` — with a fact after it to save that fact, or alone to pull what
-  is worth keeping out of the conversation.
+  failing, `/cards`, `/explain`, `/feynman`, `/note`, `/board`, `/map`,
+  `/figures`, `/export`, and `/remember` — with a fact after it to save that
+  fact, or alone to pull what is worth keeping out of the conversation.
 - **Proper rendering** — Markdown, LaTeX via KaTeX, syntax-highlighted code
   with copy buttons, tables.
 - **The usual platform things** — streaming with a stop button, regenerate
@@ -92,6 +95,33 @@ openrouter.ai.
   nothing and work offline. Only voices that can actually speak from where you
   are get offered, every paid character is on the Usage page, and a replay
   comes from a capped cache for free.
+
+### Figures
+
+Everything the model drew that turned out to be worth keeping, out of the
+thread that drew it. A conversation is a conversation, not a shelf — the
+diagram that finally made backprop click is four hundred messages back in one
+you named "q about grads".
+
+- **Keep is one press** — on any diagram, chart, function plot, drawing or
+  canvas in a reply. What is kept is the fenced block itself, so a kept figure
+  is drawn by exactly the same renderer as the one in the conversation: a
+  canvas still runs, a chart still has its tooltips and its slider.
+- **Revisions land on the same shelf** — ask for a canvas to be changed, press
+  Keep again, and it becomes v2 of the one you already have rather than a
+  second copy. Every earlier version is still there, behind an arrow. Nothing
+  is ever replaced.
+- **Say why you kept it** — a line of your own under each one, searched along
+  with the title and the figure's own source.
+- **Whiteboards live here too** — including the ones you drew from chat, which
+  until now were saved and listed by nothing at all. Start a new one from this
+  page, or reopen any of them to keep drawing.
+- **It goes somewhere** — turn a kept figure into flashcards, open the
+  conversation it came from, or start a new thread that already has it in the
+  history so you can ask about it. Export is the same SVG / PNG / HTML it
+  always was.
+- **It counts as a day** — keeping a figure lights up the square on Home, like
+  everything else in every other section.
 
 ### Review
 
@@ -122,8 +152,8 @@ openrouter.ai.
 
 - **A calendar of everything** — a year of days, one square each, and a square
   counts *anything* you did in the project: cards reviewed and written, notes,
-  journal entries, conversations, exams, memories saved. Hover a day to see
-  what it held.
+  journal entries, conversations, exams, memories saved, figures kept. Hover a
+  day to see what it held.
 - **Today, in one row** — what you have done so far, broken down, each count a
   door into the section that produced it.
 - **One streak** — computed from that same calendar, so it survives a day you
@@ -132,7 +162,7 @@ openrouter.ai.
 
 ### Settings
 
-One panel, the same one from all six sections (`ctrl + ,`), and everything is
+One panel, the same one from every section (`ctrl + ,`), and everything is
 in it — no section keeps a settings menu of its own.
 
 - **Ten pages, grouped** — Connection, Chat, Listening and Memory; Review and
@@ -427,8 +457,9 @@ src/
                              Word text, and what each attachment sends on each turn
     visuals/                figures, pure: the catalogue of kinds, the prompt that
                              teaches them, the function-plot compiler, the page a
-                             canvas runs in, the canvas versions in a thread, a
-                             whiteboard read out as text, and the concept map
+                             canvas runs in, the canvas versions in a thread, what
+                             keeping one on the shelf means, a whiteboard read out
+                             as text, and the concept map
     speech/                 what a reply sounds like: maths to words, sentences,
                              chunking, and which voice can speak (all pure but
                              segment.ts, which reads the rendered reply)
@@ -450,6 +481,8 @@ src/
                          store for originals, and the sweep for unused ones
     visuals/             figures: Mermaid and Vega-Lite loaded on first use, the
                          colours read back from the tokens, and the SVG sanitiser
+    figures.ts           the shelf: figures you kept and whiteboards you drew,
+                         both in the drill-files database, one subscription
     boards/              whiteboards: Excalidraw loaded on demand with its fonts
                          served from here, and what a board is made from and
                          turned into
@@ -463,7 +496,11 @@ src/
   hooks/                useDrillStore — the React binding onto the store singleton
   components/           the review loop and every sheet pane
     chat/               the chat platform
-    settings/           one settings panel for all six sections. catalogue.ts
+    visuals/            the figure frame, the canvas sandbox and the whiteboard —
+                         shared, because chat and the Figures section draw the
+                         same block with the same components
+    figures/            the shelf: what you kept, and one of them on its own page
+    settings/           one settings panel for every section. catalogue.ts
                          declares every page and every group on it — names,
                          blurbs and the words search matches — as pure data;
                          registry.tsx joins that to the components; Section
@@ -473,9 +510,13 @@ src/
     tokens.css           the design system: two printings, one type/space/radius
                           scale. Nothing downstream spells out a colour or a size
     style.css            the shell, the running head, the page, and every
-                          surface shared across all four sections
+                          surface shared across every section
     views.css            journal + exam            (lazy)
     chat.css             chat                      (lazy)
+    home.css             home, and the chapter opening cards and figures share
+    cards.css            cards — and the toolbar and pills figures reuses (lazy)
+    figures.css          the figure frame, drawn by chat and by the Figures
+                          section, plus that section's own furniture   (lazy)
 public/
   decks/examples/       importable decks + index.json
   config.json            committed template — no secrets
@@ -484,12 +525,14 @@ tools/                  two tsx scripts for regenerating generated files
 vercel.json             build command, output directory, SPA rewrite
 ```
 
-Routing is a hash router (`#/drill`, `#/chat/<id>`) in ~60 lines rather than a
-dependency: two views and a conversation id is the entire routing surface.
+Routing is a hash router (`#/p/<project>/<view>`, plus a conversation, day,
+exam or figure id) in ~60 lines rather than a dependency: every route is a
+project, a section and at most one id.
 
-**One book, four sections.** Review, Journal, Exam and Chat are chapters of one
-document, not four apps: they share a shell (`Shell` > `Sidebar` + `.app-main`
-> `.app-scroll` > `.page`), a type scale, a measure and one button system.
+**One book, seven sections.** Home, Review, Cards, Journal, Exam, Chat and
+Figures are chapters of one document, not seven apps: they share a shell
+(`Shell` > `Sidebar` + `.app-main` > `.app-scroll` > `.page`), a type scale, a
+measure and one button system.
 
 The sidebar is that navigation, and it has three states out of one element:
 open (17rem), collapsed to a 56px icon rail (remembered in

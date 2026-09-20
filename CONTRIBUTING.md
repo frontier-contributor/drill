@@ -39,6 +39,7 @@ src/
     chatStore.ts    conversations. Same singleton+subscribe shape as store.ts, but
                      persisted to IndexedDB — transcripts are far too big for
                      localStorage's per-origin quota.
+    figures.ts      the shelf: kept figures and whiteboards, over drill-files.
     pricing.ts      per-model pricing, where the backend publishes it.
     ai/
       backends.ts   one object per inference provider (OpenRouter, Groq, Ollama, custom).
@@ -49,13 +50,17 @@ src/
     Sidebar.tsx     the one navigation — open / icon rail / mobile drawer.
     ui/Icon.tsx     the whole icon set, one grid and one stroke weight.
     chat/           the chat platform.
+    visuals/        the figure frame, the canvas sandbox and the whiteboard —
+                     shared, because chat and Figures draw the same block.
+    figures/        the shelf: figures kept out of a thread, and whiteboards.
     settings/       the one settings panel. catalogue.ts declares every page and
                      every group on it as pure data — names, blurbs, and the words
                      search matches — and is the only place to add either.
   styles/
     tokens.css      the design system: two printings + the type/space/radius scales.
     style.css       shell, running head, page, and every shared surface.
-    views.css       journal + exam.  chat.css  the chat section. Both lazy.
+    views.css       journal + exam.  chat.css  the chat section.
+    figures.css     the figure frame — chat and Figures both import it. All lazy.
   types.ts          shared types for the review half.
   types/chat.ts     conversations, turns, variants, context sources.
 tools/              two tsx scripts that regenerate generated files.

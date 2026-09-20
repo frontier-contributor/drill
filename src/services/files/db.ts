@@ -12,20 +12,26 @@
  * original. Nothing counts references — services/files/sweep.ts reads every
  * conversation to decide what is still in use.
  *
- * Whiteboards live here too, in a second store. A board is the same kind of
- * thing by every measure that decided where files go: it is work you made, it
- * is far too big for localStorage, and it is rewritten far too often to sit
- * inside the conversation record, which is serialised whole on every message.
- * One database means one version line to reason about rather than two.
+ * Whiteboards live here too, in a second store, and kept figures in a third.
+ * A board is the same kind of thing by every measure that decided where files
+ * go: it is work you made, it is far too big for localStorage, and it is
+ * rewritten far too often to sit inside the conversation record, which is
+ * serialised whole on every message. A kept figure answers the same way — a
+ * canvas is a few hundred lines of HTML, and the point of keeping one is that
+ * it outlives the thread that wrote it. One database means one version line to
+ * reason about rather than three.
  * ========================================================================== */
+import type { KeptFigure } from "@/lib/visuals/keep";
 import * as persistence from "@/services/persistence";
 
 const DB_NAME = "drill-files";
-/* 2 added the boards store. A bump blocks while another tab holds the old
-   version open, which is why this database is small and rarely changed. */
-const DB_VERSION = 2;
+/* 2 added the boards store, 3 the kept figures. A bump blocks while another
+   tab holds the old version open, which is why this database is small and
+   rarely changed. */
+const DB_VERSION = 3;
 const BLOBS = "blobs";
 const BOARDS = "boards";
+const FIGURES = "figures";
 
 export interface StoredFile {
   id: string;
@@ -52,6 +58,7 @@ function open(): Promise<IDBDatabase> {
       const db = req.result;
       if (!db.objectStoreNames.contains(BLOBS)) db.createObjectStore(BLOBS, { keyPath: "id" });
       if (!db.objectStoreNames.contains(BOARDS)) db.createObjectStore(BOARDS, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(FIGURES)) db.createObjectStore(FIGURES, { keyPath: "id" });
     };
     req.onsuccess = () => {
       const db = req.result;
@@ -233,6 +240,65 @@ export async function replaceAllBoards(boards: StoredBoard[]): Promise<void> {
       const store = tx.objectStore(BOARDS);
       store.clear();
       for (const b of boards) store.put(b);
+      await committed(tx);
+    })()
+  );
+}
+
+/* ----------------------------------------------------------------- figures -- */
+/* A figure lifted out of the reply that drew it. What it holds is the fenced
+   block itself (lib/visuals/keep.ts), so a kept figure is drawn by exactly the
+   same renderer as the one in the conversation — there is no second format to
+   keep in step with the first. */
+
+export async function putFigure(figure: KeptFigure): Promise<boolean> {
+  const ok = await persistence.guard(
+    "kept figure",
+    (async () => {
+      const db = await open();
+      const tx = db.transaction(FIGURES, "readwrite");
+      tx.objectStore(FIGURES).put(figure);
+      await committed(tx);
+      return true as const;
+    })()
+  );
+  return ok === true;
+}
+
+export async function listFigures(): Promise<KeptFigure[]> {
+  try {
+    const db = await open();
+    const all = await result<KeptFigure[]>(db.transaction(FIGURES, "readonly").objectStore(FIGURES).getAll());
+    return all.sort((a, b) => b.updated - a.updated);
+  } catch {
+    return [];
+  }
+}
+
+export async function removeFigures(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  await persistence.guard(
+    "kept figure",
+    (async () => {
+      const db = await open();
+      const tx = db.transaction(FIGURES, "readwrite");
+      const store = tx.objectStore(FIGURES);
+      for (const id of ids) store.delete(id);
+      await committed(tx);
+    })()
+  );
+}
+
+/** For restoring a backup that carries kept figures. */
+export async function replaceAllFigures(figures: KeptFigure[]): Promise<void> {
+  await persistence.guard(
+    "kept figure",
+    (async () => {
+      const db = await open();
+      const tx = db.transaction(FIGURES, "readwrite");
+      const store = tx.objectStore(FIGURES);
+      store.clear();
+      for (const f of figures) store.put(f);
       await committed(tx);
     })()
   );

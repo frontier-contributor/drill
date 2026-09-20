@@ -843,7 +843,7 @@ export function useChat(): ChatState {
   return ctx;
 }
 
-/** Settings is one surface opened from all six sections, and one of its
+/** Settings is one surface opened from every section, and one of its
  *  categories — "This chat" — is only meaningful inside chat. This is how it
  *  asks whether it is there, rather than being offered in every view and
  *  throwing in five of them. */

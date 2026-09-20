@@ -37,7 +37,7 @@
 ### v3 — Later
 | 11 | Auto-backup to disk | not started |
 | 12 | Agent loop behind high effort | **done** — see §13 |
-| 13 | Period reports, mind maps, richer media | **in progress** — files and attachments (pictures, PDF, Word, Excel, CSV, pinning, capture, knowledge, backup) done 2026-09-15; figures in replies (Mermaid diagrams, Vega-Lite charts, function plots with sliders, SVG) 2026-09-17; the live canvas — interactive pages in a no-network sandbox, versioned by the transcript — 2026-09-17; whiteboard (Excalidraw, self-hosted fonts, mermaid → editable shapes, board → chat as picture and text) and /map 2026-09-17 |
+| 13 | Period reports, mind maps, richer media | **in progress** — files and attachments (pictures, PDF, Word, Excel, CSV, pinning, capture, knowledge, backup) done 2026-09-15; figures in replies (Mermaid diagrams, Vega-Lite charts, function plots with sliders, SVG) 2026-09-17; the live canvas — interactive pages in a no-network sandbox, versioned by the transcript — 2026-09-17; whiteboard (Excalidraw, self-hosted fonts, mermaid → editable shapes, board → chat as picture and text) and /map 2026-09-17; **the Figures section** — keeping a figure out of the thread that drew it, versioned, searchable, and the first place a whiteboard can be reopened from — 2026-09-20 |
 
 **Phase 0 notes for whoever picks this up:**
 
@@ -151,6 +151,7 @@ Do not relitigate these while building.
 |---|---|---|---|
 | `DrillDB` v4 | `localStorage["mldrill:v3"]` | settings, **projects**, decks, srs, log, notes | **sync**, `services/store.ts` |
 | Chat + memory | IndexedDB `drill-chat` **v4** | conversations, meta, memories, candidates, journal, rollups, exams, usage | **async**, `services/chatStore.ts`, `idb.ts` |
+| Files + work | IndexedDB `drill-files` **v3** | attachment originals, whiteboards, kept figures | **async**, `services/files/db.ts`, `services/figures.ts` |
 
 The sync/async split is load-bearing: the review loop renders without awaiting
 IndexedDB. New small data goes in `DrillDB`; new growing data goes in
@@ -174,8 +175,9 @@ IndexedDB behind a sync cache, copying the `chatStore` pattern.
 - **`store.isLeech`**, `weakCards`, `dueCards` — the drill-data queries exist.
 - **`types/core.ts`** — `Project`, `Memory`, `MemoryCandidate`, `Note`, `Effort`,
   `KnowledgeItem`, `FullBackup` all defined in Phase 0.
-- **`services/backup.ts`** — full export/restore across both storage worlds,
-  ids preserved. Extend it whenever a new store appears. Its UI is
+- **`services/backup.ts`** — full export/restore across all three storage
+  worlds, ids preserved. Extend it whenever a new store appears — the `figures`
+  store of `drill-files` was the most recent one to need it. Its UI is
   **Settings → Data**, reachable from every section; it used to be behind the
   review loop's Menu, where five of the six sections could not get to it.
 - **`context/SettingsContext.tsx` + `components/settings/registry.tsx`** — one
@@ -1032,3 +1034,43 @@ Deep query against a real deck and read the trace.
 2. **Restructure the memory panel around `Memory.topic`** — the field and
    `memoryStore.topics()` exist and nothing renders them yet.
 3. **The UI/navigation restructure**, to make the project hierarchy visible.
+
+---
+
+## 14. The Figures section — the shelf
+
+Shipped 2026-09-20. CLAUDE.md holds the rules; this is why it exists and what
+was decided.
+
+A figure lived only in the reply that drew it, and `lib/visuals/artifacts.ts`
+argues well for that: the transcript is already the record, so branching,
+regenerating, export and restore all carry a canvas with no code of their own.
+The argument holds for a figure *in a conversation* and fails for one you want
+back. A thread is a conversation, not a shelf — the diagram that finally made
+something clear is four hundred messages back in a thread named for the
+question, not for the answer.
+
+Decided, and worth not relitigating:
+
+- **What is kept is the fenced block**, not a rendering of it. One format, one
+  renderer, nothing to keep in step; a kept canvas still runs and a kept chart
+  still has its slider.
+- **A section, not a pane and not a Settings page.** This repo has now put
+  useful things in a surface five of six sections could not reach three times
+  (§6, and the review Menu). A shelf of study material is content, like Cards.
+- **Nothing keeps itself** (locked decision 4). Keep is a button.
+- **Identity is the source, except for a canvas** (`lib/visuals/keep.ts`), so
+  the second flowchart you keep is a second figure and the rewritten canvas is
+  v2 of the first. Superseded sources move into `versions` and are never
+  dropped (locked decision 5).
+- **Whiteboards are rows on the same page.** They had been saved since the day
+  they shipped and listed by nothing at all, so a board could not be reopened
+  once its sheet closed. Same page because, from where the learner is standing,
+  a diagram they kept and a board they drew are the same kind of thing.
+- **Keeping counts as activity** (`figure` in `ACTIVITY_KINDS`), because a
+  section invisible to the calendar is the bug §"Activity means every section"
+  exists to prevent.
+
+Open: nothing here has been used against a real model, and a figure cannot yet
+be attached to a conversation as *context* — "answer using the diagram I kept"
+still means starting the thread from the figure's own page.

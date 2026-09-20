@@ -21,10 +21,10 @@ especially its **Project layout** section. Do not restate it here.
 npm run dev     # vite; usually :5173, falls back to :5174 if taken
 npm run lint    # tsc --noEmit. The only lint there is
 npm test        # tsx --test src/**/*.test.ts
-                # 254 tests: fsrs, cardFormat, memory*, effort, title,
+                # 262 tests: fsrs, cardFormat, memory*, effort, title,
                 # thinking, agent/loop, settings/catalogue, logBudget,
                 # storage, activity, gaps, retry, budget, ai/structured,
-                # weeks, rememberArg, visuals/srcdoc (the sandbox walls),
+                # weeks, rememberArg, visuals/{srcdoc (the sandbox walls), keep},
                 # speech/{words, availability, player}
 npm run build   # tsc -b && vite build
 ```
@@ -48,14 +48,15 @@ subscribe to with `useSyncExternalStore` — `services/store.ts` (decks, cards,
 scheduling, projects, settings; persisted to `localStorage` under
 `mldrill:v3`) and the IndexedDB-backed stores (`chatStore`, `journalStore`,
 `memoryStore`, `examStore`, `candidates`, `usageLog`) in the `drill-chat`
-database. `useDrillStore()` binds the first; `useStoreSync(mod)` binds any of
-the others. Routing is a ~60-line hash router: `#/p/<projectId>/<view>`, plus
-`#/p/<projectId>/chat/<conversationId>`.
+database, plus `figures` over the `drill-files` one. `useDrillStore()` binds
+the first; `useStoreSync(mod)` binds any of the others. Routing is a ~60-line
+hash router: `#/p/<projectId>/<view>`, plus `#/p/<projectId>/chat/<conversationId>`
+and `#/p/<projectId>/figures/<figureId>`.
 
 ## Things that will cost you an hour if you don't know them
 
-**One shell, six sections.** Home, Review, Cards, Journal, Exam and Chat all
-render inside `components/Shell.tsx`. The sidebar, the dock and the rail are
+**One shell, seven sections.** Home, Review, Cards, Journal, Exam, Chat and
+Figures all render inside `components/Shell.tsx`. The sidebar, the dock and the rail are
 *siblings* of the scroll container, never inside it — that is what stops the
 navigation scrolling off the page, and it is a rule, not an accident. Putting
 navigation inside `.app-scroll` reintroduces a bug this shell was built to
@@ -131,8 +132,8 @@ alarm. Merging is not attempted — saying so is.
 
 **Activity means every section, and it is derived.** `lib/activity.ts` (pure)
 turns timestamps into days, weeks and streaks; `services/activity.ts` gathers
-those timestamps from all six sections — reviews, cards written, notes,
-journal chunks, conversations, exams, project memory — and memoises the result
+those timestamps from every section — reviews, cards written, notes, journal
+chunks, conversations, exams, project memory, figures kept — and memoises the result
 against every store's `getVersion()`, because the review rail asks for it on
 every grade. **Call `activity.daysFor(projectId)`, never rebuild it.** Nothing
 is written down twice, so a day can never disagree with the section it came
@@ -350,6 +351,32 @@ keeps it. And `collapseCanvases` leaves only the newest of each in the history
 that is replayed, since a fifth revision would otherwise pay to resend the
 first four.
 
+**Keeping a figure is the one thing that takes it out of the transcript.**
+The paragraph above is still how a figure lives *in a thread*, and it is why
+branching and backup carry canvases for free. It is not enough for one you want
+back: a thread is a conversation, not a shelf. **Figures** (`#/p/<id>/figures`,
+`services/figures.ts`, `components/figures/`) is where a kept one goes, and what
+is kept is the fenced block itself — so a kept figure is drawn by the same
+`Visual` from the same source, and there is no second format to keep in step.
+Three things are rules:
+
+- **The key is `lib/visuals/keep.ts`'s, and it is not the title.** A canvas is
+  keyed by `canvasId` within its thread, because two blocks under one title
+  already mean two versions of one canvas — so keeping the revision folds into
+  what you kept, oldest source first, never overwritten. Every other kind is
+  keyed by a digest of its own source, because `mermaidTitle` returns
+  "flowchart" for any flowchart without front matter, and a title-shaped key
+  filed the second diagram you kept as a revision of the first. `keep.test.ts`
+  holds both, and holds "keeping the same block twice writes nothing".
+- **`Visual` decides Kept from the source, never from the key.** A canvas you
+  kept and then had rewritten shares its key with the new version while plainly
+  not being it; reading the key alone leaves you unable to keep the revision,
+  under a button claiming you already had.
+- **Boards were saved and listed by nothing.** `listBoards` had one caller, the
+  backup, so a whiteboard survived the reload and could never be reopened.
+  They are rows on this page for that reason, and `BoardSheet.onSend` is
+  optional because there is no conversation here to send one to.
+
 **The whiteboard is Excalidraw, and two of its defaults are switched off.**
 It is loaded on demand through `services/boards/library.ts`, which sets
 `window.EXCALIDRAW_ASSET_PATH` **before** the import — left alone the library
@@ -492,7 +519,7 @@ its listener to nothing and never runs again.
 - **One settings surface, and it is not a view.** `context/SettingsContext.tsx`
   holds which page is open and, optionally, which group on it to jump to;
   `Shell` renders `settings/SettingsSurface.tsx` once, so the same panel with
-  the same navigation appears in all six sections (`ctrl + ,`, the sidebar,
+  the same navigation appears in every section (`ctrl + ,`, the sidebar,
   chat's header button, the review Menu). It is mounted from `Shell` rather
   than the app root deliberately — that is what puts it inside `ChatProvider`
   in chat, so the "This chat" page has a conversation to read. Conversation,

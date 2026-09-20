@@ -34,6 +34,7 @@ export function describe(s: BackupSummary): string {
     s.notes + " note" + (s.notes === 1 ? "" : "s")
   ];
   if (s.memories) bits.push(s.memories + " memories");
+  if (s.figures) bits.push(s.figures + " kept figure" + (s.figures === 1 ? "" : "s"));
   if (s.files) bits.push(s.files + " attached file" + (s.files === 1 ? "" : "s"));
   return bits.join(" · ");
 }

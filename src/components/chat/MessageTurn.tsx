@@ -17,7 +17,7 @@ import * as store from "@/services/store";
 import { renderReply, markdownToText } from "@/lib/markdown";
 import { kindsOn } from "@/lib/visuals/catalogue";
 import { canvasId, canvasVersions } from "@/lib/visuals/artifacts";
-import Visual from "./visuals/Visual";
+import Visual from "../visuals/Visual";
 import ErrorGuard from "../ui/ErrorGuard";
 import MemorySaved from "./MemorySaved";
 import AgentTrace, { stepsFromTrace } from "./AgentTrace";
@@ -363,6 +363,7 @@ export default function MessageTurn({
                 <Visual
                   block={block}
                   history={block.kind === "canvas" ? canvases?.get(canvasId(block.info)) : undefined}
+                  keep={{ projectId: conversation.projectId, conversationId: conversation.id, conversationTitle: conversation.title }}
                   onAskFix={busy ? undefined : onAskFix}
                   onMakeCards={onMakeCards}
                   onOpenBoard={onOpenBoard}

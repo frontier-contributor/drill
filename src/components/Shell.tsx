@@ -39,7 +39,8 @@ const TITLES: Record<View, string> = {
   cards: "Cards",
   journal: "Journal",
   exam: "Exam",
-  chat: "Chat"
+  chat: "Chat",
+  figures: "Figures"
 };
 
 export default function Shell({
@@ -126,7 +127,7 @@ export default function Shell({
         e.preventDefault();
         toggleRail();
       } else if ((e.ctrlKey || e.metaKey) && e.key === ",") {
-        /* The conventional one, and it works from all six sections because
+        /* The conventional one, and it works from every section because
            there is one settings surface now. Bound here rather than in the
            sidebar so it fires with the navigation collapsed or on a phone,
            where the sidebar is a drawer that is usually shut. */

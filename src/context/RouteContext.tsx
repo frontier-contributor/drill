@@ -16,6 +16,8 @@
  *   #/p/<id>/journal/<day>      a specific day, "2026-3-14"
  *   #/p/<id>/exam               the exam list / scope builder
  *   #/p/<id>/exam/<eid>         a specific exam, taking it or its report
+ *   #/p/<id>/figures            figures and whiteboards you kept
+ *   #/p/<id>/figures/<fid>      one of them, on its own page
  *
  * A hash with no section at all lands on home — that is what "home" means.
  *
@@ -28,7 +30,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import * as store from "@/services/store";
 import { isPersonalProject } from "@/lib/migrate";
 
-export type View = "home" | "drill" | "cards" | "chat" | "journal" | "exam";
+export type View = "home" | "drill" | "cards" | "chat" | "journal" | "exam" | "figures";
 
 export interface Route {
   view: View;
@@ -36,6 +38,9 @@ export interface Route {
   conversationId: string | null;
   journalDay: string | null;
   examId: string | null;
+  /** A kept figure, or a whiteboard — the section holds both, and both open
+   *  from a link, which is the point of keeping one. */
+  figureId: string | null;
 }
 
 function parse(hash: string): Omit<Route, "projectId"> & { projectId: string } {
@@ -47,10 +52,11 @@ function parse(hash: string): Omit<Route, "projectId"> & { projectId: string } {
     projectId = parts[1];
     rest = parts.slice(2);
   }
-  const blank = { conversationId: null, journalDay: null, examId: null };
+  const blank = { conversationId: null, journalDay: null, examId: null, figureId: null };
   if (rest[0] === "chat") return { view: "chat", projectId, ...blank, conversationId: rest[1] || null };
   if (rest[0] === "journal") return { view: "journal", projectId, ...blank, journalDay: rest[1] || null };
   if (rest[0] === "exam") return { view: "exam", projectId, ...blank, examId: rest[1] || null };
+  if (rest[0] === "figures") return { view: "figures", projectId, ...blank, figureId: rest[1] || null };
   if (rest[0] === "drill") return { view: "drill", projectId, ...blank };
   if (rest[0] === "cards") return { view: "cards", projectId, ...blank };
   return { view: "home", projectId, ...blank };
@@ -61,6 +67,7 @@ function serialise(r: Route): string {
   if (r.view === "chat") return base + "/chat" + (r.conversationId ? "/" + r.conversationId : "");
   if (r.view === "journal") return base + "/journal" + (r.journalDay ? "/" + r.journalDay : "");
   if (r.view === "exam") return base + "/exam" + (r.examId ? "/" + r.examId : "");
+  if (r.view === "figures") return base + "/figures" + (r.figureId ? "/" + r.figureId : "");
   if (r.view === "drill") return base + "/drill";
   if (r.view === "cards") return base + "/cards";
   return base + "/home";
@@ -91,6 +98,7 @@ interface RouteCtx extends Route {
   openCards: () => void;
   openJournal: (day?: string | null) => void;
   openExam: (id?: string | null) => void;
+  openFigures: (id?: string | null) => void;
   /** Makes a project active and lands on its drill view (or chat, if you're
    *  already there) with no conversation selected — switching projects mid
    *  conversation would otherwise leave you pointed at a thread that just
@@ -145,6 +153,7 @@ export function RouteProvider({ children }: { children: ReactNode }) {
   const openCards = useCallback(() => go({ view: "cards", conversationId: null }), [go]);
   const openJournal = useCallback((day?: string | null) => go({ view: "journal", journalDay: day ?? null }), [go]);
   const openExam = useCallback((id?: string | null) => go({ view: "exam", examId: id ?? null }), [go]);
+  const openFigures = useCallback((id?: string | null) => go({ view: "figures", figureId: id ?? null }), [go]);
   const switchProject = useCallback(
     (projectId: string) => {
       store.setActiveProject(projectId);
@@ -153,13 +162,15 @@ export function RouteProvider({ children }: { children: ReactNode }) {
          anywhere. Landing on home there would show an empty dashboard and
          make it look broken, so it lands where the only thing in it lives. */
       const view = isPersonalProject(projectId) ? "chat" : route.view;
-      go({ view, projectId, conversationId: null, journalDay: null, examId: null });
+      go({ view, projectId, conversationId: null, journalDay: null, examId: null, figureId: null });
     },
     [go, route.view]
   );
 
   return (
-    <Ctx.Provider value={{ ...route, go, openChat, openDrill, openHome, openCards, openJournal, openExam, switchProject }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ ...route, go, openChat, openDrill, openHome, openCards, openJournal, openExam, openFigures, switchProject }}>
+      {children}
+    </Ctx.Provider>
   );
 }
 

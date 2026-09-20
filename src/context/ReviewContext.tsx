@@ -100,11 +100,12 @@ export function useReview(): ReviewState {
   return ctx;
 }
 
-/** The review loop mounts this provider; the other five sections do not.
- *  Settings opens over all six and can change what the queue is made of — a
- *  restored backup, an imported deck — so it needs to ask for a refresh
- *  without requiring one. `review?.refresh()` is right in the review loop and
- *  correctly nothing everywhere else. */
+/** The review loop mounts this provider; Cards and Figures mount it for the
+ *  editor and the card writer, and the rest do not. Settings opens over every
+ *  one of them and can change what the queue is made of — a restored backup,
+ *  an imported deck — so it needs to ask for a refresh without requiring one.
+ *  `review?.refresh()` is right in the review loop and correctly nothing
+ *  everywhere else. */
 export function useMaybeReview(): ReviewState | null {
   return useContext(Ctx);
 }

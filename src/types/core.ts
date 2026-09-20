@@ -229,6 +229,9 @@ export interface FullBackup {
   /** Whiteboards. JSON already, so unlike files they cost nothing to carry and
    *  ride in every backup. Absent in backups made before boards existed. */
   boards?: unknown[];
+  /** Figures kept out of the conversations that drew them. Text, like boards,
+   *  so they ride in every backup. Absent in backups made before the shelf. */
+  figures?: unknown[];
 }
 
 /** What a backup contains, for the confirmation shown before restoring. */
@@ -246,4 +249,7 @@ export interface BackupSummary {
   candidates: number;
   journal: number;
   exams: number;
+  /** Kept figures and whiteboards, counted together the way the section
+   *  shows them. Absent in a summary of a backup made before the shelf. */
+  figures?: number;
 }

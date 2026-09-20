@@ -1,0 +1,406 @@
+/* ============================================================================
+ * figures.css — the frame a figure is drawn in, and the section that keeps
+ * them.
+ *
+ * The top half used to live at the bottom of chat.css, which was right while
+ * a figure only ever existed inside a reply. A kept figure is drawn by the
+ * same component from the Figures section, so the rules moved here and both
+ * views import this file: two stylesheets describing one frame is how the
+ * library's copy ends up looking almost, but not quite, like chat's.
+ *
+ * The section's own furniture is the bottom half. It shares the home page's
+ * chapter opening the way cards.css does — same kind of page, opened the same
+ * way — and is imported from the view rather than pulled in here, so chat
+ * does not carry the home page's stylesheet to draw a diagram.
+ * ========================================================================== */
+
+/* --------------------------------------------------------------- figures -- */
+/* Where a fenced figure was. Empty until the reply has finished streaming and
+   MessageTurn mounts the drawing into it — half a diagram is an error, so the
+   slot says what is coming instead of flashing one. */
+.vis-slot {
+  margin: var(--s-4) 0;
+}
+.vis-slot:empty::before {
+  content: "Drawing…";
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: var(--s-4);
+  border: 1px dashed var(--rule);
+  border-radius: var(--r-2);
+  text-align: center;
+}
+.vis {
+  margin: 0;
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-3);
+  background: var(--page-2);
+  overflow: hidden;
+}
+.vis-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-2) var(--s-1) var(--s-3);
+  border-bottom: 1px solid var(--rule-soft);
+}
+.vis-label {
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.vis-acts {
+  margin-left: auto;
+  display: flex;
+  gap: var(--s-1);
+  flex-wrap: wrap;
+}
+/* The figure itself is shown as an image from a blob: an SVG loaded that way
+   runs no script and reaches nothing outside itself. */
+.vis-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  padding: var(--s-3);
+  box-sizing: border-box;
+}
+.vis-chart {
+  padding: var(--s-3);
+  min-height: 4rem;
+}
+.vis-chart .vega-bindings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-4);
+  margin-top: var(--s-2);
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  color: var(--ink-2);
+}
+.vis-chart .vega-bind {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.vis-chart input[type="range"] {
+  accent-color: var(--accent);
+}
+.vis-source {
+  margin: 0;
+  padding: var(--s-3);
+  font-family: var(--mono);
+  font-size: var(--t-2xs);
+  color: var(--ink-2);
+  white-space: pre;
+  overflow: auto;
+  max-height: 24rem;
+}
+.vis-error {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+  padding: var(--s-3);
+  color: var(--red);
+  font-size: var(--t-xs);
+}
+.vis-wait {
+  padding: var(--s-4);
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  color: var(--ink-3);
+}
+.vis:fullscreen {
+  background: var(--page);
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+.vis:fullscreen .vis-img {
+  max-height: calc(100vh - 3rem);
+  width: auto;
+}
+
+/* A canvas: a figure that keeps running. The frame's height is measured from
+   inside it (the one inline style here), and its errors arrive while you
+   watch, so they sit under it rather than replacing it. */
+.vis-title {
+  font-size: var(--t-2xs);
+  color: var(--ink-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vis-version {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  color: var(--ink-3);
+}
+.vis-version button {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+.vis-version button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.vis-canvas {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: var(--page-2);
+}
+.vis-note {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+  padding: var(--s-2) var(--s-3);
+  border-top: 1px solid var(--rule-soft);
+  color: var(--amber);
+  font-size: var(--t-xs);
+}
+.vis:fullscreen .vis-canvas {
+  height: calc(100vh - 3rem) !important;
+}
+
+/* ---------------------------------------------------------- whiteboard -- */
+/* A board wants the whole sheet: it is a canvas with its own toolbars, and a
+   drawing surface the size of a dialog is not one you can think on. */
+.board-sheet {
+  max-width: none;
+  width: 96vw;
+  height: 92vh;
+  max-height: none;
+}
+.board-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--r-1);
+  padding: var(--s-1) var(--s-2);
+  font: inherit;
+  font-size: var(--t-4);
+  font-weight: 600;
+  color: var(--ink);
+}
+.board-title:hover {
+  border-color: var(--rule-soft);
+}
+.board-title:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.board-acts {
+  display: flex;
+  gap: var(--s-2);
+  flex: 0 0 auto;
+}
+.board-surface {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.board-surface .excalidraw {
+  --zIndex-layerUI: 4;
+}
+
+/* ======================================================= the Figures section */
+/* The page chrome — the chapter opening, the toolbar, the filter pills — is
+   cards.css's, imported alongside this by the view. The two sections are the
+   same kind of page (a library you browse, not an instrument you operate) and
+   a second set of pills that looked almost the same would be worse than a
+   shared one. Only what is genuinely new is below. */
+
+.page.figs {
+  max-width: var(--page-wide);
+  padding-top: var(--s-7);
+  padding-bottom: var(--s-8);
+}
+
+/* ------------------------------------------------------------- the list -- */
+.figlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.figrow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  width: 100%;
+  text-align: left;
+  padding: var(--s-3);
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--rule-soft);
+  border-radius: var(--r-2);
+  cursor: pointer;
+  transition: background var(--fast), transform var(--fast), box-shadow var(--fast);
+}
+.figrow:hover {
+  background: var(--surface);
+  transform: translateX(4px);
+  box-shadow: var(--lift-1);
+}
+.figrow-txt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.figrow-title {
+  font-family: var(--serif);
+  font-size: var(--t-read);
+  line-height: var(--lh-snug);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Your own words about why you kept it, when there are any — quieter than the
+   title, one line, the same argument the card list makes for showing a back. */
+.figrow-note {
+  font-family: var(--sans);
+  font-size: var(--t-xs);
+  line-height: var(--lh-snug);
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.figrow-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex: 0 0 auto;
+  font: 400 var(--t-2xs) / 1 var(--sans);
+  color: var(--ink-3);
+}
+.fig-kind {
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--ink-3);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-full);
+  padding: 2px var(--s-2);
+}
+
+/* ----------------------------------------------------------- one figure -- */
+/* One at a time, on its own page. A wall of live charts and running canvases
+   is a wall of work for the browser, and the figure you came back for wants
+   the width anyway. */
+.fig-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  background: none;
+  border: 0;
+  padding: 0;
+  margin-bottom: var(--s-4);
+  color: var(--ink-3);
+  font: 400 var(--t-xs) / 1.6 var(--sans);
+  cursor: pointer;
+}
+.fig-back:hover {
+  color: var(--ink);
+}
+/* The one chevron, turned. A rotation is a look, so it lives here rather than
+   in a style prop — the same rule .rail-chev and .turn-toc-chev keep. */
+.fig-back-chev {
+  flex: 0 0 auto;
+  transform: rotate(90deg);
+}
+.fig-title {
+  width: 100%;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--r-1);
+  margin: 0 0 var(--s-2) calc(var(--s-2) * -1);
+  padding: var(--s-1) var(--s-2);
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: var(--t-xl);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--track-tight);
+  color: var(--ink);
+}
+.fig-title:hover {
+  border-color: var(--rule-soft);
+}
+.fig-title:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.fig-prov {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  margin-bottom: var(--s-4);
+  font: 400 var(--t-2xs) / 1.6 var(--sans);
+  color: var(--ink-3);
+}
+.fig-prov button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+.fig-vers {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  color: var(--ink-3);
+}
+.fig-vers button {
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+.fig-vers button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.fig-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+}
+/* Why you kept it. Commits on blur like every other field in the app — there
+   is no Save button anywhere in Drill and this is not where one starts. */
+.fig-why {
+  margin-top: var(--s-5);
+}
+.fig-why textarea.fi {
+  min-height: 4.5rem;
+  font-size: var(--t-sm);
+  margin-bottom: 0;
+}

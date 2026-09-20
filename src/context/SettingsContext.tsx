@@ -14,7 +14,7 @@
  * So: one piece of state, held above every view, saying which page is open (or
  * none) and, optionally, which group on it to jump to. Anything can call
  * `open()`; exactly one surface renders it, from Shell, which is the one
- * component all six sections agree on.
+ * component every section agrees on.
  *
  * The surface renders in Shell rather than here on purpose. Some pages need a
  * context only their own view provides — "This chat" reads ChatProvider — and

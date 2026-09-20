@@ -1,7 +1,7 @@
 /* ============================================================================
  * Sidebar — the running head, stood on its end.
  *
- * One navigation for the whole app: the project, the four sections, whatever
+ * One navigation for the whole app: the project, the seven sections, whatever
  * the current section wants to hang underneath them (chat puts its
  * conversation index there), and the two global tools at the foot.
  *
@@ -30,7 +30,10 @@ const SECTIONS: { view: View; label: string; icon: IconName }[] = [
   { view: "cards", label: "Cards", icon: "cards" },
   { view: "journal", label: "Journal", icon: "journal" },
   { view: "exam", label: "Exam", icon: "exam" },
-  { view: "chat", label: "Chat", icon: "bubble" }
+  { view: "chat", label: "Chat", icon: "bubble" },
+  /* Last, because that is where its contents come from: you keep a figure out
+     of a conversation, and this is where it lands. */
+  { view: "figures", label: "Figures", icon: "figure" }
 ];
 
 export default function Sidebar({
@@ -54,7 +57,7 @@ export default function Sidebar({
 }) {
   const db = useDrillStore();
   useStoreSync(journalStore);
-  const { openHome, openDrill, openCards, openChat, openJournal, openExam } = useRoute();
+  const { openHome, openDrill, openCards, openChat, openJournal, openExam, openFigures } = useRoute();
   /* Shell renders the panel, so this only asks for it. The sidebar used to
      hold its own copy, which is how chat ended up with a second settings
      surface that the sidebar's one knew nothing about. */
@@ -74,7 +77,8 @@ export default function Sidebar({
     cards: openCards,
     chat: () => openChat(null),
     journal: () => openJournal(),
-    exam: () => openExam(null)
+    exam: () => openExam(null),
+    figures: () => openFigures(null)
   };
 
   /* The printing lives one click away rather than only in Settings: which one

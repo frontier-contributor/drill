@@ -24,6 +24,7 @@ import * as usageLog from "./usageLog";
 import * as memoryStore from "./memoryStore";
 import * as candidates from "./candidates";
 import * as examStore from "./examStore";
+import * as figuresStore from "./figures";
 import * as U from "@/lib/util";
 import { idbAll, idbBulkPut, idbClear, STORE_CAND, STORE_CONV, STORE_EXAMS, STORE_JOURNAL, STORE_MEM, STORE_ROLLUPS, STORE_USAGE } from "./idb";
 import { CURRENT_DB_VERSION, dbVersionOf } from "@/lib/migrate";
@@ -81,6 +82,7 @@ export async function collect(opts: CollectOptions = {}): Promise<FullBackup> {
     exams,
     usage,
     boards: await filesDb.listBoards(),
+    figures: await filesDb.listFigures(),
     ...(opts.includeFiles ? { files: await collectFiles() } : {})
   };
 }
@@ -148,7 +150,8 @@ export function parse(text: string): FullBackup {
     exams: Array.isArray(b.exams) ? b.exams : [],
     usage: Array.isArray(b.usage) ? b.usage : [],
     files: Array.isArray(b.files) ? b.files : undefined,
-    boards: Array.isArray(b.boards) ? b.boards : []
+    boards: Array.isArray(b.boards) ? b.boards : [],
+    figures: Array.isArray(b.figures) ? b.figures : []
   };
 }
 
@@ -171,6 +174,7 @@ export function summarise(b: FullBackup): BackupSummary {
     candidates: b.candidates.length,
     journal: b.journal.length,
     exams: b.exams.length,
+    figures: (b.figures?.length || 0) + (b.boards?.length || 0),
     files: b.files?.length || 0
   };
 }
@@ -223,13 +227,15 @@ export async function restoreEverything(b: FullBackup): Promise<BackupSummary> {
      at all — including empty, which is what "this browser had no boards when
      I exported" means. A backup from before boards leaves them alone. */
   if (Array.isArray(b.boards)) await filesDb.replaceAllBoards(b.boards as never);
+  if (Array.isArray(b.figures)) await filesDb.replaceAllFigures(b.figures as never);
   await Promise.all([
     chatStore.rebuildIndex(),
     memoryStore.reload(),
     candidates.reload(),
     journalStore.reload(),
     examStore.reload(),
-    usageLog.reload()
+    usageLog.reload(),
+    figuresStore.reload()
   ]);
 
   return summarise(b);
