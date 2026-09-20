@@ -6,6 +6,11 @@
  * worth the tokens, and three of the six only exist because the app knows
  * your decks.
  *
+ * The first of them is the day itself, and it appears only on a day that has
+ * one: what the app can see you have already done is the most specific thing
+ * it will ever be able to open with, and it is also how anyone finds out that
+ * chat can see it at all.
+ *
  * Which is exactly why the personal space gets a different set. "Work on my
  * weak spots · 0 leeches" is not a starter there, it is an advertisement for
  * an empty room — Personal has no decks by design, and offering the three
@@ -16,6 +21,7 @@
  * ========================================================================== */
 import * as store from "@/services/store";
 import { isPersonalProject } from "@/services/projects";
+import { ASK_ABOUT_TODAY, collectDay, daySummary, isEmptyDay, todayWindow } from "@/lib/dayBrief";
 import type { CreateOpts } from "@/services/chatStore";
 import Icon, { type IconName } from "../ui/Icon";
 
@@ -34,6 +40,22 @@ export default function ChatEmpty({ ready, onStart, onPrefill }: Props) {
   const counts = store.counts(projectDecks);
   const stats = store.stats(projectDecks);
   const personal = isPersonalProject(store.get().activeProjectId);
+
+  /* The day, if there is one. Offered first when there is and not at all when
+     there is not — the same rule the deck starters follow, for the same
+     reason: a starter that promises to pick up where you left off, on a day
+     you have not started, is an advertisement for an empty room. */
+  const day = collectDay(store.get().activeProjectId, todayWindow(1));
+  const dayStarter = isEmptyDay(day)
+    ? []
+    : [
+        {
+          t: "Pick up where I left off",
+          s: daySummary(day),
+          icon: "home" as IconName,
+          go: () => onStart(ASK_ABOUT_TODAY, { title: "Today", personaId: "tutor" })
+        }
+      ];
 
   const deckStarters: { t: string; s: string; icon: IconName; go: () => void }[] = [
     {
@@ -93,7 +115,7 @@ export default function ChatEmpty({ ready, onStart, onPrefill }: Props) {
 
   /* Deck-shaped openers first where there are decks, and not at all where
      there are none. */
-  const starters = personal ? always : [...deckStarters, ...always];
+  const starters = personal ? [...dayStarter, ...always] : [...dayStarter, ...deckStarters, ...always];
 
   return (
     <div className="chat-empty">

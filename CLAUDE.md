@@ -21,10 +21,10 @@ especially its **Project layout** section. Do not restate it here.
 npm run dev     # vite; usually :5173, falls back to :5174 if taken
 npm run lint    # tsc --noEmit. The only lint there is
 npm test        # tsx --test src/**/*.test.ts
-                # 262 tests: fsrs, cardFormat, memory*, effort, title,
+                # 269 tests: fsrs, cardFormat, memory*, effort, title,
                 # thinking, agent/loop, settings/catalogue, logBudget,
                 # storage, activity, gaps, retry, budget, ai/structured,
-                # weeks, rememberArg, visuals/{srcdoc (the sandbox walls), keep},
+                # weeks, rememberArg, dayBrief, visuals/{srcdoc (the walls), keep},
                 # speech/{words, availability, player}
 npm run build   # tsc -b && vite build
 ```
@@ -215,6 +215,23 @@ and leaves the first request unstoppable.
 An assistant turn with no variants and no error is a reply that was in flight
 when the app went away; `chatStore.repair()` names it so the UI offers Retry
 instead of a blank bubble it used to give a blank variant to.
+
+**The day is one description, in one file, read by everything.**
+`lib/dayBrief.ts` is what "today" means: `collectDay(projectId, window)` walks
+every section — reviews and the sentences written when tested, conversations,
+exams, notes, cards written, memories, figures kept, the journal itself — and
+`renderDay` turns that into the block a model is given. Three rules.
+**It is a window, never the clock**: the journal writes up a named day, so
+`dayWindow(day)` closes at that day's midnight, and handing it `todayWindow()`
+would file this morning's reviews into yesterday's permanent entry
+(`dayBrief.test.ts` holds that). **`dayBlocks` and `renderDay` are one walk,
+two renderings** — the journal page shows you the blocks and the writer is sent
+the same ones, so the page cannot claim a day the prompt does not have.
+And **`services/ai` may not import it**: it reaches into six stores, and that
+file is in the review loop's entry chunk, so the journal view passes the
+rendered record into `writeJournal` instead. It is also why the brief is used
+through `renderSource` in chat and `collectDay` directly in the journal — one
+module, two callers, no second definition of what a day is.
 
 **The learner model is one description, in one file, fed by the loop.**
 `lib/memoryBrief.ts`'s `learnerBlocks()` is the only place that says how a

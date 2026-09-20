@@ -644,8 +644,16 @@ export async function wrapUp(turns: ChatMessage[], alreadyKnown: string[] = []):
 /* -------------------------------------------------------------- journal -- */
 
 const JOURNAL_SYS =
-  "Below is what a learner did today, in their own words, possibly messy and out of order. Write their journal " +
-  "entry for the day.\n\n" +
+  "Write a learner's journal entry for one day.\n\n" +
+  "You may be given two things, and they are not the same kind of evidence.\n\n" +
+  "THE RECORD is what the app logged: cards reviewed and how each went, what they wrote from memory when " +
+  "tested, conversations they worked in, exams, notes, cards written, figures they kept. It is fact. Use it for " +
+  "`did`, and to ground everything else — but never read a difficulty into it that they did not express. A " +
+  "failed card is a fact; what confused them about it is only knowable if they said so, or if the words they " +
+  "wrote when tested show it.\n\n" +
+  "THEIR OWN WORDS are what they typed, possibly messy and out of order. This is how they were thinking, and it " +
+  "outranks the record everywhere the two could disagree about meaning.\n\n" +
+  "If only one of the two is present, write from it alone and do not remark on the absence of the other.\n\n" +
   "`narrative` is 2 to 5 sentences in second person — the shape of the day, not a list. Be concrete and do not " +
   "flatter. If the day was thin, say so briefly rather than inflating it.\n\n" +
   "`stuck` is the most important field: capture the SPECIFIC confusion, not the topic. \"Could not see why the " +
@@ -653,13 +661,29 @@ const JOURNAL_SYS =
   "difficulty.\n\n" +
   "`open` is anything raised and not resolved — a question asked and dropped, a thing they said they would look " +
   "up. Leave empty rather than padding.\n\n" +
-  "Use only what is in the text. Do not add facts, do not correct their understanding, do not teach.\n\n" +
+  "Use only what you are given. Do not add facts, do not correct their understanding, do not teach.\n\n" +
   "Reply ONLY with JSON: {\"narrative\":\"...\",\"did\":[\"...\"],\"learned\":[\"...\"],\"stuck\":[\"...\"]," +
   "\"open\":[\"...\"],\"resources\":[{\"label\":\"...\",\"url\":\"...\"}],\"nextUp\":[\"...\"]}";
 
-export async function writeJournal(rawText: string, project: Project): Promise<JournalSummary> {
+/**
+ * Write up one day.
+ *
+ * `record` is the day as the app logged it — `lib/dayBrief.ts`'s rendering of
+ * it, passed in rather than imported, because that module reaches into every
+ * store and this file is in the review loop's entry chunk (see the note on
+ * `poolFor` in lib/chatContext.ts). The journal view is lazy and can afford
+ * it; this cannot.
+ *
+ * It matters because the journal used to be written from the capture box
+ * alone. A day spent drilling sixty cards, arguing through a derivation in
+ * chat and sitting an exam produced "Log something first" — the one section
+ * whose job is to say what happened could not see anything that had.
+ */
+export async function writeJournal(rawText: string, project: Project, record?: string): Promise<JournalSummary> {
   const usr =
-    "PROJECT: " + project.name + (project.goals ? " — goal: " + project.goals : "") + "\n\nTODAY'S RAW LOG:\n" + rawText;
+    "PROJECT: " + project.name + (project.goals ? " — goal: " + project.goals : "") +
+    (record ? "\n\nTHE RECORD — what the app logged for this day:\n" + record : "") +
+    (rawText.trim() ? "\n\nTHEIR OWN WORDS, as they typed them:\n" + rawText : "");
   const sys = withMemory(JOURNAL_SYS, rawText, { goals: false, projectId: project.id });
   const j = await structured({
     messages: [{ role: "system", content: sys }, { role: "user", content: usr }],

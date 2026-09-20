@@ -168,7 +168,7 @@ export const SECTIONS = sections({
     cat: "conversation",
     title: "What it can see",
     sub: "Rebuilt from your decks and memory every time you send, so it always reflects today's progress rather than the day the thread started.",
-    finds: ["context", "attach", "deck", "today", "weak spots", "due", "insight log", "notes", "memory", "project files", "knowledge", "journal"]
+    finds: ["context", "attach", "deck", "today", "weak spots", "due", "insight log", "notes", "memory", "project files", "knowledge", "journal", "figures", "kept", "diagrams", "canvas", "whiteboard"]
   },
 
   /* -------------------------------------------------------------- connection -- */

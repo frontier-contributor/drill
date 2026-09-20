@@ -4,10 +4,18 @@
  * The narrative is regenerable: raw text is kept forever (CaptureBox never
  * touches this component), so a bad entry is one click to redo. An edited
  * entry is flagged so regeneration warns before overwriting hand edits.
+ *
+ * It is written from two things now: what you typed, and what the app logged
+ * for that day (lib/dayBrief.ts, shown above by DayRecord). Either alone is
+ * enough. Before, the capture box was the only input, so the button was dead
+ * on a day spent drilling, chatting and sitting an exam without typing
+ * anything — the one section whose job is to say what happened, refusing
+ * because nobody had told it.
  * ========================================================================== */
 import { useState } from "react";
 import * as AI from "@/services/ai";
 import * as journalStore from "@/services/journalStore";
+import { collectDay, dayWindow, isEmptyDay, renderDay } from "@/lib/dayBrief";
 import { useToast } from "@/context/ToastContext";
 import type { JournalEntry, JournalSummary } from "@/types/journal";
 import type { Project } from "@/types/core";
@@ -98,9 +106,20 @@ export default function JournalEntryView({
   const rawText = entry.raw.map((r) => (r.label ? `[${r.label}]\n` : "") + r.text).join("\n\n---\n\n");
   const s = entry.summary;
 
+  /* The day as the app logged it, for this entry's own day rather than for
+     right now — writing up yesterday must not be handed this morning's
+     reviews, in a record whose whole promise is that it is what happened. */
+  const record = (() => {
+    const w = dayWindow(entry.day);
+    if (!w) return null;
+    const r = collectDay(entry.projectId, w);
+    return isEmptyDay(r) ? null : renderDay(r);
+  })();
+  const canWrite = !!rawText.trim() || !!record;
+
   function generate() {
-    if (!rawText.trim()) {
-      toast("Log something first");
+    if (!canWrite) {
+      toast("Nothing logged for this day yet — study something, or write a line above");
       return;
     }
     if (s && entry.edited) {
@@ -108,7 +127,7 @@ export default function JournalEntryView({
     }
     setBusy(true);
     setError(null);
-    AI.writeJournal(rawText, project)
+    AI.writeJournal(rawText, project, record || undefined)
       .then((summary) => {
         journalStore.setSummary(entry, summary);
         toast("Journal written");
@@ -126,12 +145,18 @@ export default function JournalEntryView({
       {error && <div className="err">{error}</div>}
       {busy && (
         <div className="empty">
-          <Working stages={["reading what you wrote", "finding the shape of the day", "naming what you got stuck on", "writing it up"]} />
+          <Working stages={["reading the day", "reading what you wrote", "finding the shape of it", "naming what you got stuck on", "writing it up"]} />
         </div>
       )}
 
       {!busy && !s && (
-        <div className="empty">{rawText.trim() ? "Not written yet — generate it below." : "Nothing logged for this day yet."}</div>
+        <div className="empty">
+          {canWrite
+            ? rawText.trim()
+              ? "Not written yet — write it up below."
+              : "Nothing typed, but the day has a record of its own. Write it up and it will be written from that."
+            : "Nothing logged for this day yet."}
+        </div>
       )}
 
       {!busy && s && (
@@ -204,8 +229,8 @@ export default function JournalEntryView({
           with no object is a bad button, so the button says what it produces
           and a line underneath says where the two piles go. */}
       <div className="btnrow" style={{ marginTop: 6 }}>
-        <button className="btn" disabled={busy || !rawText.trim()} onClick={generate}>
-          {s ? "Regenerate" : "Write today's entry"}
+        <button className="btn" disabled={busy || !canWrite} onClick={generate}>
+          {s ? "Regenerate" : "Write this day up"}
         </button>
         {s && (
           <button className="btn pri" onClick={onDistill} disabled={busy}>

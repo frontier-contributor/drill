@@ -285,7 +285,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const persona = c.systemPrompt || getPersona(c.personaId).prompt;
       const lastUser = [...c.turns.slice(0, upTo + 1)].reverse().find((t) => t.role === "user");
       const queryText = lastUser ? chatStore.activeContent(lastUser) : "";
-      const { system, memories } = buildContext(persona, c.context, queryText, c.projectId, budget.memoryLimit);
+      const { system, memories } = buildContext(persona, c.context, queryText, c.projectId, budget.memoryLimit, c.id);
       const msgs: ChatMessage[] = [];
       if (system) msgs.push({ role: "system", content: system });
 

@@ -25,6 +25,13 @@ openrouter.ai.
   whole deck, or your insight log. Context is rebuilt from your real progress
   every time you send, so a thread you return to next week reflects next
   week's gaps.
+- **It can see your day** — everything you did, from every section: the cards
+  you reviewed and how each went, the sentences you wrote from memory when
+  tested, the other conversations you worked in, exams, notes, cards written,
+  memories saved, and the figures you kept. "What have I been working on?" is
+  a question this answers with facts rather than a guess, and `/today` asks it
+  in one keystroke. It is also the first thing a new chat offers you, on a day
+  you have already started.
 - **Attach what you are studying from** — pictures and screenshots (paste,
   drop anywhere on the chat, or pick), PDFs, Word, Excel, CSV, text and code.
   Everything is read in your browser first: a PDF's text with page numbers, a
@@ -68,8 +75,9 @@ openrouter.ai.
   Explainer, Feynman check (you explain, it finds the holes), ML researcher,
   Code, or a raw model with no system prompt.
 - **Slash commands** — `/quiz` on what's due, `/weak` to attack what you keep
-  failing, `/cards`, `/explain`, `/feynman`, `/note`, `/board`, `/map`,
-  `/figures`, `/export`, and `/remember` — with a fact after it to save that
+  failing, `/today` for what you have done and what to do next, `/cards`,
+  `/explain`, `/feynman`, `/note`, `/board`, `/map`, `/figures`, `/export`,
+  and `/remember` — with a fact after it to save that
   fact, or alone to pull what is worth keeping out of the conversation.
 - **Proper rendering** — Markdown, LaTeX via KaTeX, syntax-highlighted code
   with copy buttons, tables.
@@ -120,8 +128,33 @@ you named "q about grads".
   conversation it came from, or start a new thread that already has it in the
   history so you can ask about it. Export is the same SVG / PNG / HTML it
   always was.
+- **Chat knows what is on the shelf** — every thread can see the titles of what
+  you kept and the notes you wrote about them, so "the diagram I kept" means
+  something. Type `@` and pick one to hand over the figure itself; ask for a
+  change, press Keep on the reply, and it becomes the next version of the one
+  you already had — even from a different conversation.
 - **It counts as a day** — keeping a figure lights up the square on Home, like
   everything else in every other section.
+
+### Journal
+
+A day, written up — and it no longer depends on you remembering to type
+anything.
+
+- **The record** — above the box you write in, every day carries what the app
+  logged for it: cards reviewed and how they went, conversations, exams, notes,
+  cards written, figures kept. Open it and you are reading exactly what the
+  journal writer will be given, word for word.
+- **Write it from either half** — what you typed, what actually happened, or
+  both. A day spent drilling, arguing through a derivation in chat and sitting
+  an exam without typing a word used to produce "Log something first"; it now
+  writes up from the record, and your own words simply outrank it wherever the
+  two could disagree about meaning.
+- **Capture anything, any time** — type it, drop a file on it, or let a
+  `/remember` from a conversation file itself under the day it happened.
+- **It goes somewhere** — distil an entry into memories and flashcards, both
+  proposed and neither saved until you pick them; roll a week up into a summary
+  that also proposes what to merge and retire in memory.
 
 ### Review
 

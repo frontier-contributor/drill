@@ -249,7 +249,11 @@ export function defaultContext(): ContextSource[] {
     { kind: "today", days: 1 },
     { kind: "journal", days: 7 },
     { kind: "weak", deckId: null },
-    { kind: "knowledge" }
+    { kind: "knowledge" },
+    /* Costs nothing until something is on the shelf — every source renders to
+       null when it is empty — and the moment one is, a new thread knows what
+       the learner has been working on without being configured to. */
+    { kind: "figures" }
   ];
 }
 

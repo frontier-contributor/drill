@@ -22,11 +22,13 @@
 import * as store from "@/services/store";
 import * as journalStore from "@/services/journalStore";
 import * as memoryStore from "@/services/memoryStore";
+import * as figures from "@/services/figures";
 import * as U from "@/lib/util";
 import { renderToday } from "@/lib/dayBrief";
+import { visualDef } from "@/lib/visuals/catalogue";
 import type { Attachment } from "@/types/chat";
 
-export type ReferenceKind = "today" | "journal" | "book" | "deck" | "card" | "memory" | "note";
+export type ReferenceKind = "today" | "figure" | "journal" | "book" | "deck" | "card" | "memory" | "note";
 
 export interface Reference {
   id: string;
@@ -43,6 +45,7 @@ export interface Reference {
  *  thing was attached without reading it. */
 export const KIND_LABEL: Record<ReferenceKind, string> = {
   today: "today",
+  figure: "figure",
   journal: "journal",
   book: "book",
   deck: "deck",
@@ -76,6 +79,31 @@ export function catalogue(projectId: string): Reference[] {
     hint: "everything you did today — reviews, attempts, what you wrote",
     text: () => renderToday(projectId, 1) || "Nothing recorded today yet."
   });
+
+  /* --- figures you kept, with their block ---
+     The other half of the `{kind:"figures"}` context source, and the reason
+     that one is only a list of titles: this is where a figure is actually
+     handed over, one at a time, when it is the thing being talked about.
+     Sending the fence rather than a description means the model can revise it
+     — and a revision written under the same title becomes the next version of
+     what is already on the shelf rather than a second copy of it. */
+  for (const f of figures.list(projectId).slice(0, 40)) {
+    const def = visualDef(f.kind);
+    out.push({
+      id: "figure:" + f.id,
+      kind: "figure",
+      label: clip(f.title, 44),
+      hint: `${def.label.toLowerCase()} · kept ${U.ago(f.updated)}${f.versions.length ? ` · v${f.versions.length + 1}` : ""}`,
+      text: () =>
+        `A figure the learner kept, titled "${f.title}" (${def.label.toLowerCase()})` +
+        (f.note ? `. Their note on why: ${f.note}` : "") +
+        ".\n\n```" +
+        (f.info || def.fences[0]) +
+        "\n" +
+        f.source.replace(/\n$/, "") +
+        "\n```\n\nTo revise it, write the whole block again under the same title."
+    });
+  }
 
   /* --- journal entries, newest first --- */
   for (const e of journalStore.listForProject(projectId).slice(0, 40)) {

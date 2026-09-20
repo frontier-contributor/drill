@@ -30,6 +30,7 @@ import { useDrillStore } from "@/hooks/useDrillStore";
 import { describeSource } from "@/lib/chatContext";
 import { catalogue } from "@/lib/references";
 import { markdownToText } from "@/lib/markdown";
+import { ASK_ABOUT_TODAY } from "@/lib/dayBrief";
 import { estimateTurnTokens, formatCost, formatTokens } from "@/lib/tokens";
 import { getPersona } from "@/lib/personas";
 import { download, slug } from "@/lib/util";
@@ -498,6 +499,16 @@ ${conceptMap(input)}
 It is built from your memories and what the review loop says you keep getting wrong, so nothing was asked of a model.`;
           const target = c || chat.newConversation({ title: "Concept map" });
           if (target) chatStore.addTurn(target, chatStore.makeTurn("assistant", body));
+        }
+      },
+      {
+        cmd: "/today",
+        desc: "What you have done today, and what to do next",
+        run: (arg: string) => {
+          chat.newConversation(
+            { title: "Today", personaId: "tutor" },
+            arg ? `${ASK_ABOUT_TODAY} Focus on ${arg}.` : ASK_ABOUT_TODAY
+          );
         }
       },
       {

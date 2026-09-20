@@ -79,12 +79,32 @@ test("stepping back to an older version and keeping it again changes nothing", (
   assert.equal(back.figure.versions.length, 1);
 });
 
-test("the same canvas title in a second thread is a second figure", () => {
-  /* Versions are a thread's idea of a canvas. Two conversations that both
-     produced a canvas called "Canvas" — which is the fallback title — are not
-     revisions of each other. */
+test("two unnamed canvases from different threads are two figures", () => {
+  /* Every canvas without a title attribute has the same derived id, so a
+     project-wide key would fold every anonymous one ever kept into a single
+     stack of versions. */
   const c = block({ kind: "canvas", info: "drill-canvas", source: "<h1>a</h1>" });
   assert.notEqual(figureKey(c, where), figureKey(c, { projectId: "p1", conversationId: "c2" }));
+});
+
+test("a named canvas is the same figure from any thread", () => {
+  /* The loop the shelf exists for: attach the one you kept with @, ask for it
+     to be changed, keep the reply — which happens in whatever conversation you
+     were in. A thread-local key would have started a second figure of the same
+     name rather than a second version of the first. */
+  const v1 = block({ kind: "canvas", info: 'drill-canvas title="Gradient descent"', source: "<h1>one</h1>" });
+  const v2 = block({ kind: "canvas", info: 'drill-canvas title="Gradient descent"', source: "<h1>two</h1>" });
+  assert.equal(figureKey(v1, where), figureKey(v2, { projectId: "p1", conversationId: "somewhere-else" }));
+
+  const kept = foldKeep(undefined, { block: v1, ...where }, 1000, ids).figure;
+  const elsewhere = foldKeep(kept, { block: v2, projectId: "p1", conversationId: "somewhere-else" }, 2000, ids);
+  assert.equal(elsewhere.status, "revised");
+  assert.equal(elsewhere.figure.versions.length, 1);
+});
+
+test("a named canvas in another project is another figure", () => {
+  const c = block({ kind: "canvas", info: 'drill-canvas title="Gradient descent"', source: "<h1>one</h1>" });
+  assert.notEqual(figureKey(c, where), figureKey(c, { projectId: "p2", conversationId: "c1" }));
 });
 
 test("renaming does not change what the next revision folds into", () => {

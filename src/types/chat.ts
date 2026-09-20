@@ -155,7 +155,18 @@ export type ContextSource =
    * journal source only sees entries that have been through the narrative
    * step, and nothing else in this list has ever seen the review log.
    */
-  | { kind: "today"; days?: number };
+  | { kind: "today"; days?: number }
+  /**
+   * The figures the learner has kept — the shelf, not the thread.
+   *
+   * A list, deliberately: title, kind and the note they wrote about why it
+   * was worth keeping. The block itself is what the `@` picker attaches
+   * (lib/references.ts), because a canvas is a few hundred lines and sending
+   * every kept one on every message would cost more than the conversation.
+   * This source is how "the diagram I kept" resolves to something; that one
+   * is how the model gets to read it.
+   */
+  | { kind: "figures"; limit?: number };
 
 export interface Conversation {
   id: string;

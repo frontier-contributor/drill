@@ -227,3 +227,84 @@
   padding-top: var(--s-3);
   border-top: 1px solid var(--rule-soft);
 }
+
+/* ------------------------------------------------------------ the record -- */
+/* What the app logged for a day, above the box you write in. Shut by default:
+   the point of a day is what you have to say about it, and this is evidence,
+   which belongs behind a summary line. Ruled rather than boxed — it is a
+   preamble to the entry, not a panel beside it. */
+.dayrec {
+  margin-bottom: var(--s-5);
+  border-bottom: 1px solid var(--rule-soft);
+}
+.dayrec-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  width: 100%;
+  padding: var(--s-2) 0 var(--s-3);
+  background: none;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  color: var(--ink-3);
+}
+.dayrec-head:hover {
+  color: var(--ink);
+}
+.dayrec-chev {
+  flex: 0 0 auto;
+  align-self: center;
+  transform: rotate(-90deg);
+  transition: transform var(--fast) var(--ease);
+}
+.dayrec.open .dayrec-chev {
+  transform: rotate(0deg);
+}
+.dayrec-title {
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  flex: 0 0 auto;
+}
+.dayrec-sum {
+  font-family: var(--sans);
+  font-size: var(--t-2xs);
+  color: var(--ink-3);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dayrec-body {
+  padding-bottom: var(--s-4);
+}
+.dayrec-block + .dayrec-block {
+  margin-top: var(--s-4);
+}
+.dayrec-bh {
+  font-family: var(--sans);
+  font-size: var(--t-xs);
+  color: var(--ink-2);
+  line-height: var(--lh-snug);
+}
+/* The lines are the prompt's own text, newlines and all — shown as written
+   rather than reflowed, because this panel's promise is that it is exactly
+   what the writer is given. */
+.dayrec-bl {
+  font-family: var(--mono);
+  font-size: var(--t-2xs);
+  line-height: var(--lh-snug);
+  color: var(--ink-3);
+  white-space: pre-wrap;
+  margin-top: var(--s-2);
+  padding-left: var(--s-3);
+  border-left: 1px solid var(--rule-soft);
+}
+.dayrec-foot {
+  font-family: var(--sans);
+  font-size: var(--t-2xs);
+  color: var(--ink-3);
+  margin: var(--s-4) 0 0;
+}

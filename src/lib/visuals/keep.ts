@@ -82,14 +82,31 @@ export function digest(text: string): string {
   return h.toString(36);
 }
 
+/** Whether a canvas fence names itself, rather than falling back to "Canvas".
+ *  A named canvas is a thing the model was told to call something; an unnamed
+ *  one is anonymous, and every anonymous canvas has the same id. */
+export function canvasNamed(info: string): boolean {
+  const attrs = parseFenceInfo(info);
+  return !!(attrs.id || attrs.title);
+}
+
 /**
  * What identifies this figure on the shelf.
  *
- * A canvas is keyed by its id *within its thread*, because that is exactly
- * what a canvas already means: the model rewrites one under the same title
- * and the two blocks are two versions of one thing (artifacts.ts). Keeping
- * the revision therefore updates what you kept rather than shelving a second
- * copy, which is the whole reason `versions` exists here.
+ * A canvas is keyed by its id, because that is exactly what a canvas already
+ * means: the model rewrites one under the same title and the two blocks are
+ * two versions of one thing (artifacts.ts). Keeping the revision therefore
+ * updates what you kept rather than shelving a second copy, which is the whole
+ * reason `versions` exists here.
+ *
+ * A *named* canvas is keyed across the project; an unnamed one only within its
+ * thread. Both halves of that are load-bearing. Unnamed canvases all share the
+ * fallback id, so a project-wide key would fold every anonymous canvas you
+ * ever kept into one stack of versions. And a named one has to reach across
+ * threads, because that is the loop this shelf exists for: attach the figure
+ * you kept with `@`, ask for it to be changed, keep the reply — in a new
+ * conversation, which under a thread-local key would have quietly started a
+ * second figure with the same name instead of a second version of the first.
  *
  * Everything else is keyed by its source. A diagram's derived title is often
  * a single generic word — `mermaidTitle` returns "flowchart" for any flowchart
@@ -100,7 +117,8 @@ export function digest(text: string): string {
  */
 export function figureKey(block: Pick<VisualBlock, "kind" | "source" | "info">, where: { projectId: string; conversationId?: string }): string {
   if (block.kind === "canvas") {
-    return `${where.projectId}|${where.conversationId || "loose"}|canvas|${canvasId(block.info)}`;
+    const scope = canvasNamed(block.info) ? "named" : where.conversationId || "loose";
+    return `${where.projectId}|${scope}|canvas|${canvasId(block.info)}`;
   }
   return `${where.projectId}|${block.kind}|${digest(block.source.trim())}`;
 }

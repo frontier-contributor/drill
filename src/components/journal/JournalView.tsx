@@ -17,6 +17,7 @@ import { partLabel } from "@/lib/weeks";
 import Shell from "../Shell";
 import JournalRail from "../rail/JournalRail";
 import CaptureBox from "./CaptureBox";
+import DayRecord from "./DayRecord";
 import JournalEntryView from "./JournalEntryView";
 import Timeline from "./Timeline";
 import DistillReview from "./DistillReview";
@@ -182,6 +183,11 @@ export default function JournalView() {
             <div className="empty">No entry for {day}.</div>
           ) : (
             <>
+              {/* Above the box you type in, and above the entry, because it is
+                  what the day already contains before you have said anything
+                  about it. Shown for past days too: it is what that day's
+                  entry would be regenerated from. */}
+              <DayRecord projectId={projectId} day={day} />
               {isToday && <CaptureBox entry={entry} key={entry.id} />}
               <JournalEntryView entry={entry} project={project} onDistill={() => setDistilling(true)} />
             </>

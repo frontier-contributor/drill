@@ -204,6 +204,13 @@ export default function ConversationScope() {
           <span className="pn">Journal</span>
           <span className="pb">The last two weeks of your log.</span>
         </button>
+        <button
+          className={"personaopt" + (hasSource((s) => s.kind === "figures") ? " on" : "")}
+          onClick={() => toggleSource({ kind: "figures" }, (s) => s.kind === "figures")}
+        >
+          <span className="pn">Kept figures</span>
+          <span className="pb">The diagrams, charts and canvases on your shelf — titles and your notes, so "the one I kept" means something.</span>
+        </button>
       </div>
 
       {memSource && (

@@ -17,9 +17,10 @@ import * as journalStore from "@/services/journalStore";
 import * as U from "@/lib/util";
 import { retrieve, type RetrievalTrace } from "@/lib/memoryRetrieval";
 import { learnerBlocks, memoryLine, poolFor, wrapLearner } from "@/lib/memoryBrief";
-import { kindsOn } from "@/lib/visuals/catalogue";
+import { kindsOn, visualDef } from "@/lib/visuals/catalogue";
 import { visualProtocol } from "@/lib/visuals/protocol";
-import { renderToday } from "@/lib/dayBrief";
+import { collectDay, renderDay, todayWindow } from "@/lib/dayBrief";
+import * as figures from "@/services/figures";
 import type { ContextSource } from "@/types/chat";
 import type { Card, Deck, Memory, MemoryScope, SRSState } from "@/types";
 
@@ -30,6 +31,9 @@ const MAX_CARDS = 60;
 const MAX_WEAK = 20;
 const MAX_NOTES = 25;
 const MAX_JOURNAL_ENTRIES = 14;
+/** Kept figures ride on every message as a list of titles, so this is a
+ *  shelf's worth of the most recent, not the whole shelf. */
+const MAX_FIGURES = 12;
 
 function cardLine(c: Card, st?: SRSState): string {
   const front = U.stripTags(c.q);
@@ -104,6 +108,11 @@ export interface RenderOpts {
   projectId?: string;
   /** Memory already retrieved for this source, so it is not scored twice. */
   memories?: Memory[];
+  /** The thread this is being built for, so the day brief can leave it out of
+   *  its own list of conversations. Describing the conversation you are in to
+   *  the model that is in it reads as a second, stale account of the thing it
+   *  is already looking at. */
+  conversationId?: string;
 }
 
 export function renderSource(src: ContextSource, queryText = "", opts: RenderOpts = {}): string | null {
@@ -214,8 +223,39 @@ export function renderSource(src: ContextSource, queryText = "", opts: RenderOpt
   }
 
   if (src.kind === "today") {
-    const block = renderToday(projectId, Math.max(1, src.days || 1));
-    return block;
+    return renderDay(
+      collectDay(projectId, todayWindow(Math.max(1, src.days || 1))),
+      { exceptConversation: opts.conversationId }
+    );
+  }
+
+  if (src.kind === "figures") {
+    /* Newest first, by when each was last revised: a canvas you came back to
+       three times is what you are working on now. */
+    const kept = figures.list(projectId).slice(0, Math.min(src.limit || MAX_FIGURES, MAX_FIGURES));
+    const boards = figures.boards(projectId).slice(0, 6);
+    if (!kept.length && !boards.length) return null;
+    const lines = [
+      ...kept.map((f) => {
+        const versions = f.versions.length + 1;
+        return (
+          `- [${visualDef(f.kind).label.toLowerCase()}] "${f.title}"` +
+          (versions > 1 ? ` (${versions} versions)` : "") +
+          ` — kept ${U.ago(f.updated)}` +
+          (f.note ? `. Their note: ${f.note}` : "")
+        );
+      }),
+      ...boards.map((b) => `- [whiteboard] "${b.title}" — ${U.ago(b.updated)}`)
+    ];
+    return (
+      "Figures this learner has kept — diagrams, charts, plots and interactive canvases they pressed Keep on, " +
+      "because they meant to come back to them:\n" +
+      lines.join("\n") +
+      "\n\nThese are the things they are working on. You are given the titles, not the figures themselves; if one " +
+      "is relevant, say which and offer to work on it, and they can attach it with @. When they ask you to revise " +
+      "one, write the whole block again under the same title, so that keeping it makes the next version of that " +
+      "figure rather than a second figure."
+    );
   }
 
   if (src.kind === "notes") {
@@ -264,12 +304,15 @@ export function buildContext(
   /** Cap from the effort budget. Overrides each memory source's own limit,
    *  which is what makes "low effort" mean something concrete rather than
    *  being a label. */
-  memoryLimit?: number
+  memoryLimit?: number,
+  /** The conversation being sent, so the day brief can leave it out of its
+   *  own list of today's conversations. */
+  conversationId?: string
 ): BuiltContext {
   const memories: Memory[] = [];
   const blocks = sources
     .map((s) => {
-      if (s.kind !== "memory") return renderSource(s, queryText, { projectId });
+      if (s.kind !== "memory") return renderSource(s, queryText, { projectId, conversationId });
       /* Three caps, smallest wins: the source's own limit, the effort budget,
          and the project's memory policy — which was editable, persisted, and
          read by nothing at all before this. */
@@ -286,7 +329,7 @@ export function buildContext(
       const capped = { ...s, limit };
       const picked = memoriesForSource(capped, queryText, projectId);
       memories.push(...picked);
-      return renderSource(capped, queryText, { projectId, memories: picked });
+      return renderSource(capped, queryText, { projectId, conversationId, memories: picked });
     })
     .filter((b): b is string => !!b);
 
@@ -357,6 +400,7 @@ export function describeSource(src: ContextSource): string {
   if (src.kind === "knowledge") return "project files";
   if (src.kind === "journal") return `journal · ${src.days}d`;
   if (src.kind === "today") return src.days && src.days > 1 ? `today · ${src.days}d` : "today";
+  if (src.kind === "figures") return "kept figures";
   return "insight log";
 }
 

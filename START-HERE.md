@@ -1071,6 +1071,58 @@ Decided, and worth not relitigating:
   section invisible to the calendar is the bug §"Activity means every section"
   exists to prevent.
 
-Open: nothing here has been used against a real model, and a figure cannot yet
-be attached to a conversation as *context* — "answer using the diagram I kept"
-still means starting the thread from the figure's own page.
+Open: nothing here has been used against a real model.
+
+---
+
+## 15. The day — one description, read by everything
+
+Shipped 2026-09-20, the same day as §14 and for the same reason: the app knew
+things it was not telling itself.
+
+`lib/dayBrief.ts` was chat's private answer to "what did I do today", and it
+covered three sections — reviews, the journal, and what you had written down.
+It missed conversations, exams, notes and kept figures, which is four of the
+seven, while `services/activity.ts` had read across all of them for a year. So
+the calendar on Home drew a fuller day than the tutor on the next screen could
+see.
+
+It is now one record with two renderings — `dayBlocks` for a page, `renderDay`
+for a prompt — collected over a **window** rather than "now". Everything reads
+it:
+
+- **Chat**, through the `today` source, minus the thread being sent (the
+  conversation the model is already reading does not need describing back).
+- **The journal writer**, which used to be fed the capture box alone. A day
+  spent drilling, working through chat and sitting an exam without typing
+  anything produced "Log something first" — the one section whose job is to
+  say what happened, refusing because nobody had told it. `writeJournal` now
+  takes the record and treats it as fact, with the learner's own words ranking
+  above it wherever the two could disagree about meaning.
+- **The journal page**, which shows the same blocks above the capture box, so
+  what you can see and what the model is given are the same list.
+- **The chat empty screen**, which offers the day as a starter when there is
+  one — which is also how anyone discovers this exists.
+
+Two decisions worth not relitigating:
+
+- **The window is a parameter.** `dayWindow(day)` closes at that day's
+  midnight; `todayWindow(n)` runs to now. Writing up yesterday with a live
+  window puts this morning into yesterday's permanent entry, and nothing about
+  the entry would look wrong afterwards. `dayBrief.test.ts` is only about this.
+- **`services/ai` does not import it.** The brief reaches into six stores and
+  that file is in the review loop's entry chunk; the caller passes the rendered
+  string in. It is the same boundary the `poolFor` note in `lib/chatContext.ts`
+  describes.
+
+Kept figures reached chat at the same time, in the two shapes chat already
+has: a `{kind:"figures"}` **context source** (titles and your notes, cheap,
+standing) and an `@` **reference** (the fenced block itself, once). A canvas
+kept under a name is now keyed project-wide rather than per thread, which is
+what makes the loop close — `@` the figure, ask for a change, keep the reply in
+whatever conversation you are in, and it is v2 of the one you had.
+
+Cost, honestly: the day brief is bigger than it was and rides on every message
+of any thread with `today` attached, and `lib/dayBrief.ts` moved into the
+review loop's entry chunk (+6KB raw, +2KB gzip) because two lazy chunks share
+it now.
