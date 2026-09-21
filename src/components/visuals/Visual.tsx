@@ -100,6 +100,9 @@ export default function Visual({ block, history, keep, onAskFix, onMakeCards, on
   const [error, setError] = useState<string | null>(null);
   const [ran, setRan] = useState<string | null>(null);
   const [image, setImage] = useState<string | null>(null);
+  /* Whether the chart has actually been drawn into its container, so the
+     reveal animation starts when the picture does and not when the box does. */
+  const [charted, setCharted] = useState(false);
   /* Null means "the one this reply wrote", worked out once the versions are. */
   const [pinnedVersion, setPinnedVersion] = useState<number | null>(null);
   const [runNonce, setRunNonce] = useState(0);
@@ -153,6 +156,8 @@ export default function Visual({ block, history, keep, onAskFix, onMakeCards, on
         return;
       }
       chart.current = handle;
+      /* Only now is there anything to reveal — see .vis-drawn. */
+      setCharted(true);
     })().catch((e) => {
       if (alive) setError(readable(e));
     });
@@ -162,6 +167,7 @@ export default function Visual({ block, history, keep, onAskFix, onMakeCards, on
       if (url) URL.revokeObjectURL(url);
       chart.current?.finalize();
       chart.current = null;
+      setCharted(false);
     };
   }, [block.kind, block.source, themeKey, view, live, isCanvas]);
 
@@ -338,9 +344,9 @@ export default function Visual({ block, history, keep, onAskFix, onMakeCards, on
       ) : isCanvas ? (
         <CanvasView source={source} title={current?.title || "Canvas"} theme={canvasTheme} nonce={runNonce} onError={setRan} />
       ) : live ? (
-        <div className="vis-chart" ref={chartRef} />
+        <div className={"vis-chart" + (charted ? " vis-drawn" : "")} ref={chartRef} />
       ) : image ? (
-        <img className="vis-img" src={image} alt={def.standIn(block.source, block.info)} />
+        <img className="vis-img vis-drawn" src={image} alt={def.standIn(block.source, block.info)} />
       ) : (
         <div className="vis-wait">Drawing…</div>
       )}

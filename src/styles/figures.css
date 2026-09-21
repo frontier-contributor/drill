@@ -404,3 +404,119 @@
   font-size: var(--t-sm);
   margin-bottom: 0;
 }
+
+/* ======================================================= how a figure arrives */
+/* A figure is *drawn* and a photograph is *taken*, and the two should not
+   appear the same way. Both animations run from an altered state to the
+   natural one, so the natural rule is the end state — which is what makes them
+   safe under the global prefers-reduced-motion block in tokens.css, where the
+   duration collapses to nothing and the element simply lands correct.
+   Nothing here changes layout: only paint, so neither can reflow a reply. */
+
+/* The frame, for every kind. A short rise, because a figure should feel set
+   down on the page rather than switched on. */
+@keyframes vis-settle {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.994);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.vis {
+  animation: vis-settle var(--med) var(--ease-out) both;
+}
+
+/* The drawn kinds: a soft edge sweeps across and leaves the picture behind it.
+   A mask rather than an overlay, so it works over any background and leaves
+   nothing behind — at the end position the mask is entirely opaque, which is
+   indistinguishable from having no mask at all. */
+@keyframes vis-draw {
+  from {
+    -webkit-mask-position: 100% 0;
+    mask-position: 100% 0;
+  }
+  to {
+    -webkit-mask-position: 0 0;
+    mask-position: 0 0;
+  }
+}
+/* Applied only once there is something to reveal. The chart's container mounts
+   before Vega has drawn into it, so a wipe on the container itself would sweep
+   across an empty box and be over before the chart arrived. */
+.vis-drawn {
+  -webkit-mask-image: linear-gradient(105deg, #000 0 35%, rgba(0, 0, 0, 0) 62%, rgba(0, 0, 0, 0) 100%);
+  mask-image: linear-gradient(105deg, #000 0 35%, rgba(0, 0, 0, 0) 62%, rgba(0, 0, 0, 0) 100%);
+  -webkit-mask-size: 300% 100%;
+  mask-size: 300% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  animation: vis-draw 0.62s var(--ease-out) both;
+}
+
+/* A canvas is left out of the wipe on purpose: it is already running when it
+   appears, and sweeping a mask over live, moving content reads as a glitch
+   rather than as ink. It gets the frame's rise and nothing more. */
+.vis-canvas {
+  animation: vis-settle var(--med) var(--ease-out) both;
+}
+
+/* A photograph develops: out of focus and colourless, resolving. Distinctly
+   not the wipe — the wipe says "this was drawn for you", and a photograph was
+   not drawn. */
+@keyframes photo-develop {
+  from {
+    opacity: 0;
+    filter: blur(15px) saturate(0.15) contrast(0.82) brightness(1.06);
+    transform: scale(1.035);
+  }
+  55% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    filter: none;
+    transform: none;
+  }
+}
+.photo-in {
+  animation: photo-develop 0.95s var(--ease-out) both;
+}
+
+/* While a picture is being made there is nothing to show yet, so the frame
+   holds its place and says so. A slow sheen rather than a spinner: a spinner
+   promises a moment and this can take twenty seconds. */
+@keyframes photo-wait {
+  from {
+    background-position: -140% 0;
+  }
+  to {
+    background-position: 240% 0;
+  }
+}
+.photo-pending {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 11rem;
+  border-radius: var(--r-2);
+  margin: var(--s-3);
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  background-color: var(--surface);
+  background-image: linear-gradient(
+    100deg,
+    transparent 0 38%,
+    var(--accent-10) 48%,
+    var(--accent-16) 52%,
+    transparent 62% 100%
+  );
+  background-size: 220% 100%;
+  background-repeat: no-repeat;
+  animation: photo-wait 1.9s linear infinite;
+}

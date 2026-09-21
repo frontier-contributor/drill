@@ -33,8 +33,27 @@ export interface Sniffed {
  *  fair look at whether the rest is text. */
 export const SNIFF_BYTES = 4096;
 
-const TEXT_EXT =
-  /\.(txt|text|md|markdown|mdx|rst|adoc|org|tex|bib|log|json|jsonl|ndjson|ipynb|csv|tsv|xml|svg|html?|css|scss|less|js|mjs|cjs|jsx|ts|tsx|vue|svelte|py|pyw|r|rmd|jl|m|sql|java|kt|kts|scala|c|h|cc|cpp|cxx|hpp|cs|go|rs|rb|php|swift|lua|pl|sh|bash|zsh|fish|ps1|bat|cmd|toml|ya?ml|ini|cfg|conf|env|properties|gradle|proto|graphql|gql|diff|patch)$/i;
+/**
+ * Every extension read as text, as a list rather than as a regex.
+ *
+ * It is a list because two things need it: this file, which decides what is
+ * actually read, and lib/files/kinds.ts, which opens the file dialog on it.
+ * Those drifting apart is a menu that offers a file ingest then refuses, so
+ * there is one list and the regex below is built from it.
+ */
+export const TEXT_EXTENSIONS = [
+  "txt", "text", "md", "markdown", "mdx", "rst", "adoc", "org", "tex", "bib", "log",
+  "json", "jsonl", "ndjson", "ipynb", "csv", "tsv", "xml", "svg",
+  "html", "htm", "css", "scss", "less",
+  "js", "mjs", "cjs", "jsx", "ts", "tsx", "vue", "svelte",
+  "py", "pyw", "r", "rmd", "jl", "m", "sql",
+  "java", "kt", "kts", "scala", "c", "h", "cc", "cpp", "cxx", "hpp", "cs", "go", "rs", "rb",
+  "php", "swift", "lua", "pl", "sh", "bash", "zsh", "fish", "ps1", "bat", "cmd",
+  "toml", "yaml", "yml", "ini", "cfg", "conf", "env", "properties",
+  "gradle", "proto", "graphql", "gql", "diff", "patch"
+];
+
+const TEXT_EXT = new RegExp("\.(" + TEXT_EXTENSIONS.join("|") + ")$", "i");
 
 const TEXT_MIME =
   /^(text\/|application\/(json|ld\+json|xml|javascript|x-javascript|typescript|x-sh|x-python|sql|x-tex|x-yaml|yaml|toml|x-ndjson)|image\/svg\+xml)/i;

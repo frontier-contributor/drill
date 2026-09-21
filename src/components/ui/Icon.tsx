@@ -34,6 +34,7 @@ export type IconName =
   | "journal"
   | "exam"
   | "figure"
+  | "image"
   | "paperclip"
   | "bubble"
   | "check"
@@ -106,6 +107,13 @@ const PATHS: Record<IconName, { d: string; fill?: boolean }[]> = {
   /* A figure, framed and hung: the Figures section, where a diagram, a chart
      or a canvas goes when it is worth coming back to. */
   figure: [{ d: "M4 5.5h16v13H4z" }, { d: "M7 15.2l3.4-3.9 2.5 2.5L17 9.2" }],
+  /* A photograph, as distinct from a figure: the same frame with a horizon and
+     a sun in it rather than a plotted line. One is drawn, the other is taken. */
+  image: [
+    { d: "M4 5.5h16v13H4z" },
+    { d: "M9.1 10.4a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0" },
+    { d: "M4.4 16.6l4.3-4.3 3 3 3.3-3.6 4.6 4.9" }
+  ],
   paperclip: [
     { d: "m21.4 11.6-8.5 8.5a5.6 5.6 0 0 1-7.9-7.9l8.5-8.5a3.8 3.8 0 0 1 5.3 5.3l-8.5 8.5a1.9 1.9 0 0 1-2.7-2.7l7.8-7.8" }
   ],

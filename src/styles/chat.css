@@ -2693,3 +2693,37 @@
 .cpill:hover .cpill-x {
   opacity: 1;
 }
+
+/* ------------------------------------------------------------ attach menu -- */
+/* The paperclip asks what kind of file first, so the dialog can be opened on
+   that kind alone and so a kind this model cannot read can say so before you
+   have picked anything. Same furniture as the tools menu — it is the same
+   idea, a row that greys and explains itself — narrower, because these rows
+   are nouns rather than switches. */
+.attachmenu {
+  position: relative;
+  flex: 0 0 auto;
+}
+.attach-pop {
+  position: absolute;
+  bottom: calc(100% + var(--s-2));
+  left: 0;
+  z-index: 50;
+  width: min(21rem, 84vw);
+  max-height: min(30rem, 74vh);
+  overflow-y: auto;
+  padding: var(--s-2);
+  border: 1px solid var(--border-subtle, var(--rule));
+  border-radius: var(--r-3);
+  background: var(--surface-glass, var(--surface));
+  backdrop-filter: blur(10px);
+  box-shadow: var(--lift-3);
+  animation: pop-up var(--fast) var(--ease-spring);
+}
+/* No switch on the right, so the text may have the width. */
+.attach-row .tools-text {
+  padding-right: var(--s-1);
+}
+.attach-btn.open {
+  color: var(--accent);
+}

@@ -12,10 +12,14 @@
 import { useRef, useState } from "react";
 import * as journalStore from "@/services/journalStore";
 import { useToast } from "@/context/ToastContext";
+import { acceptFor, TEXT_ONLY_KINDS } from "@/lib/files/kinds";
 import { ago } from "@/lib/util";
 import type { JournalEntry } from "@/types/journal";
 
-const ACCEPT = ".md,.txt,.pdf,.docx,.xlsx,.csv,.tsv,.json,.tex,text/*";
+/* Derived, not written out: this box keeps text, so it takes everything the
+   app reads except a picture — which ingest refuses here with its own
+   sentence. The list it used to carry named ten extensions out of sixty. */
+const ACCEPT = acceptFor(TEXT_ONLY_KINDS);
 
 export default function CaptureBox({ entry }: { entry: JournalEntry }) {
   const toast = useToast();

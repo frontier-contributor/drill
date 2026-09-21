@@ -37,6 +37,8 @@ import { attachmentTokens, fileIdsOf } from "@/lib/files/parts";
 import { ingest } from "@/services/files/ingest";
 import * as filesDb from "@/services/files/db";
 import type { Attachment } from "@/types/chat";
+import type { ModalityVerdict } from "@/lib/modality";
+import AttachMenu from "./AttachMenu";
 import Icon from "../ui/Icon";
 import AttachmentCard, { type PendingFile } from "./AttachmentCard";
 
@@ -80,13 +82,13 @@ interface Props {
    *  "cannot see images". Asked of the caller, because the composer knows
    *  nothing about models. */
   warnFor?: (a: Attachment) => string | null;
+  /** What that model can take, and what to say about a kind it cannot. Asked
+   *  of the caller for the same reason `warnFor` is: this component resolves
+   *  no models, and the menu and the card must not disagree about one. */
+  attachVerdicts?: Record<string, ModalityVerdict>;
+  attachReasons?: Record<string, string>;
   onPreview?: (a: Attachment) => void;
 }
-
-/** What the file picker offers. A hint only — services/files/ingest reads the
- *  bytes and decides for itself. */
-const ACCEPT =
-  "image/*,.pdf,.docx,.xlsx,.xlsm,.csv,.tsv,.txt,.md,.markdown,.tex,.bib,.json,.jsonl,.ipynb,.py,.js,.ts,.tsx,.jsx,.html,.css,.xml,.yml,.yaml,.toml,.r,.sql,.java,.kt,.c,.h,.cpp,.cs,.go,.rs,.rb,.php,.swift,.sh,.log,text/*";
 
 export default function Composer({
   disabled,
@@ -102,6 +104,8 @@ export default function Composer({
   droppedNonce,
   takeDropped,
   warnFor,
+  attachVerdicts,
+  attachReasons,
   onPreview
 }: Props) {
   const [text, setText] = useState("");
@@ -467,20 +471,26 @@ export default function Composer({
                 read as a dashboard nobody parses — the gap is doing real work
                 here, not decoration. */}
             <div className="ctools-left">
-              <button
-                className="cbtn ghost attach-btn"
-                onClick={() => fileRef.current?.click()}
+              <AttachMenu
                 disabled={disabled}
-                title="Attach files — pictures, PDFs, Word, Excel, text and code"
-                aria-label="Attach files"
-              >
-                <Icon name="paperclip" size={13} />
-              </button>
+                verdicts={attachVerdicts || {}}
+                reasons={attachReasons || {}}
+                onPick={(kind) => {
+                  const el = fileRef.current;
+                  if (!el) return;
+                  /* Set on the node rather than through React, and clicked in
+                     the same tick. A browser only opens a file dialog inside a
+                     user gesture, and waiting a frame for React to render the
+                     attribute is a frame spent outside one. React never
+                     manages `accept` here, so nothing re-renders it away. */
+                  el.accept = kind.accept;
+                  el.click();
+                }}
+              />
               <input
                 ref={fileRef}
                 type="file"
                 multiple
-                accept={ACCEPT}
                 className="hidden-file"
                 onChange={(e) => {
                   if (e.target.files) addFiles(e.target.files);

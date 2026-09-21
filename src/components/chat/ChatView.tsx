@@ -19,7 +19,7 @@ import { conceptMap, mappable } from "@/lib/visuals/conceptMap";
 import { gapsFrom } from "@/lib/gaps";
 import type { ChatMessage } from "@/types";
 import type { Attachment } from "@/types/chat";
-import { catalogueEntry } from "@/services/pricing";
+import { catalogueEntry, loadPricing } from "@/services/pricing";
 import { canTake, imageWarning, scannedWarning } from "@/lib/modality";
 import { resolveBackend, resolveModel } from "@/lib/resolveSetting";
 import { useChat } from "@/context/ChatContext";
@@ -302,17 +302,56 @@ export default function ChatView() {
     }
   }, [c, toast, hangReceipt]);
 
-  /* What an attachment's card should warn about, for the model that will
-     actually answer: the conversation's own, inherited through its project,
-     or the one picked on the empty screen. The same lookup the send path
-     makes, so the card cannot promise what the request does not do. */
-  const warnFor = useCallback(
-    (a: Attachment): string | null => {
+  /* The model catalogue is fetched once and memoised, and it lands a second or
+     two after the first paint. Nothing else on this screen would think to
+     re-render when it does, so every attach row would read as "not known" for
+     the rest of the session. ToolsMenu solves the same problem the same way. */
+  const [catalogueVersion, bumpCatalogue] = useState(0);
+  useEffect(() => {
+    let live = true;
+    void loadPricing().then(() => live && bumpCatalogue((n) => n + 1));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  /* The model that will actually answer: the conversation's own, inherited
+     through its project, or the one picked on the empty screen. The same
+     lookup the send path makes, so nothing the composer says can promise what
+     the request does not do.
+
+     Recomputed when the pricing catalogue lands as well as when the model
+     changes — it arrives a second or two after the first paint, and without
+     that every row would read "unknown" until something else re-rendered. */
+  const target = useMemo(
+    () => {
       const project = c ? store.get().projects[c.projectId] : undefined;
-      const target = c
+      return c
         ? AI.resolve({ backend: resolveBackend(c, project).value, model: resolveModel(c, project).value })
         : AI.resolve(chat.draftModel ? { model: chat.draftModel } : undefined);
-      const image = canTake(catalogueEntry(target.model)?.inputModalities, "image");
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [c, chat.draftModel, catalogueVersion]
+  );
+
+  /* What that model can take, for the attach menu. Three states, and the
+     third leaves the row live: lib/modality.ts's rule, because a local model
+     has no catalogue entry and greying a row out for everyone until the
+     catalogue loads is a worse answer than a picture that gets ignored. */
+  const attachVerdicts = useMemo(() => {
+    const modalities = catalogueEntry(target.model)?.inputModalities;
+    return { image: canTake(modalities, "image"), file: canTake(modalities, "file") };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target.model, catalogueVersion]);
+
+  const attachReasons = useMemo(
+    () => ({ image: imageWarning(target.model, attachVerdicts.image) || "" }),
+    [target.model, attachVerdicts.image]
+  );
+
+  const warnFor = useCallback(
+    (a: Attachment): string | null => {
+      const image = attachVerdicts.image;
       if (a.kind === "image") return imageWarning(target.model, image);
       if (a.kind === "pdf") {
         const mode = c ? c.mode || "direct" : chat.draftMode;
@@ -321,7 +360,7 @@ export default function ChatView() {
       }
       return null;
     },
-    [c, chat.draftModel, chat.draftMode]
+    [c, chat.draftMode, target, attachVerdicts.image]
   );
 
   /* --------------------------------------------------------- whiteboard -- */
@@ -776,6 +815,8 @@ It is built from your memories and what the review loop says you keep getting wr
           droppedNonce={dropNonce}
           takeDropped={takeDropped}
           warnFor={warnFor}
+          attachVerdicts={attachVerdicts}
+          attachReasons={attachReasons}
           onPreview={setPreview}
           placeholder={readiness.ok ? "Ask anything — / for commands" : readiness.why}
           onSend={(text, attachments) => void chat.send(text, attachments)}

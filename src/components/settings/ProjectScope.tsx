@@ -27,6 +27,7 @@ import Section from "./Section";
 import DeckList from "./DeckList";
 import type { Autonomy, BackendType, Effort } from "@/types";
 import Icon from "../ui/Icon";
+import { acceptFor, TEXT_ONLY_KINDS } from "@/lib/files/kinds";
 
 /** Reads the active project itself rather than being handed one. The caller
  *  is a table of categories with no store subscription of its own, so a
@@ -215,7 +216,9 @@ export default function ProjectScope({ projectId: given }: { projectId?: string 
         <input
           ref={fileRef}
           type="file"
-          accept=".pdf,.docx,.xlsx,.csv,.tsv,.md,.txt,.json,.tex,text/*"
+          /* One list, in lib/files/kinds.ts. Knowledge keeps text, so it
+             takes everything but a picture. */
+          accept={acceptFor(TEXT_ONLY_KINDS)}
           className="hidden-file"
           onChange={(e) => void onFile(e)}
         />
