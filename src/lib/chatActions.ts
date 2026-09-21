@@ -29,6 +29,7 @@ import { thinkingSupport } from "@/lib/thinking";
 import { canMake, imageOutputWhy } from "@/lib/modality";
 import { catalogueEntry } from "@/services/pricing";
 import type { BackendType } from "@/types";
+import type { ChatMode } from "@/types/chat";
 
 export type ChatActionId = "web" | "think" | "image";
 
@@ -133,6 +134,19 @@ export const CHAT_ACTIONS: Record<ChatActionId, ChatAction> = {
 };
 
 export const ACTION_ORDER: ChatActionId[] = ["web", "think", "image"];
+
+/**
+ * What a mode switches on by itself.
+ *
+ * Image mode *is* the Image action plus two dials, so the action rides along
+ * without being stored on the conversation: storing it would leave the switch
+ * stuck on after you left the mode, and the user never turned it on. Derived,
+ * never memorised — the same rule the gap clusters follow.
+ */
+export function actionsFor(mode: ChatMode | undefined, actions: ChatActionId[]): ChatActionId[] {
+  if (mode !== "image" || actions.includes("image")) return actions;
+  return [...actions, "image"];
+}
 
 export function isActionId(v: unknown): v is ChatActionId {
   return typeof v === "string" && v in CHAT_ACTIONS;

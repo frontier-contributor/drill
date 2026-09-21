@@ -46,6 +46,7 @@ import ChatEmpty from "./ChatEmpty";
 import ReadProgress from "./ReadProgress";
 import ModelChip from "./ModelChip";
 import ToolsMenu from "./ToolsMenu";
+import ImageBar from "./ImageBar";
 import ListenBar from "./ListenBar";
 import ErrorGuard from "../ui/ErrorGuard";
 import AttachmentPreview from "./AttachmentPreview";
@@ -811,6 +812,11 @@ It is built from your memories and what the review loop says you keep getting wr
           commands={commands}
           references={references}
           tools={<ToolsMenu />}
+          /* Only in Image mode, which is the whole argument for the mode: two
+             dials wanted on every message when the thread is for drawing and
+             on none of them otherwise. Rendered nowhere else, so it cannot
+             crowd the composer of a thread that is not drawing. */
+          bar={(c ? c.mode : chat.draftMode) === "image" ? <ImageBar /> : null}
           trailing={<ModelChip conversation={c} draftModel={chat.draftModel} onDraftModel={chat.setDraftModel} />}
           seed={seed}
           droppedNonce={dropNonce}

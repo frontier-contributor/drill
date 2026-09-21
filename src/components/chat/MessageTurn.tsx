@@ -36,6 +36,7 @@ import type { Attachment, Conversation, Turn } from "@/types/chat";
 import AttachmentCard from "./AttachmentCard";
 import type { BackendType } from "@/types";
 import Icon from "../ui/Icon";
+import { actionsFor } from "@/lib/chatActions";
 
 /* One selector, used to build the contents and to jump within it. */
 const HEADINGS = "h1, h2, h3";
@@ -404,7 +405,7 @@ export default function MessageTurn({
               words at all. Without this the reply is a blank bubble with a
               caret in it for twenty seconds, which reads as a hang rather than
               as work. Shown only when a picture was actually asked for. */}
-          {streaming && conversation.actions?.includes("image") && (
+          {streaming && actionsFor(conversation.mode, conversation.actions || []).includes("image") && (
             <div className="photo-pending">Drawing…</div>
           )}
           {/* Under the words, because the words are usually about the picture.

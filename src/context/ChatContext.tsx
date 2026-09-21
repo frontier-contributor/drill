@@ -44,6 +44,8 @@ import type { AgentPlan, AgentTrace, ToolCall, ToolRun } from "@/types/agent";
 import type { ChatActionId } from "@/lib/chatActions";
 import type { BackendType, ChatMessage, Citation, Memory } from "@/types";
 import { capReasoning } from "@/lib/reasoning";
+import { DEFAULT_IMAGE_SPEC, type ImageSpec } from "@/lib/imageSpec";
+import { actionsFor } from "@/lib/chatActions";
 
 /** A one-off backend/model for a single regenerate call — applied to that
  *  variant only, never written to conversation.backend/model. */
@@ -192,6 +194,12 @@ interface ChatState {
    *  thread existed to hold it. */
   draftActions: ChatActionId[];
   setDraftActions: (a: ChatActionId[]) => void;
+  /** The picture's shape and size chosen on the empty screen. A draft for the
+   *  reason every control above has one: `update()` returns early with no
+   *  conversation, so without this, picking Wide before typing the first
+   *  message would silently draw a square. */
+  draftImage: ImageSpec;
+  setDraftImage: (s: ImageSpec) => void;
 }
 
 const Ctx = createContext<ChatState | null>(null);
@@ -213,6 +221,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [draftEffort, setDraftEffort] = useState<Effort | "">("");
   const [draftMode, setDraftMode] = useState<ChatMode>("direct");
   const [draftActions, setDraftActions] = useState<ChatActionId[]>([]);
+  const [draftImage, setDraftImage] = useState<ImageSpec>(DEFAULT_IMAGE_SPEC);
 
   const abortRef = useRef<AbortController | null>(null);
   const followupAbort = useRef<AbortController | null>(null);
@@ -268,10 +277,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
    * always empty — and a new chat started with Web on silently started with
    * Web off. A ref has no vintage.
    */
-  const draftsRef = useRef({ draftModel, draftEffort, draftMode, draftActions });
+  const draftsRef = useRef({ draftModel, draftEffort, draftMode, draftActions, draftImage });
   useEffect(() => {
-    draftsRef.current = { draftModel, draftEffort, draftMode, draftActions };
-  }, [draftModel, draftEffort, draftMode, draftActions]);
+    draftsRef.current = { draftModel, draftEffort, draftMode, draftActions, draftImage };
+  }, [draftModel, draftEffort, draftMode, draftActions, draftImage]);
 
   /**
    * What the composer was set to before there was a conversation to set it on.
@@ -292,7 +301,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       ...(d.draftModel ? { model: d.draftModel } : {}),
       ...(d.draftEffort ? { effort: d.draftEffort } : {}),
       ...(d.draftMode !== "direct" ? { mode: d.draftMode } : {}),
-      ...(d.draftActions.length ? { actions: d.draftActions } : {})
+      ...(d.draftActions.length ? { actions: d.draftActions } : {}),
+      /* Only when it says something. A spec of two Autos is the absence of a
+         spec, and writing it would put a field on every conversation ever
+         created from this screen. */
+      ...(d.draftImage.aspect !== "auto" || d.draftImage.size !== "auto" ? { image: d.draftImage } : {})
     };
   }, []);
 
@@ -550,7 +563,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             maxTokens: Math.max(256, Math.round(c.maxTokens * replyScale)),
             signal: controller.signal,
             label: "chat",
-            actions: c.actions,
+            /* Image mode is the Image action plus two dials, and the action
+               rides along rather than being written onto the conversation —
+               see lib/chatActions.ts. */
+            actions: actionsFor(c.mode, c.actions),
+            image: c.mode === "image" ? c.image || DEFAULT_IMAGE_SPEC : undefined,
             pdfEngine,
             onToken: (_t, a) => {
               answerStarted();
@@ -605,7 +622,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
            before this reply, which is the sentence the picture is of. */
         const asked = [...c.turns.slice(0, upToIndex + 1)].reverse().find((t) => t.role === "user");
         const images = drawn.length
-          ? await keepGenerated(drawn, asked ? chatStore.activeContent(asked) : c.title)
+          ? await keepGenerated(
+              drawn,
+              asked ? chatStore.activeContent(asked) : c.title,
+              /* What was asked for at the moment it was drawn. The dial moves;
+                 this picture's receipt must not move with it. */
+              c.mode === "image" ? (c.image || DEFAULT_IMAGE_SPEC).aspect : undefined
+            )
           : undefined;
 
         /* Pull any save-to-memory block out of the markdown *before* it is
@@ -942,6 +965,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     draftMode,
     setDraftMode,
     draftActions,
+    draftImage,
+    setDraftImage,
     setDraftActions
   };
 

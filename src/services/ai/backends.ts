@@ -23,6 +23,7 @@
 import { CHAT_ACTIONS, availability, type ChatActionId } from "@/lib/chatActions";
 import { MAX_ATTEMPTS, jitter, planRetry } from "@/lib/retry";
 import { ReplyCutOff } from "@/lib/budget";
+import { imageConfig } from "@/lib/imageSpec";
 import type {
   AIContext,
   BackendDef,
@@ -563,6 +564,16 @@ function openAICompatible(
          reads it with its paid OCR engine — a bill nobody chose. Merged into
          the plugin list rather than replacing it, because web search lives
          there too. */
+      /* Shape and size for a generated picture. OpenRouter only, like every
+         other passthrough here: a provider that has no use for the key drops
+         it, but a backend that is whatever server you pointed it at has no
+         dialect to guess. Undefined when both dials are on Auto, so a thread
+         that never touched them sends the byte-identical request it always
+         did. */
+      if (id === "openrouter") {
+        const cfg = imageConfig(opts.image);
+        if (cfg) body.image_config = cfg;
+      }
       if (opts.pdfEngine && id === "openrouter" && messages.some((m) => m.parts?.some((p) => p.type === "file"))) {
         body.plugins = [...(Array.isArray(body.plugins) ? (body.plugins as unknown[]) : []), { id: "file-parser", pdf: { engine: opts.pdfEngine } }];
       }

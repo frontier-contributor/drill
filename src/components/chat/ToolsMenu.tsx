@@ -78,6 +78,19 @@ const MODES: ModeDef[] = [
     icon: "sparkle",
     blurb: "States a plan, works every step, then answers. For the questions worth waiting for.",
     steps: (n) => deepSteps(n)
+  },
+  /* A mode rather than a second Image switch, and the switch stays. The
+     difference is what the thread is *for*: the action lets a reply come back
+     as a picture, which is right when you are talking and a diagram would
+     help. This turns the whole thread into a drawing surface — every message
+     asks for a picture, and the two dials that decide its shape are on the
+     composer instead of three menus deep. */
+  {
+    id: "image",
+    label: "Image",
+    icon: "image",
+    blurb: "Every message draws. Shape and size sit beside the composer.",
+    steps: () => 0
   }
 ];
 
@@ -138,7 +151,11 @@ export default function ToolsMenu() {
      returns early with no conversation, so a control without one is a switch
      that lights up and does nothing until a thread exists to hold it. */
   const rawMode = conversation ? conversation.mode : draftMode;
-  const mode: ChatMode = rawMode === "agent" || rawMode === "deep" ? rawMode : "direct";
+  /* Every mode but the default is named here. A mode missing from this list
+     is silently shown as Direct while the send path runs it for real, which
+     is the worst of both — the picker would disagree with what the app is
+     actually doing. */
+  const mode: ChatMode = rawMode === "agent" || rawMode === "deep" || rawMode === "image" ? rawMode : "direct";
   const actions = conversation ? conversation.actions : draftActions;
   const pinnedEffort = conversation ? conversation.effort : draftEffort;
 

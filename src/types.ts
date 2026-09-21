@@ -9,6 +9,7 @@
 import type { Autonomy, Effort, Note, Project } from "@/types/core";
 import type { ChatActionId } from "@/lib/chatActions";
 import type { VisualKind } from "@/lib/visuals/catalogue";
+import type { ImageSpec } from "@/lib/imageSpec";
 
 export type { Autonomy, Effort, Note, Project } from "@/types/core";
 export type {
@@ -478,6 +479,10 @@ export interface ChatOpts {
    *  services/ai/structured.ts tell "ran out of room" from "said something
    *  unparseable". */
   onFinish?: (info: FinishInfo) => void;
+  /** Shape and size for a generated picture. Sent as `image_config` by the
+   *  OpenRouter adapter and ignored by every other backend, which is the same
+   *  bargain `pdfEngine` makes. Undefined sends nothing at all. */
+  image?: ImageSpec;
   /** Which of OpenRouter's parsers reads a PDF sent as a file. Always named
    *  when a file goes out: left unset, OpenRouter's documented default is its
    *  paid OCR engine. Ignored by every other backend, which is never sent one. */

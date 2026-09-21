@@ -21,6 +21,7 @@ import { useToast } from "@/context/ToastContext";
 import { size } from "@/lib/files/limits";
 import type { GeneratedImage } from "@/types/chat";
 import StoredImage from "./StoredImage";
+import { honoured, nearestAspect } from "@/lib/imageSpec";
 
 interface Props {
   image: GeneratedImage;
@@ -76,6 +77,8 @@ export default function Picture({ image, keep, onMakeCards }: Props) {
     }, 800);
   }
 
+  const verdict = honoured(image.asked, image.w, image.h);
+
   return (
     <figure className="vis vis-image" ref={figRef}>
       <div className="vis-bar">
@@ -121,6 +124,18 @@ export default function Picture({ image, keep, onMakeCards }: Props) {
       />
       <figcaption className="vis-foot">
         {image.w}×{image.h} · {size(image.size)}
+        {/* Whether the shape you asked for is the shape you got.
+            These two dials cannot be gated the way Think is — no image model
+            lists them in OpenRouter's `supported_parameters` — so the only
+            way they are not dead dials is that they report. Silent when
+            nothing was asked, and silent when it was honoured: a receipt that
+            confirms every success is noise, and the one that matters is the
+            one that says the model ignored you. */}
+        {verdict === "ignored" && (
+          <span className="vis-foot-warn" title={`Asked for ${image.asked}; this model drew ${nearestAspect(image.w, image.h)} instead.`}>
+            {" · asked " + image.asked + ", got " + nearestAspect(image.w, image.h)}
+          </span>
+        )}
       </figcaption>
     </figure>
   );

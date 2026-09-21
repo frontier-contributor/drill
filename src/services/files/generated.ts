@@ -23,6 +23,7 @@ import * as U from "@/lib/util";
 import { base64ToBlob } from "./bytes";
 import * as files from "./db";
 import type { GeneratedImage } from "@/types/chat";
+import type { AspectId } from "@/lib/imageSpec";
 
 /** `data:image/png;base64,iVBOR…` — mime and payload, or null for anything
  *  that is not one. The backend only hands over `data:image/`, so this is a
@@ -40,7 +41,15 @@ function parseDataUrl(url: string): { mime: string; data: string } | null {
  * has a name without anyone having to invent one — it is what the Keep button
  * titles a kept picture with.
  */
-export async function keepGenerated(dataUrls: readonly string[], prompt: string): Promise<GeneratedImage[]> {
+export async function keepGenerated(
+  dataUrls: readonly string[],
+  prompt: string,
+  /** The shape requested, so the receipt can check it against what arrived.
+   *  prepareImage below shrinks proportionally, so the ratio it measures is
+   *  still the ratio the model returned — which is the whole reason the check
+   *  is on the aspect and not on the pixel count. */
+  asked?: AspectId
+): Promise<GeneratedImage[]> {
   if (!dataUrls.length) return [];
   const { prepareImage } = await import("./image");
   const out: GeneratedImage[] = [];
@@ -75,6 +84,7 @@ export async function keepGenerated(dataUrls: readonly string[], prompt: string)
         size: img.blob.size,
         thumb: img.thumb,
         prompt: prompt.slice(0, 300),
+        asked,
         createdAt: Date.now()
       });
     } catch {

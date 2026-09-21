@@ -19,6 +19,7 @@ import { markdownToText } from "@/lib/plaintext";
 import type { ChatMode, Conversation, ConversationMeta, ContextSource, Turn, Usage, Variant } from "@/types/chat";
 import type { ChatActionId } from "@/lib/chatActions";
 import type { BackendType, Effort } from "@/types";
+import type { ImageSpec } from "@/lib/imageSpec";
 
 let metas: ConversationMeta[] = [];
 let loaded = false;
@@ -227,6 +228,9 @@ export interface CreateOpts {
   mode?: ChatMode;
   /** Carried from the empty screen's capability switches — Web, Think. */
   actions?: ChatActionId[];
+  /** Carried from the empty screen's picture dials. Absent means both on
+   *  Auto, which sends nothing. */
+  image?: ImageSpec;
 }
 
 /**
@@ -282,7 +286,11 @@ export function create(opts: CreateOpts = {}): Conversation {
     turns: [],
     usage: { promptTokens: 0, completionTokens: 0 },
     rolledUpThrough: 0,
-    actions: opts.actions ? [...opts.actions] : []
+    actions: opts.actions ? [...opts.actions] : [],
+    /* Copied rather than referenced: the draft object in ChatContext outlives
+       this call and is mutated by the composer's dials, so sharing it would
+       let a later turn of the dial silently rewrite a thread already created. */
+    ...(opts.image ? { image: { ...opts.image } } : {})
   };
   cache.set(c.id, c);
   persist(c, true);

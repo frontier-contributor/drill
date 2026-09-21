@@ -19,6 +19,7 @@
  * request, not one and a bit.
  * ========================================================================== */
 import type { Effort } from "@/types/core";
+import type { ChatMode } from "@/types/chat";
 
 export interface EffortBudget {
   /** How many of the most recent turns are sent. Infinity sends the lot. */
@@ -108,8 +109,13 @@ export function deepSteps(agentSteps: number): number {
  * everything, and the mode decides whether the lookup budget is one of the
  * things being sized.
  */
-export function effortMeans(effort: Effort, mode: "direct" | "agent" | "deep"): string {
+export function effortMeans(effort: Effort, mode: ChatMode): string {
   const b = budgetFor(effort);
+  /* Image mode makes one request like Direct, but saying "no lookups" there
+     would answer a question nobody asked: what effort buys when the reply is
+     a picture is how much of the thread the model is reminded of, not how
+     much it writes. */
+  if (mode === "image") return b.blurb + " The picture's own shape and size are the two dials beside the composer.";
   if (mode === "direct") return b.blurb + " No lookups — Direct mode answers in one request.";
   const n = mode === "deep" ? deepSteps(b.agentSteps) : b.agentSteps;
   return `${b.blurb} In ${mode === "deep" ? "Deep" : "Agent"} mode it also sets the lookup budget: up to ${n}, each one a request.`;

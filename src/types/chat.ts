@@ -11,6 +11,7 @@ import type { BackendType, Citation, TokenUsage } from "@/types";
 import type { ChatActionId } from "@/lib/chatActions";
 import type { AgentTrace } from "@/types/agent";
 import type { Effort, MemoryScope } from "@/types/core";
+import type { AspectId, ImageSpec } from "@/lib/imageSpec";
 
 /**
  * How a message is answered. Three genuinely different purchases, not a
@@ -34,7 +35,7 @@ import type { Effort, MemoryScope } from "@/types/core";
  * property of what the thread is for, and a global switch would make every
  * quick question expensive.
  */
-export type ChatMode = "direct" | "agent" | "deep";
+export type ChatMode = "direct" | "agent" | "deep" | "image";
 
 /** Re-exported so chat code has one import for its own vocabulary. */
 export type Usage = TokenUsage;
@@ -111,6 +112,11 @@ export interface GeneratedImage {
   thumb?: string;
   /** Bytes, for the receipt under the reply. */
   size: number;
+  /** The shape asked for, when one was. Kept on the picture rather than read
+   *  back off the conversation because the conversation's dial moves: a
+   *  picture drawn at 16:9 stays a picture that was drawn at 16:9 after you
+   *  switch to square, and the receipt would otherwise start lying. */
+  asked?: AspectId;
   /** What was asked for — the user's own message — so a kept picture has a
    *  title without anyone having to name it. */
   prompt?: string;
@@ -241,6 +247,11 @@ export interface Conversation {
    *  chatStore.repair() reads as "chat" — the cheap default, so an old thread
    *  never silently becomes expensive. */
   mode?: ChatMode;
+  /** Shape and size for `image` mode. Absent means the defaults, and the
+   *  defaults send nothing — see lib/imageSpec.ts. Per conversation like the
+   *  mode it belongs to: a thread you opened to draw diagrams wants a
+   *  different shape from one you opened to draw a wallpaper. */
+  image?: ImageSpec;
 
   context: ContextSource[];
   /** Attachments that survive every turn, as opposed to Turn.attachments
