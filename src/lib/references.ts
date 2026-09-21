@@ -25,7 +25,7 @@ import * as memoryStore from "@/services/memoryStore";
 import * as figures from "@/services/figures";
 import * as U from "@/lib/util";
 import { renderToday } from "@/lib/dayBrief";
-import { visualDef } from "@/lib/visuals/catalogue";
+import { keptFence, keptLabel } from "@/lib/visuals/keep";
 import type { Attachment } from "@/types/chat";
 
 export type ReferenceKind = "today" | "figure" | "journal" | "book" | "deck" | "card" | "memory" | "note";
@@ -88,20 +88,28 @@ export function catalogue(projectId: string): Reference[] {
      — and a revision written under the same title becomes the next version of
      what is already on the shelf rather than a second copy of it. */
   for (const f of figures.list(projectId).slice(0, 40)) {
-    const def = visualDef(f.kind);
+    const label = keptLabel(f.kind).toLowerCase();
     out.push({
       id: "figure:" + f.id,
       kind: "figure",
       label: clip(f.title, 44),
-      hint: `${def.label.toLowerCase()} · kept ${U.ago(f.updated)}${f.versions.length ? ` · v${f.versions.length + 1}` : ""}`,
+      hint: `${label} · kept ${U.ago(f.updated)}${f.versions.length ? ` · v${f.versions.length + 1}` : ""}`,
+      /* A kept picture has no source to hand over — its bytes are in the file
+         store, and this picker deals in text — so it goes as a line naming it
+         and says where the picture itself can be got. Attaching the bytes is
+         the paperclip's job, and it already knows whether the model can see. */
       text: () =>
-        `A figure the learner kept, titled "${f.title}" (${def.label.toLowerCase()})` +
-        (f.note ? `. Their note on why: ${f.note}` : "") +
-        ".\n\n```" +
-        (f.info || def.fences[0]) +
-        "\n" +
-        f.source.replace(/\n$/, "") +
-        "\n```\n\nTo revise it, write the whole block again under the same title."
+        f.kind === "image"
+          ? `A picture the learner generated and kept, titled "${f.title}"` +
+            (f.note ? `. Their note on why: ${f.note}` : "") +
+            ". They can attach the picture itself with the paperclip if you need to look at it."
+          : `A figure the learner kept, titled "${f.title}" (${label})` +
+            (f.note ? `. Their note on why: ${f.note}` : "") +
+            ".\n\n```" +
+            (f.info || keptFence(f.kind)) +
+            "\n" +
+            f.source.replace(/\n$/, "") +
+            "\n```\n\nTo revise it, write the whole block again under the same title."
     });
   }
 

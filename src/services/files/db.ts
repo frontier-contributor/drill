@@ -146,7 +146,29 @@ export async function list(): Promise<StoredFileMeta[]> {
   }
 }
 
-/** For restoring a backup that carries files: this browser's files become
+/**
+ * Add files without clearing what is here.
+ *
+ * For a backup that carries *some* files rather than all of them — one made
+ * without attachments still brings the pictures a kept figure points at, since
+ * those are nothing but their bytes. Clearing the store for those would delete
+ * every attachment in the browser being restored into.
+ */
+export async function putAll(files: StoredFile[]): Promise<void> {
+  if (!files.length) return;
+  await persistence.guard(
+    "attached file",
+    (async () => {
+      const db = await open();
+      const tx = db.transaction(BLOBS, "readwrite");
+      const store = tx.objectStore(BLOBS);
+      for (const f of files) store.put(f);
+      await committed(tx);
+    })()
+  );
+}
+
+/** For restoring a backup that carries every file: this browser's files become
  *  exactly the backup's. */
 export async function replaceAll(files: StoredFile[]): Promise<void> {
   await persistence.guard(

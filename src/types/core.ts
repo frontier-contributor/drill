@@ -226,6 +226,17 @@ export interface FullBackup {
   /** Attached pictures and PDFs, base64 — only when the backup was made with
    *  them included, and absent in every backup made before files existed. */
   files?: { id: string; name: string; mime: string; size: number; created: number; data: string }[];
+  /**
+   * Whether `files` is every file this browser held, or only some.
+   *
+   * It matters because restoring a complete set *replaces* the file store,
+   * and restoring a partial one must not. A backup made without files still
+   * carries the ones a kept picture points at — those are nothing but their
+   * bytes — and treating that handful as the complete set would delete every
+   * attachment in the browser it was restored into. Absent means "complete",
+   * which is what every backup written before this field was.
+   */
+  filesComplete?: boolean;
   /** Whiteboards. JSON already, so unlike files they cost nothing to carry and
    *  ride in every backup. Absent in backups made before boards existed. */
   boards?: unknown[];

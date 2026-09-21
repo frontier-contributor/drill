@@ -430,6 +430,18 @@ export interface ChatOpts {
   actions?: ChatActionId[];
   /** Sources the backend cited, reported once when the reply is complete. */
   onCitations?: (c: Citation[]) => void;
+  /**
+   * Pictures the reply came back with, as `data:` URLs, reported once before
+   * the promise settles.
+   *
+   * A side channel rather than a return value, like every other non-text thing
+   * a reply can produce here — `chat()` resolves to a string and fifteen
+   * callers depend on that. The bytes are handed over raw: what to do with
+   * them is the caller's, because only the caller knows whether they are worth
+   * keeping (a chat reply) or should be dropped on the floor (a one-shot
+   * operation that asked for JSON).
+   */
+  onImages?: (dataUrls: string[]) => void;
   /** Tool definitions, already compiled to the provider's shape by
    *  services/agent/protocol.ts. Only the OpenAI-compatible adapter reads
    *  this; a backend that ignores it degrades to a plain reply, which the

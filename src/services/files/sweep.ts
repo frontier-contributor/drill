@@ -18,8 +18,17 @@ const GRACE_MS = 60 * 60 * 1000;
 
 export async function unusedFileIds(): Promise<string[]> {
   chatStore.flushAll();
-  const [conversations, stored] = await Promise.all([idbAll<Conversation>(STORE_CONV).catch(() => [] as Conversation[]), files.list()]);
+  /* Every holder of a file id, not just the conversations. A kept picture is
+     the case that made this a list rather than one call: it is reachable only
+     from the shelf, so a sweep that asked the conversations alone would report
+     it as unused and the one button on that page would delete it. */
+  const [conversations, kept, stored] = await Promise.all([
+    idbAll<Conversation>(STORE_CONV).catch(() => [] as Conversation[]),
+    files.listFigures().catch(() => []),
+    files.list()
+  ]);
   const used = referencedFileIds(conversations);
+  for (const f of kept) if (f.image?.fileId) used.add(f.image.fileId);
   const cutoff = Date.now() - GRACE_MS;
   return stored.filter((f) => !used.has(f.id) && f.created < cutoff).map((f) => f.id);
 }

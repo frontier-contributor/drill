@@ -18,6 +18,7 @@ import { renderReply, markdownToText } from "@/lib/markdown";
 import { kindsOn } from "@/lib/visuals/catalogue";
 import { canvasId, canvasVersions } from "@/lib/visuals/artifacts";
 import Visual from "../visuals/Visual";
+import Picture from "../visuals/Picture";
 import ErrorGuard from "../ui/ErrorGuard";
 import MemorySaved from "./MemorySaved";
 import AgentTrace, { stepsFromTrace } from "./AgentTrace";
@@ -374,6 +375,28 @@ export default function MessageTurn({
             );
           })}
           {streaming && <span className="caret" />}
+          {/* A picture arrives whole, at the end, long after the words have
+              stopped — and an image model asked for a picture often writes no
+              words at all. Without this the reply is a blank bubble with a
+              caret in it for twenty seconds, which reads as a hang rather than
+              as work. Shown only when a picture was actually asked for. */}
+          {streaming && conversation.actions?.includes("image") && (
+            <div className="photo-pending">Drawing…</div>
+          )}
+          {/* Under the words, because the words are usually about the picture.
+              Never while streaming: the reply arrives before the pictures are
+              in the file store, and a frame that pointed at bytes not yet
+              written would draw the "not in this browser" sentence. */}
+          {!streaming &&
+            variant?.images?.map((img) => (
+              <ErrorGuard key={img.id} fallback={<div className="vis-error">This picture could not be shown.</div>}>
+                <Picture
+                  image={img}
+                  keep={{ projectId: conversation.projectId, conversationId: conversation.id, conversationTitle: conversation.title }}
+                  onMakeCards={onMakeCards}
+                />
+              </ErrorGuard>
+            ))}
           {!streaming && variant?.citations?.length ? <Sources citations={variant.citations} /> : null}
           {!streaming && variant?.saved && <MemorySaved saved={variant.saved} />}
         </div>

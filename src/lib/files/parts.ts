@@ -38,9 +38,20 @@ export function forTranscript(messages: ChatMessage[]): ChatMessage[] {
   });
 }
 
-/** Every file id a conversation still points at, pinned or on a turn. Derived,
- *  never counted: a reference count is a second record that can disagree with
- *  the first. */
+/**
+ * Every file id a conversation still points at.
+ *
+ * Derived, never counted: a reference count is a second record that can
+ * disagree with the first. Four places hold one — pinned attachments, an
+ * attachment on a turn, a picture the model drew on a *variant*, and a figure
+ * kept out of a reply.
+ *
+ * The third is the one that has to be remembered. `unusedFileIds` feeds a
+ * button that deletes, and a holder this function does not walk is a file that
+ * button silently throws away: a generated picture would survive until the
+ * first time anyone pressed "Remove unused", and then not. `parts.test.ts`
+ * pins exactly that.
+ */
 export function referencedFileIds(conversations: Pick<Conversation, "turns" | "pinnedAttachments">[]): Set<string> {
   const used = new Set<string>();
   const take = (a: Attachment) => {
@@ -49,7 +60,12 @@ export function referencedFileIds(conversations: Pick<Conversation, "turns" | "p
   };
   for (const c of conversations) {
     for (const a of c.pinnedAttachments || []) take(a);
-    for (const t of c.turns || []) for (const a of t.attachments || []) take(a);
+    for (const t of c.turns || []) {
+      for (const a of t.attachments || []) take(a);
+      /* Every variant, not just the active one: the others are one press of
+         the variant arrow away and are still the learner's. */
+      for (const v of t.variants || []) for (const img of v.images || []) used.add(img.fileId);
+    }
   }
   return used;
 }

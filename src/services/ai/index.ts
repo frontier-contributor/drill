@@ -93,12 +93,22 @@ export function chat(messages: ChatMessage[], opts: ChatOpts = {}, override?: Ov
 
   const started = Date.now();
   let usage: TokenUsage | undefined;
+  /* Counted here rather than left to the caller, because this is the one place
+     that meters. A picture is billed per picture and reports no tokens at all,
+     so an image reply would otherwise be a row of zeros that looked exactly
+     like a free one — the hole `characters` fills for a voice. */
+  let images = 0;
   const passedOnUsage = opts.onUsage;
+  const passedOnImages = opts.onImages;
   const wrapped: ChatOpts = {
     ...opts,
     onUsage: (u) => {
       usage = u;
       passedOnUsage?.(u);
+    },
+    onImages: (urls) => {
+      images = urls.length;
+      passedOnImages?.(urls);
     }
   };
 
@@ -113,16 +123,24 @@ export function chat(messages: ChatMessage[], opts: ChatOpts = {}, override?: Ov
      call that otherwise worked. */
   const meter = (failed: boolean) => {
     try {
+      const price = priceForModel(r.type, r.model);
+      /* The provider's own figure first. It is what was actually charged, and
+         it is the only one that includes non-token fees — a web search costs
+         about $0.007 that no tokens-times-price sum can account for. */
+      const reported = usage?.reportedCost ?? costOf(usage, price);
+      /* Pictures are added only when we are reconstructing the bill: a figure
+         the provider reported already has them in it, and adding them again
+         would double-charge the most expensive thing in the app. */
+      const perImage = usage?.reportedCost == null ? (price?.imagePrice || 0) * images : 0;
       usageLog.add({
         at: started,
         backend: r.type,
         model: r.model,
         label,
         usage,
-        /* The provider's own figure first. It is what was actually charged,
-           and it is the only one that includes non-token fees — a web search
-           costs about $0.007 that no tokens-times-price sum can account for. */
-        cost: usage?.reportedCost ?? costOf(usage, priceForModel(r.type, r.model)),
+        images: failed ? 0 : images,
+        /* `undefined` is "no price known" and must never collapse to zero. */
+        cost: failed ? undefined : reported == null ? (perImage > 0 ? perImage : undefined) : reported + perImage,
         failed
       });
     } catch {

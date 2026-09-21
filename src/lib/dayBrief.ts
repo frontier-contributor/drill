@@ -43,7 +43,7 @@ import * as memoryStore from "@/services/memoryStore";
 import * as chatStore from "@/services/chatStore";
 import * as examStore from "@/services/examStore";
 import * as figures from "@/services/figures";
-import { allVersions } from "@/lib/visuals/keep";
+import { allVersions, keptLabel } from "@/lib/visuals/keep";
 import { visualDef } from "@/lib/visuals/catalogue";
 import { dayStart } from "@/lib/weeks";
 import * as U from "@/lib/util";
@@ -223,7 +223,7 @@ export function collectDay(projectId: string, window: DayWindow): DayRecord {
     if (!here.length) continue;
     keptToday.push({
       title: f.title,
-      kind: visualDef(f.kind).label.toLowerCase(),
+      kind: keptLabel(f.kind).toLowerCase(),
       note: f.note,
       revised: versions.length > here.length
     });

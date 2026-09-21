@@ -29,6 +29,32 @@ export function canTake(modalities: string[] | undefined, want: Modality): Modal
   return modalities.includes(want) ? "yes" : "no";
 }
 
+/**
+ * Whether this model can hand back a picture rather than only read one.
+ *
+ * The mirror of `canTake`, over `architecture.output_modalities`, and the
+ * three states mean the same things — except that the `unknown` bargain lands
+ * differently here and it is worth being explicit about why.
+ *
+ * For input, `unknown` sends the picture and lets the backend refuse, because
+ * refusing costs one clear error and greying the control out costs every local
+ * model for ever. For output, `unknown` leaves the switch *live* for the same
+ * reason, but a model that ignores it simply answers in words: asking a
+ * text-only model for a picture is not an error, it is a disappointment. So
+ * the control says it is a guess rather than promising.
+ */
+export function canMake(modalities: string[] | undefined, want: Modality): ModalityVerdict {
+  if (!Array.isArray(modalities) || modalities.length === 0) return "unknown";
+  return modalities.includes(want) ? "yes" : "no";
+}
+
+/** What the Image switch says about this model, in words. */
+export function imageOutputWhy(model: string, verdict: ModalityVerdict): string {
+  if (verdict === "yes") return "Ask for a picture and this model will draw one.";
+  if (verdict === "no") return `${shortName(model)} writes text only. Pick an image model to draw with.`;
+  return `Not known whether ${shortName(model)} can draw. Left on — if it cannot, it will answer in words.`;
+}
+
 function shortName(model: string): string {
   return model.split("/").pop() || model || "This model";
 }

@@ -34,10 +34,12 @@
 import { BACKENDS } from "@/services/ai/backends";
 import type { ModelPrice } from "@/types/chat";
 
-/* v2 added `reasoning`; a v1 cache has the field missing rather than
-   false, which would read as "cannot think" for every model in it. */
-const CACHE_KEY = "drill:pricing:v2";
-const STALE_KEYS = ["drill:pricing:v1"];
+/* v2 added `reasoning`, v3 `outputModalities` and `imagePrice`. A cache from
+   an older version has the field missing rather than false, which would read
+   as "cannot think" or "cannot draw" for every model in it — so the key moves
+   rather than the shape being patched. */
+const CACHE_KEY = "drill:pricing:v3";
+const STALE_KEYS = ["drill:pricing:v1", "drill:pricing:v2"];
 const TTL = 24 * 60 * 60 * 1000;
 /** Hardcoded rather than taken from the resolved backend: this is fetched
  *  regardless of which backend is active, so the active base URL is usually
@@ -90,9 +92,9 @@ export function loadPricing(): Promise<Record<string, ModelPrice>> {
           id?: string;
           name?: string;
           context_length?: number;
-          pricing?: { prompt?: string; completion?: string };
+          pricing?: { prompt?: string; completion?: string; image?: string };
           supported_parameters?: string[];
-          architecture?: { input_modalities?: string[] };
+          architecture?: { input_modalities?: string[]; output_modalities?: string[] };
           top_provider?: { max_completion_tokens?: number | null };
         };
         if (!m.id || !m.pricing) continue;
@@ -105,6 +107,10 @@ export function loadPricing(): Promise<Record<string, ModelPrice>> {
            "include_reasoning" only asks for the trace back. A model that
            advertises either one accepts the switch. */
         const params = m.supported_parameters || [];
+        /* Per image, not per million: OpenRouter quotes it that way because
+           that is how it is billed, and multiplying it up would make a
+           four-cent picture read as forty thousand dollars. */
+        const image = parseFloat(m.pricing.image || "");
         models[m.id] = {
           id: m.id,
           name: m.name,
@@ -113,6 +119,8 @@ export function loadPricing(): Promise<Record<string, ModelPrice>> {
           contextLength: m.context_length,
           reasoning: params.includes("reasoning") || params.includes("include_reasoning"),
           inputModalities: m.architecture?.input_modalities,
+          outputModalities: m.architecture?.output_modalities,
+          imagePrice: isFinite(image) && image > 0 ? image : undefined,
           maxOutput: m.top_provider?.max_completion_tokens || undefined
         };
       }

@@ -68,6 +68,10 @@ export async function collect(opts: CollectOptions = {}): Promise<FullBackup> {
     idbAll<UsageDay>(STORE_USAGE).catch(() => [] as UsageDay[])
   ]);
 
+  /* Read once, because the picture files are worked out from them. */
+  const keptFigures = await filesDb.listFigures();
+  const keptPictures = new Set(keptFigures.map((f) => f.image?.fileId).filter((id): id is string => !!id));
+
   return {
     kind: KIND,
     version: 1,
@@ -82,16 +86,30 @@ export async function collect(opts: CollectOptions = {}): Promise<FullBackup> {
     exams,
     usage,
     boards: await filesDb.listBoards(),
-    figures: await filesDb.listFigures(),
-    ...(opts.includeFiles ? { files: await collectFiles() } : {})
+    figures: keptFigures,
+    ...(opts.includeFiles
+      ? { files: await collectFiles(), filesComplete: true }
+      : keptPictures.size
+        ? { files: await collectFiles(keptPictures), filesComplete: false }
+        : {})
   };
 }
 
-/** One file at a time, so a backup of a thousand photos holds one photo's
- *  base64 in memory at once rather than all of them. */
-async function collectFiles(): Promise<NonNullable<FullBackup["files"]>> {
+/**
+ * One file at a time, so a backup of a thousand photos holds one photo's
+ * base64 in memory at once rather than all of them.
+ *
+ * `only` is how a backup made *without* files still carries the ones a kept
+ * figure points at. Attachments are skippable because the conversation still
+ * reads without them — the text was extracted on the way in, and a photo is
+ * described by its card. A kept picture is not: it is nothing but its bytes,
+ * so leaving it out restores a shelf of records pointing at files that are not
+ * there. It is also the one thing here that cost money to make.
+ */
+async function collectFiles(only?: Set<string>): Promise<NonNullable<FullBackup["files"]>> {
   const out: NonNullable<FullBackup["files"]> = [];
   for (const meta of await filesDb.list()) {
+    if (only && !only.has(meta.id)) continue;
     const rec = await filesDb.get(meta.id);
     if (!rec) continue;
     out.push({ id: rec.id, name: rec.name, mime: rec.mime, size: rec.size, created: rec.created, data: await blobToBase64(rec.blob) });
@@ -150,6 +168,10 @@ export function parse(text: string): FullBackup {
     exams: Array.isArray(b.exams) ? b.exams : [],
     usage: Array.isArray(b.usage) ? b.usage : [],
     files: Array.isArray(b.files) ? b.files : undefined,
+    /* Absent means complete: that is what every backup written before the
+       field existed was, and reading it as partial would stop those from
+       replacing the file store the way they always have. */
+    filesComplete: b.filesComplete !== false,
     boards: Array.isArray(b.boards) ? b.boards : [],
     figures: Array.isArray(b.figures) ? b.figures : []
   };
@@ -219,9 +241,20 @@ export async function restoreEverything(b: FullBackup): Promise<BackupSummary> {
      this browser's own copies where they are rather than emptying the store,
      so a restored conversation pointing at a picture still here can show it. */
   if (b.files?.length) {
-    await filesDb.replaceAll(
-      b.files.map((f) => ({ id: f.id, name: f.name, mime: f.mime, size: f.size, created: f.created, blob: base64ToBlob(f.data, f.mime) }))
-    );
+    const incoming = b.files.map((f) => ({
+      id: f.id,
+      name: f.name,
+      mime: f.mime,
+      size: f.size,
+      created: f.created,
+      blob: base64ToBlob(f.data, f.mime)
+    }));
+    /* Replace only when the backup is the whole file store. A partial set —
+       which is what a backup made without attachments carries, so that a kept
+       picture is not restored as a broken record — is added alongside what is
+       here, because it is not claiming to be everything. */
+    if (b.filesComplete === false) await filesDb.putAll(incoming);
+    else await filesDb.replaceAll(incoming);
   }
   /* Boards, unlike files, are replaced whenever the backup carries the field
      at all — including empty, which is what "this browser had no boards when

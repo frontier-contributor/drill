@@ -37,7 +37,7 @@
 ### v3 — Later
 | 11 | Auto-backup to disk | not started |
 | 12 | Agent loop behind high effort | **done** — see §13 |
-| 13 | Period reports, mind maps, richer media | **in progress** — files and attachments (pictures, PDF, Word, Excel, CSV, pinning, capture, knowledge, backup) done 2026-09-15; figures in replies (Mermaid diagrams, Vega-Lite charts, function plots with sliders, SVG) 2026-09-17; the live canvas — interactive pages in a no-network sandbox, versioned by the transcript — 2026-09-17; whiteboard (Excalidraw, self-hosted fonts, mermaid → editable shapes, board → chat as picture and text) and /map 2026-09-17; **the Figures section** — keeping a figure out of the thread that drew it, versioned, searchable, and the first place a whiteboard can be reopened from — 2026-09-20 |
+| 13 | Period reports, mind maps, richer media | **in progress** — files and attachments (pictures, PDF, Word, Excel, CSV, pinning, capture, knowledge, backup) done 2026-09-15; figures in replies (Mermaid diagrams, Vega-Lite charts, function plots with sliders, SVG) 2026-09-17; the live canvas — interactive pages in a no-network sandbox, versioned by the transcript — 2026-09-17; whiteboard (Excalidraw, self-hosted fonts, mermaid → editable shapes, board → chat as picture and text) and /map 2026-09-17; **the Figures section** — keeping a figure out of the thread that drew it, versioned, searchable, and the first place a whiteboard can be reopened from — 2026-09-20; image generation and the model-aware file picker 2026-09-21 |
 
 **Phase 0 notes for whoever picks this up:**
 
@@ -151,7 +151,7 @@ Do not relitigate these while building.
 |---|---|---|---|
 | `DrillDB` v4 | `localStorage["mldrill:v3"]` | settings, **projects**, decks, srs, log, notes | **sync**, `services/store.ts` |
 | Chat + memory | IndexedDB `drill-chat` **v4** | conversations, meta, memories, candidates, journal, rollups, exams, usage | **async**, `services/chatStore.ts`, `idb.ts` |
-| Files + work | IndexedDB `drill-files` **v3** | attachment originals, whiteboards, kept figures | **async**, `services/files/db.ts`, `services/figures.ts` |
+| Files + work | IndexedDB `drill-files` **v3** | attachment originals **and generated pictures**, whiteboards, kept figures | **async**, `services/files/db.ts`, `services/figures.ts` |
 
 The sync/async split is load-bearing: the review loop renders without awaiting
 IndexedDB. New small data goes in `DrillDB`; new growing data goes in
@@ -1126,3 +1126,48 @@ Cost, honestly: the day brief is bigger than it was and rides on every message
 of any thread with `today` attached, and `lib/dayBrief.ts` moved into the
 review loop's entry chunk (+6KB raw, +2KB gzip) because two lazy chunks share
 it now.
+
+---
+
+## 16. Pictures — generated, and asked for
+
+Shipped 2026-09-21. Two halves that share one idea: the app should know what
+the model on the other end can actually do with an image, in both directions.
+
+**Coming in.** The paperclip opened the OS file dialog directly on one static
+`accept` string of about fifty extensions, so it cheerfully offered a photo to
+a text-only model. It asks what kind first now, each row opening the dialog on
+that kind alone, with a kind the model cannot read dimmed and explaining
+itself. `lib/files/kinds.ts` is the one list that is read off — it replaced
+three hand-written `accept` strings that had already drifted, and `sniff.ts`
+owns the extension list both it and the sniffer use.
+
+**Going out.** `Image` is a third entry in the `lib/chatActions.ts` registry,
+so it is a switch beside Web and Think and needed nothing new in the composer
+or the send path. OpenRouter only, and model-dependent on top of that, exactly
+the way Think is — asked through `availability()`, never `backend.supports`.
+
+Locked decisions:
+
+- **A picture is not a figure.** The figure catalogue's promise is that a kind
+  in it is taught, drawn and described; an image is bytes a model returned, so
+  it is a `KeptKind` and not a catalogue entry. The shelf has had a second sort
+  of citizen since whiteboards.
+- **A kept picture's `source` is its file id**, which makes `figureKey` and
+  `holds` right for it with no special cases.
+- **Bytes never touch a variant.** They are in `drill-files` before the variant
+  is written; only the 112px thumbnail rides inline.
+- **A picture is a reply.** Both empty-reply guards in `backends.ts` had to
+  learn that, or an image-only answer is discarded as "the model said nothing".
+- **It is billed per picture**, so the ledger counts pictures beside tokens,
+  and the per-image price is added only when reconstructing a bill the provider
+  did not report — adding it to a reported figure would double-charge.
+- **Figures arrive, they do not appear.** A figure is drawn (a mask sweeps
+  across and leaves it behind); a photograph develops (blurred and colourless,
+  resolving). Both animate from an altered state to the natural one, so the
+  reduced-motion block lands them correctly with no duration.
+
+Open: none of this has run against a real model — there is still no API key
+here — so the wire shape of `message.images[]`, the streaming case, the real
+per-image cost and whether the empty-reply guards are now right in practice are
+all unverified. First job with a key.

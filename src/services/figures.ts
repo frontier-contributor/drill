@@ -18,7 +18,7 @@
  * failure mode, so it is the part that is pure and tested.
  * ========================================================================== */
 import * as U from "@/lib/util";
-import { foldKeep, figureKey, type KeepInput, type KeepStatus, type KeptFigure } from "@/lib/visuals/keep";
+import { foldKeep, figureKey, type KeepInput, type KeepStatus, type KeptBlock, type KeptFigure } from "@/lib/visuals/keep";
 import type { VisualBlock } from "@/lib/visuals/catalogue";
 import * as db from "./files/db";
 import type { StoredBoard } from "./files/db";
@@ -91,7 +91,7 @@ export function board(id: string): StoredBoard | undefined {
  *  reads, on every figure in a reply, on every render. A lookup over one
  *  project's figures, so it stays a lookup. */
 export function keptFor(
-  block: Pick<VisualBlock, "kind" | "source" | "info">,
+  block: Pick<KeptBlock, "kind" | "source" | "info">,
   where: { projectId: string; conversationId?: string }
 ): KeptFigure | undefined {
   /* A canvas's key covers every version of it, so stepping back to v1 of one

@@ -26,9 +26,11 @@
  * a second round trip, it does not belong here — it belongs in Phase 8.
  * ========================================================================== */
 import { thinkingSupport } from "@/lib/thinking";
+import { canMake, imageOutputWhy } from "@/lib/modality";
+import { catalogueEntry } from "@/services/pricing";
 import type { BackendType } from "@/types";
 
-export type ChatActionId = "web" | "think";
+export type ChatActionId = "web" | "think" | "image";
 
 /** Whether one specific model can perform an action, and what to say about it.
  *  `usable` is not `verdict === "yes"`: not knowing leaves the control live
@@ -105,10 +107,32 @@ export const CHAT_ACTIONS: Record<ChatActionId, ChatAction> = {
       const s = thinkingSupport(model);
       return { usable: s.usable, why: s.why, certain: s.verdict !== "unknown" };
     }
+  },
+
+  image: {
+    id: "image",
+    label: "Image",
+    blurb: "Lets the reply come back as a picture as well as words. Billed per image, not per token.",
+    unsupported: "Only OpenRouter reaches models that draw. Change backend in Settings to use this.",
+    apply(body) {
+      /* Asking for both, never for image alone. A reply that is a bare picture
+         with no sentence around it cannot be quoted, read aloud, turned into a
+         card or searched — and the model has to be allowed to answer in words
+         when what was asked for is not a picture at all. */
+      body.modalities = ["image", "text"];
+    },
+    modelSupport(model) {
+      const verdict = canMake(catalogueEntry(model)?.outputModalities, "image");
+      return {
+        usable: verdict !== "no",
+        why: imageOutputWhy(model, verdict),
+        certain: verdict !== "unknown"
+      };
+    }
   }
 };
 
-export const ACTION_ORDER: ChatActionId[] = ["web", "think"];
+export const ACTION_ORDER: ChatActionId[] = ["web", "think", "image"];
 
 export function isActionId(v: unknown): v is ChatActionId {
   return typeof v === "string" && v in CHAT_ACTIONS;

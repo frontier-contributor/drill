@@ -32,8 +32,11 @@ openrouter.ai.
   a question this answers with facts rather than a guess, and `/today` asks it
   in one keystroke. It is also the first thing a new chat offers you, on a day
   you have already started.
-- **Attach what you are studying from** — pictures and screenshots (paste,
-  drop anywhere on the chat, or pick), PDFs, Word, Excel, CSV, text and code.
+- **Attach what you are studying from** — the paperclip asks what kind first,
+  and opens the file dialog on that kind alone. A kind the model cannot read is
+  dimmed and says why, before you have picked anything rather than after it has
+  been read. Pictures and screenshots (paste, drop anywhere on the chat, or
+  pick), PDFs, Word, Excel, CSV, text and code.
   Everything is read in your browser first: a PDF's text with page numbers, a
   spreadsheet as CSV, a Word file with its headings and tables. Pictures go to
   a model that can see, downscaled and with their location data stripped; a
@@ -41,6 +44,13 @@ openrouter.ai.
   Scanned PDF pages are sent as pictures, or read by OpenRouter's parser if you
   choose it in Settings → Chat. Pin a file to keep it on every message in that
   thread; click any card to see exactly what the model was given.
+- **It can generate pictures** — switch **Image** on in the tools menu and the
+  reply can come back with a picture as well as words. OpenRouter only, and
+  only on models that can draw: the switch says which, and says plainly when it
+  is guessing. Billed per picture rather than per token, so the Usage page
+  counts pictures beside tokens rather than showing an image reply as a row of
+  zeros. Every picture has Keep on it, and lands on the same shelf a diagram
+  does.
 - **It can draw** — Mermaid diagrams, Vega-Lite charts, function plots with a
   slider per parameter, and small SVG drawings, written by the model as text
   and drawn here. No extra request, and it works on every backend including
@@ -107,12 +117,14 @@ openrouter.ai.
 ### Figures
 
 Everything the model drew that turned out to be worth keeping, out of the
-thread that drew it. A conversation is a conversation, not a shelf — the
+thread that drew it. A generated picture is the clearest case for it: it cost
+real money, asking again gives you a different one, and it is four hundred
+messages back by Thursday. A conversation is a conversation, not a shelf — the
 diagram that finally made backprop click is four hundred messages back in one
 you named "q about grads".
 
-- **Keep is one press** — on any diagram, chart, function plot, drawing or
-  canvas in a reply. What is kept is the fenced block itself, so a kept figure
+- **Keep is one press** — on any diagram, chart, function plot, drawing,
+  canvas or generated picture in a reply. What is kept is the fenced block itself, so a kept figure
   is drawn by exactly the same renderer as the one in the conversation: a
   canvas still runs, a chart still has its tooltips and its slider.
 - **Revisions land on the same shelf** — ask for a canvas to be changed, press

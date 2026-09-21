@@ -23,6 +23,49 @@
 import { canvasId, canvasTitle, parseFenceInfo } from "./artifacts";
 import { visualDef, type VisualBlock, type VisualKind } from "./catalogue";
 
+/**
+ * What can sit on the shelf.
+ *
+ * Every `VisualKind` is something a model wrote as a fenced block, which is
+ * why the catalogue teaches it and `Visual` draws it from its source. An
+ * `image` is the one that is not: it is bytes a model handed back, so there is
+ * nothing to teach and nothing to re-draw — which is exactly why it is a kind
+ * here and not an entry in lib/visuals/catalogue.ts, whose whole promise is
+ * that a kind added there is taught, drawn and described. The shelf has
+ * tolerated a second sort of citizen since whiteboards landed on it.
+ */
+export type KeptKind = VisualKind | "image";
+
+/** Where the bytes of a kept picture are, and what it takes to show one in a
+ *  list without opening the file store. */
+export interface KeptImage {
+  fileId: string;
+  mime: string;
+  w: number;
+  h: number;
+  size: number;
+  thumb?: string;
+}
+
+/** A block as `keep` takes it. Widened from `VisualBlock` only by the kind,
+ *  because an image arrives through the same door. */
+export interface KeptBlock {
+  kind: KeptKind;
+  info: string;
+  /**
+   * For a figure, the fenced block itself. **For an image, the file id** — the
+   * thing that identifies it and the thing that fetches it back.
+   *
+   * That is not a shortcut. `figureKey` digests the source for every kind but
+   * a canvas, and `holds` compares sources to decide whether a keep is a
+   * repeat, so putting the file id here makes both of them exactly right for a
+   * picture with no edits of the code below: two keeps of the same generated
+   * image are one figure, two different pictures are two, and neither can be
+   * a "revision" of the other, which for a photograph is the truth.
+   */
+  source: string;
+}
+
 /** A source this figure had before the one it has now. Oldest first, never
  *  dropped: locked decision 5, raw input is never destroyed. */
 export interface KeptVersion {
@@ -37,10 +80,14 @@ export interface KeptFigure {
    *  kept, and deliberately *not* recomputed on rename — renaming a figure
    *  must not turn the next revision of it into a second figure. */
   key: string;
-  kind: VisualKind;
-  /** The fence's info string, which is where a canvas's title and id live. */
+  kind: KeptKind;
+  /** The fence's info string, which is where a canvas's title and id live.
+   *  Empty for an image, which has no fence. */
   info: string;
+  /** The fenced block — or, for an image, its file id. See `KeptBlock`. */
   source: string;
+  /** Set only when `kind` is "image": where the bytes actually are. */
+  image?: KeptImage;
   title: string;
   /** Why you kept it, in your own words. Empty until you write something. */
   note: string;
@@ -54,18 +101,40 @@ export interface KeptFigure {
   versions: KeptVersion[];
 }
 
+/**
+ * What this kind is called, and the fence it would be written in.
+ *
+ * One function rather than `visualDef(f.kind)` at four call sites, because
+ * `image` is not in the figure catalogue and never will be — asking the
+ * catalogue about it would be asking the list of things a model can *draw*
+ * about a thing a model *returns*.
+ */
+export function keptLabel(kind: KeptKind): string {
+  return kind === "image" ? "Image" : visualDef(kind).label;
+}
+
+/** The fence a kept figure is handed back to a model in. An image has none:
+ *  it goes as itself, the way an attached picture does. */
+export function keptFence(kind: KeptKind): string {
+  return kind === "image" ? "" : visualDef(kind).fences[0];
+}
+
 /** What a figure is called when nobody has named it. The catalogue already
  *  knows how to say what each kind is — it says it to the card writer and to
  *  the voice — so this is that sentence with its brackets taken off rather
  *  than a second titling rule that could drift from the first. */
-export function defaultTitle(block: Pick<VisualBlock, "kind" | "source" | "info">): string {
+export function defaultTitle(block: Pick<KeptBlock, "kind" | "source" | "info">): string {
+  /* A picture cannot be read for a title the way a spec or a fence can, so the
+     caller passes one — what was asked for. This is only the fallback. */
+  if (block.kind === "image") return "Image";
   if (block.kind === "canvas") return canvasTitle(block.info, block.source);
   const attrs = parseFenceInfo(block.info);
   if (attrs.title) return attrs.title;
-  const standIn = visualDef(block.kind).standIn(block.source, block.info);
+  const def = visualDef(block.kind as VisualKind);
+  const standIn = def.standIn(block.source, block.info);
   const inside = /^\[(.*)\]$/.exec(standIn.trim());
   const text = (inside ? inside[1] : standIn).replace(/^[a-z ]+:\s*/i, "").trim();
-  return text || visualDef(block.kind).label;
+  return text || def.label;
 }
 
 /**
@@ -115,7 +184,7 @@ export function canvasNamed(info: string): boolean {
  * a version list you never asked for. Two charts are two charts unless they
  * are byte-for-byte the same block.
  */
-export function figureKey(block: Pick<VisualBlock, "kind" | "source" | "info">, where: { projectId: string; conversationId?: string }): string {
+export function figureKey(block: Pick<KeptBlock, "kind" | "source" | "info">, where: { projectId: string; conversationId?: string }): string {
   if (block.kind === "canvas") {
     const scope = canvasNamed(block.info) ? "named" : where.conversationId || "loose";
     return `${where.projectId}|${scope}|canvas|${canvasId(block.info)}`;
@@ -124,7 +193,9 @@ export function figureKey(block: Pick<VisualBlock, "kind" | "source" | "info">, 
 }
 
 export interface KeepInput {
-  block: Pick<VisualBlock, "kind" | "source" | "info">;
+  block: Pick<KeptBlock, "kind" | "source" | "info">;
+  /** The bytes, when the block is an image. */
+  image?: KeptImage;
   projectId: string;
   conversationId?: string;
   conversationTitle?: string;
@@ -168,6 +239,7 @@ export function foldKeep(
         kind: input.block.kind,
         info: input.block.info,
         source,
+        image: input.image,
         title,
         note: "",
         projectId: input.projectId,

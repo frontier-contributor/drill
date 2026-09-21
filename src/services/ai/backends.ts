@@ -241,6 +241,30 @@ function readToolCalls(node: unknown): WireToolCall[] {
 }
 
 /**
+ * Pictures a reply came back with.
+ *
+ * OpenRouter puts them on `message.images[]` as `{type, image_url:{url}}`,
+ * where the url is a `data:` URL — the same envelope wireParts() builds in the
+ * other direction for a picture being sent, which is why nothing new is needed
+ * to read one.
+ *
+ * Only `data:` is accepted. A remote url here would be a reply telling this
+ * browser to go and fetch something, which is not a thing a reply gets to do;
+ * it would also break the moment the link expired, on a picture that had been
+ * paid for and kept.
+ */
+function readImages(node: unknown): string[] {
+  const list = (node as { images?: unknown[] })?.images;
+  if (!Array.isArray(list)) return [];
+  const out: string[] = [];
+  for (const raw of list) {
+    const url = (raw as { image_url?: { url?: unknown } })?.image_url?.url;
+    if (typeof url === "string" && url.startsWith("data:image/")) out.push(url);
+  }
+  return out;
+}
+
+/**
  * Reassemble tool calls from a stream.
  *
  * Streamed calls arrive as fragments keyed by `index`, with the name on the
@@ -532,6 +556,8 @@ function openAICompatible(
         }
         const toolCalls = readToolCalls(message);
         if (toolCalls.length && opts.onToolCalls) opts.onToolCalls(toolCalls);
+        const images = readImages(message);
+        if (images.length && opts.onImages) opts.onImages(images);
         const text = message.content || "";
         const reasoning = String(message.reasoning || message.reasoning_content || "");
         /* Reasoning shows up in any of three places depending on the model and
@@ -546,7 +572,12 @@ function openAICompatible(
            entirely correct — it is the normal shape of an agent step. Throwing
            "the model said nothing" here is what would break the loop on its
            first useful turn. */
-        if (!text && !toolCalls.length) throw emptyReplyError(label, choice.finish_reason, reasoned ? reasoning || "yes" : "");
+        /* A picture is a reply too. Without `images` here an image-only
+           answer — exactly what an image model returns when asked for one —
+           would be thrown away as "the model said nothing". */
+        if (!text && !toolCalls.length && !images.length) {
+          throw emptyReplyError(label, choice.finish_reason, reasoned ? reasoning || "yes" : "");
+        }
         return text;
       }
       let out = "";
@@ -558,6 +589,11 @@ function openAICompatible(
          deduped by url. Missing them entirely would silently drop the whole
          point of a web-search reply. */
       let cites: Citation[] = [];
+      /* Gathered from the frame, the message and the delta, for the reason
+         citations are: providers disagree about where a non-text artefact
+         hangs off a stream, and an image that arrived in a shape this did not
+         look in is one that was paid for and never seen. */
+      let images: string[] = [];
       const calls = new ToolCallAccumulator();
       await readSSE(res, (j) => {
         const u = readOpenAIUsage(j);
@@ -567,6 +603,7 @@ function openAICompatible(
         if (!choice) return;
         if (choice.finish_reason) finish = choice.finish_reason;
         cites = cites.concat(readCitations(choice.message), readCitations(choice.delta));
+        images = images.concat(readImages(choice.message), readImages(choice.delta));
         const d = choice.delta;
         if (!d) return;
         calls.add(d);
@@ -581,9 +618,10 @@ function openAICompatible(
       if ((usage as TokenUsage | undefined)?.reasoningTokens) reasoned = true;
       opts.onFinish?.({ reason: finish, reasoned, partial: finish === "length" });
       if (opts.onCitations && cites.length) opts.onCitations(dedupeCitations(cites));
+      if (opts.onImages && images.length) opts.onImages([...new Set(images)]);
       const streamedCalls = calls.done();
       if (streamedCalls.length && opts.onToolCalls) opts.onToolCalls(streamedCalls);
-      if (!out && !streamedCalls.length) throw emptyReplyError(label, finish, reasoned ? "yes" : "");
+      if (!out && !streamedCalls.length && !images.length) throw emptyReplyError(label, finish, reasoned ? "yes" : "");
       return out;
     },
 
@@ -713,7 +751,7 @@ export const BACKENDS: Record<BackendType, BackendDef> = {
     /* The only backend that can search: OpenRouter runs it server-side and
        injects the results into the prompt, so it stays one request. Thinking
        is a per-model question on top of this — see lib/thinking.ts. */
-    supports: ["web", "think"],
+    supports: ["web", "think", "image"],
     /* The catalogue this prices against is OpenRouter's own, so its ids match
        by construction. */
     pricing: "catalogue",

@@ -520,3 +520,40 @@
   background-repeat: no-repeat;
   animation: photo-wait 1.9s linear infinite;
 }
+
+/* --------------------------------------------------------------- pictures -- */
+/* A picture the model drew, in the same frame a figure gets so the two read as
+   two of a kind. `.photo-held` is the 112px thumbnail standing in while the
+   real bytes come out of IndexedDB — blurred because it *is* blurred at that
+   size, not as an effect. */
+.vis-photo,
+.photo {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  padding: var(--s-3);
+  box-sizing: border-box;
+}
+.photo-held {
+  filter: blur(14px) saturate(0.4);
+  transform: scale(1.02);
+}
+.vis:fullscreen .vis-photo {
+  max-height: calc(100vh - 4rem);
+  width: auto;
+}
+.vis-foot {
+  margin: 0;
+  padding: 0 var(--s-3) var(--s-2);
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  color: var(--ink-3);
+  text-align: right;
+}
+.photo-gone {
+  padding: var(--s-4);
+  font-size: var(--t-xs);
+  line-height: var(--lh-snug);
+  color: var(--ink-3);
+}

@@ -21,6 +21,7 @@ import { kindsOn, visualDef } from "@/lib/visuals/catalogue";
 import { visualProtocol } from "@/lib/visuals/protocol";
 import { collectDay, renderDay, todayWindow } from "@/lib/dayBrief";
 import * as figures from "@/services/figures";
+import { keptLabel } from "@/lib/visuals/keep";
 import type { ContextSource } from "@/types/chat";
 import type { Card, Deck, Memory, MemoryScope, SRSState } from "@/types";
 
@@ -239,7 +240,7 @@ export function renderSource(src: ContextSource, queryText = "", opts: RenderOpt
       ...kept.map((f) => {
         const versions = f.versions.length + 1;
         return (
-          `- [${visualDef(f.kind).label.toLowerCase()}] "${f.title}"` +
+          `- [${keptLabel(f.kind).toLowerCase()}] "${f.title}"` +
           (versions > 1 ? ` (${versions} versions)` : "") +
           ` — kept ${U.ago(f.updated)}` +
           (f.note ? `. Their note: ${f.note}` : "")

@@ -21,10 +21,11 @@ especially its **Project layout** section. Do not restate it here.
 npm run dev     # vite; usually :5173, falls back to :5174 if taken
 npm run lint    # tsc --noEmit. The only lint there is
 npm test        # tsx --test src/**/*.test.ts
-                # 269 tests: fsrs, cardFormat, memory*, effort, title,
+                # 273 tests: fsrs, cardFormat, memory*, effort, title,
                 # thinking, agent/loop, settings/catalogue, logBudget,
                 # storage, activity, gaps, retry, budget, ai/structured,
-                # weeks, rememberArg, dayBrief, visuals/{srcdoc (the walls), keep},
+                # weeks, rememberArg, dayBrief, files/parts (the sweep),
+                # visuals/{srcdoc (the walls), keep},
                 # speech/{words, availability, player}
 npm run build   # tsc -b && vite build
 ```
@@ -300,6 +301,15 @@ the whole picture. Four things bite:
   re-registered only when the palette or drawer moves and otherwise holds a
   first-render closure.
 
+**The paperclip asks what kind, and `lib/files/kinds.ts` is the one list it
+asks from** — the row, the `accept` the OS dialog opens on, the size quoted
+before you pick, and the modality the model needs. It replaced three
+hand-written `accept` strings that had already drifted, and `sniff.ts` owns the
+extension list both read, so the menu cannot offer what ingest refuses. A kind
+the model cannot take is dimmed with the reason in its second line; `unknown`
+stays live, per `lib/modality.ts`. **It narrows, it does not gate** — drag and
+paste bypass it entirely and still work, with the card's warning.
+
 **Attachments are read here, kept apart, and carried by rule.** Every file —
 the chat composer, project knowledge, journal capture — goes through
 `services/files/ingest.ts`, which sniffs the bytes (`lib/files/sniff.ts`),
@@ -319,6 +329,39 @@ imports and none may reach the review loop's entry chunk. Dropped files are
 *taken* from a queue (`takeDropped`), never passed as a prop: the composer
 remounts when the first message creates a conversation, and a prop holding the
 files attached every one of them again.
+
+**A picture is not a figure, and the difference is load-bearing.** Everything
+in `lib/visuals/catalogue.ts` is something a model *wrote* as a fenced block,
+which is why one list can teach it, draw it and describe it. An image is bytes
+a model *returned*: nothing to teach, nothing to re-draw, no source. So
+`image` is a `KeptKind` in `lib/visuals/keep.ts` and never an entry in the
+catalogue — the shelf has tolerated a second sort of citizen since whiteboards
+landed on it. Read `keptLabel`/`keptFence`, never `visualDef(f.kind)`, on
+anything off the shelf. Four more things:
+
+- **A kept picture's `source` is its file id.** Not a lie, a fit: `figureKey`
+  digests the source for every kind but a canvas and `holds` compares sources
+  to spot a repeat, so the file id makes both exactly right for a picture with
+  no special cases — two keeps of one picture are one figure, two pictures are
+  two, and neither can be a "revision" of the other.
+- **`ChatOpts.onImages` is the seam**, like `onCitations` and `onToolCalls`:
+  `chat()` returns a string and fifteen callers depend on it. `readImages` in
+  `backends.ts` takes `data:` URLs only — a remote one would be a reply telling
+  this browser to fetch something — and **a picture counts as a reply** in both
+  empty-reply guards, or an image-only answer is thrown away as "the model said
+  nothing".
+- **The bytes never touch the variant.** `services/files/generated.ts` puts
+  them in `drill-files` before the variant is written, because a conversation
+  is one record rewritten whole on every message. Only the 112px thumbnail
+  rides inline, which is what lets a list draw before IndexedDB answers.
+- **Four things hold a file id now** — a pinned attachment, an attachment on a
+  turn, a picture on a *variant*, and a kept figure. `referencedFileIds` walks
+  the first three and `unusedFileIds` adds the fourth; miss one and Settings →
+  Data's "Remove unused" deletes the learner's picture with no error anywhere.
+  `parts.test.ts` pins it. Backup has the matching rule: a backup made without
+  attachments still carries the files a kept picture points at, and
+  `filesComplete: false` is what stops that handful from *replacing* the file
+  store on restore.
 
 **Figures are one catalogue, drawn two ways.** `lib/visuals/catalogue.ts`
 declares every kind — its fence, its Settings row, the line of prompt that

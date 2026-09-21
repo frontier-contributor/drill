@@ -35,13 +35,15 @@ import { useRoute } from "@/context/RouteContext";
 import { SheetProvider, useSheet } from "@/context/SheetContext";
 import { ReviewProvider } from "@/context/ReviewContext";
 import { useToast } from "@/context/ToastContext";
-import { allVersions, type KeptFigure } from "@/lib/visuals/keep";
-import { visualDef, VISUALS, type VisualKind } from "@/lib/visuals/catalogue";
+import { allVersions, keptFence, keptLabel, type KeptFigure, type KeptKind } from "@/lib/visuals/keep";
+import { VISUALS, type VisualKind } from "@/lib/visuals/catalogue";
+import { size } from "@/lib/files/limits";
 import { ago } from "@/lib/util";
 import type { StoredBoard } from "@/services/files/db";
 import Shell from "../Shell";
 import Sheet from "../Sheet";
 import Visual from "../visuals/Visual";
+import StoredImage from "../visuals/StoredImage";
 import ErrorGuard from "../ui/ErrorGuard";
 import Icon from "../ui/Icon";
 import "@/styles/cards.css";
@@ -51,9 +53,10 @@ import "@/styles/figures.css";
    open — the same bargain ChatView makes. */
 const BoardSheet = lazy(() => import("../visuals/BoardSheet"));
 
-/** A filter is a kind, "board", or everything. Built from the catalogue rather
- *  than typed out, so a new kind of figure appears here the day it is added. */
-type Filter = "all" | VisualKind | "board";
+/** A filter is a kept kind, "board", or everything. The figure kinds are built
+ *  from the catalogue rather than typed out, so a new one appears here the day
+ *  it is added; "image" and "board" are the two that are not in it. */
+type Filter = "all" | KeptKind | "board";
 
 /** One row of the list, whichever of the two things it is. */
 interface Row {
@@ -72,7 +75,7 @@ function figureRow(f: KeptFigure): Row {
   return {
     id: f.id,
     filter: f.kind,
-    kind: visualDef(f.kind).label,
+    kind: keptLabel(f.kind),
     title: f.title,
     note: f.note,
     updated: f.updated,
@@ -174,18 +177,20 @@ function FiguresPage() {
                    renderer and is part of the history from the first question
                    you ask about it. Nothing is sent — what to ask is yours. */
                 const c = chatStore.create({ projectId, title: f.title.slice(0, 60) });
-                chatStore.addTurn(
-                  c,
-                  chatStore.makeTurn(
-                    "assistant",
-                    `Here is the ${visualDef(f.kind).label.toLowerCase()} you kept — “${f.title}”.\n\n` +
+                /* A picture has no block to put in the thread — its bytes are
+                   in the file store and a transcript holds text — so the new
+                   thread is opened naming it instead, and the paperclip is
+                   how the picture itself gets there if the model can see. */
+                const body =
+                  f.kind === "image"
+                    ? `You kept a picture called “${f.title}”. Attach it with the paperclip if I need to look at it.`
+                    : `Here is the ${keptLabel(f.kind).toLowerCase()} you kept — “${f.title}”.\n\n` +
                       "```" +
-                      (f.info || visualDef(f.kind).fences[0]) +
+                      (f.info || keptFence(f.kind)) +
                       "\n" +
                       f.source.replace(/\n$/, "") +
-                      "\n```"
-                  )
-                );
+                      "\n```";
+                chatStore.addTurn(c, chatStore.makeTurn("assistant", body));
                 openChat(c.id);
               }}
               onDelete={(f) => {
@@ -246,6 +251,18 @@ function FiguresPage() {
                       <span className="cfilter-n">{counts[v.kind] || 0}</span>
                     </button>
                   ))}
+                  {/* The two kinds that are not in the figure catalogue, for
+                      the reason keep.ts gives: one is bytes a model returned
+                      and the other is a drawing surface, and neither is
+                      something a model is taught to write as a fence. */}
+                  <button
+                    className={"cfilter" + (filter === "image" ? " on" : "")}
+                    onClick={() => setFilter("image")}
+                    disabled={!counts.image}
+                  >
+                    Image
+                    <span className="cfilter-n">{counts.image || 0}</span>
+                  </button>
                   <button
                     className={"cfilter" + (filter === "board" ? " on" : "")}
                     onClick={() => setFilter("board")}
@@ -334,7 +351,7 @@ function FigureDetail({
   onDiscuss: (f: KeptFigure) => void;
   onDelete: (f: KeptFigure) => void;
 }) {
-  const def = visualDef(figure.kind);
+  const isPicture = figure.kind === "image";
   const versions = allVersions(figure);
   /* Undefined when the conversation has since been deleted — in which case the
      name it had is still worth showing, and the link to it is not. */
@@ -379,7 +396,7 @@ function FigureDetail({
       />
 
       <div className="fig-prov">
-        <span className="fig-kind">{def.label}</span>
+        <span className="fig-kind">{keptLabel(figure.kind)}</span>
         <span>kept {ago(figure.created)}</span>
         {figure.updated !== figure.created && <span>revised {ago(figure.updated)}</span>}
         {thread ? (
@@ -400,15 +417,25 @@ function FigureDetail({
         )}
       </div>
 
-      {/* The same renderer the conversation uses, on the same fenced block —
-          which is why there is nothing here that can drift from how it looked
-          in the reply. No `keep`: it is already kept. */}
+      {/* The same renderer the conversation uses, on the same block — which is
+          why there is nothing here that can drift from how it looked in the
+          reply. No `keep`: it is already kept. A picture has no block, so its
+          bytes come from the file store instead. */}
       <ErrorGuard fallback={<div className="vis-error">This figure could not be shown.</div>}>
-        <Visual
-          key={`${figure.id}:${at}`}
-          block={{ kind: figure.kind, lang: def.fences[0], info: figure.info, source }}
-          onMakeCards={(text) => onMakeCards(text, `the figure “${figure.title}”`)}
-        />
+        {isPicture && figure.image ? (
+          <figure className="vis vis-image">
+            <StoredImage fileId={figure.image.fileId} thumb={figure.image.thumb} alt={figure.title} className="vis-photo" />
+            <figcaption className="vis-foot">
+              {figure.image.w}×{figure.image.h} · {size(figure.image.size)}
+            </figcaption>
+          </figure>
+        ) : (
+          <Visual
+            key={`${figure.id}:${at}`}
+            block={{ kind: figure.kind as VisualKind, lang: keptFence(figure.kind), info: figure.info, source }}
+            onMakeCards={(text) => onMakeCards(text, `the figure “${figure.title}”`)}
+          />
+        )}
       </ErrorGuard>
 
       <div className="fig-why">
@@ -431,7 +458,17 @@ function FigureDetail({
         </button>
         <button
           className="btn sm"
-          onClick={() => onMakeCards(`${def.label} — ${figure.title}\n\n${source}`, `the figure “${figure.title}”`)}
+          /* A picture's source is a file id, which would teach a card writer
+             nothing — what it has instead is the title, which is what was
+             asked for when it was drawn. */
+          onClick={() =>
+            onMakeCards(
+              isPicture
+                ? `A picture the learner kept: ${figure.title}${figure.note ? `. Their note: ${figure.note}` : ""}`
+                : `${keptLabel(figure.kind)} — ${figure.title}\n\n${source}`,
+              `the figure “${figure.title}”`
+            )
+          }
         >
           Make cards
         </button>

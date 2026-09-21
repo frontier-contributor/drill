@@ -90,6 +90,33 @@ export interface SavedMemory {
   atCap: boolean;
 }
 
+/**
+ * A picture the model drew, on the reply that drew it.
+ *
+ * The bytes are in the `drill-files` database under `fileId`, never here, for
+ * the reason spelled out on `Attachment` above: a conversation is one record
+ * and it is rewritten whole on every message, so a picture stored inside it
+ * would be re-serialised on every message after it for the life of the thread.
+ *
+ * `thumb` is the exception and is here on purpose — a hundred-odd characters
+ * of JPEG so a list can draw the picture without opening the file store.
+ */
+export interface GeneratedImage {
+  id: string;
+  fileId: string;
+  mime: string;
+  w: number;
+  h: number;
+  /** A small JPEG data URL, drawn in this browser. */
+  thumb?: string;
+  /** Bytes, for the receipt under the reply. */
+  size: number;
+  /** What was asked for — the user's own message — so a kept picture has a
+   *  title without anyone having to name it. */
+  prompt?: string;
+  createdAt: number;
+}
+
 /** One generation of an assistant turn, or one edit of a user turn. */
 export interface Variant {
   content: string;
@@ -114,6 +141,10 @@ export interface Variant {
    *  played. Replays from saved audio add nothing, because nothing was spent.
    *  `cost` undefined means the voice has no published price, not free. */
   listened?: { chars: number; cost?: number };
+  /** Pictures this generation drew. Per variant rather than per turn, so
+   *  regenerating gives a new picture and the variant arrows step between
+   *  them rather than piling them up under one reply. */
+  images?: GeneratedImage[];
 }
 
 export interface Turn {
@@ -257,9 +288,19 @@ export interface ModelPrice {
   reasoning?: boolean;
   /** What the model accepts as input beyond text — "image", "file", "audio" —
    *  from the catalogue's `architecture.input_modalities`. Absent means not
-   *  known, same convention as `reasoning`; ["text"] means text-only. Read
-   *  today, acted on later: nothing in the app sends an attachment yet. */
+   *  known, same convention as `reasoning`; ["text"] means text-only. Read by
+   *  lib/modality.ts, which is what decides whether a picture is sent as
+   *  itself and whether the attach menu offers one at all. */
   inputModalities?: string[];
+  /** What it can produce, from `architecture.output_modalities`. A model that
+   *  lists "image" can be asked for pictures; every other model in the
+   *  catalogue lists "text" alone. Same absent-means-unknown convention. */
+  outputModalities?: string[];
+  /** USD per generated image, from the catalogue's `pricing.image`. Images are
+   *  billed per picture rather than per token, so without this an image reply
+   *  costs a row of zeros that looks exactly like a free one — the same hole
+   *  `characters` fills for a voice. Absent means no published price. */
+  imagePrice?: number;
   /** The most the model will write in one reply, from the catalogue's
    *  `top_provider.max_completion_tokens`. Absent means not known — which is
    *  also how a price cached before the field existed reads. lib/budget.ts

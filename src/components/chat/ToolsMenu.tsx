@@ -81,7 +81,7 @@ const MODES: ModeDef[] = [
   }
 ];
 
-const ACTION_ICON: Record<ChatActionId, IconName> = { web: "globe", think: "brain" };
+const ACTION_ICON: Record<ChatActionId, IconName> = { web: "globe", think: "brain", image: "image" };
 
 export default function ToolsMenu() {
   const {

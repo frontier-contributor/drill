@@ -37,10 +37,12 @@ function shareOf(r: UsageRow, max: number, priced: boolean): number {
 }
 
 /** How much a row did, for the bar when nothing is priced. A voice reports
- *  characters and no tokens; counting only tokens would draw every listening
- *  row at nothing. */
+ *  characters and no tokens and an image model reports barely any tokens at
+ *  all; counting only tokens would draw both of those at nothing. Pictures are
+ *  weighted so one is visible beside a few thousand tokens rather than being a
+ *  rounding error on the same axis. */
 function volume(r: UsageRow): number {
-  return r.promptTokens + r.completionTokens + (r.characters || 0);
+  return r.promptTokens + r.completionTokens + (r.characters || 0) + (r.images || 0) * 1000;
 }
 
 function Group({ title, sub, rows, name }: { title: string; sub: string; rows: UsageRow[]; name: (r: UsageRow) => string }) {
@@ -70,10 +72,11 @@ function Group({ title, sub, rows, name }: { title: string; sub: string; rows: U
               {r.errors > 0 ? ` · ${r.errors} failed` : ""}
               {/* A voice bills by the character and reports no tokens, and
                   "0 in · 0 out" under it would read like a fault. */}
-              {r.promptTokens || r.completionTokens || !r.characters
+              {r.promptTokens || r.completionTokens || !(r.characters || r.images)
                 ? ` · ${formatTokens(r.promptTokens)} in · ${formatTokens(r.completionTokens)} out`
                 : ""}
               {r.characters > 0 ? ` · ${formatTokens(r.characters)} characters read aloud` : ""}
+              {r.images > 0 ? ` · ${r.images} picture${r.images === 1 ? "" : "s"}` : ""}
               {r.cachedPromptTokens > 0 ? ` · ${formatTokens(r.cachedPromptTokens)} cached` : ""}
               {r.reasoningTokens > 0 ? ` · ${formatTokens(r.reasoningTokens)} reasoning` : ""}
             </div>
@@ -119,6 +122,7 @@ export default function UsageScope() {
               {formatTokens(totals.completionTokens)} out
               {totals.cachedPromptTokens > 0 ? ` · ${formatTokens(totals.cachedPromptTokens)} of the input cached` : ""}
               {totals.characters > 0 ? ` · ${formatTokens(totals.characters)} characters read aloud` : ""}
+              {totals.images > 0 ? ` · ${totals.images} picture${totals.images === 1 ? "" : "s"} drawn` : ""}
             </span>
           </div>
 

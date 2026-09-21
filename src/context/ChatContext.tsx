@@ -22,6 +22,7 @@ import * as store from "@/services/store";
 import * as chatStore from "@/services/chatStore";
 import * as memoryStore from "@/services/memoryStore";
 import * as memoryCapture from "@/services/memoryCapture";
+import { keepGenerated } from "@/services/files/generated";
 import * as AI from "@/services/ai";
 import { isAbort } from "@/services/ai/backends";
 import { catalogueEntry, loadPricing, priceForModel } from "@/services/pricing";
@@ -383,6 +384,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const started = Date.now();
       let usage: Usage | undefined;
       let citations: Citation[] | undefined;
+      /* Data URLs, briefly. They are in the file store before the variant is
+         written — see keepGenerated. */
+      let drawn: string[] = [];
       let acc = "";
 
       // Build the prompt once and record usage against exactly what went into
@@ -494,6 +498,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             onCitations: (cs) => {
               citations = cs;
             },
+            onImages: (urls) => {
+              drawn = urls;
+            },
             onUsage: (u) => {
               /* What the provider says it charged beats what we can
                  reconstruct: it is the real figure, and it includes web
@@ -511,7 +518,20 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         );
 
         const raw = full || acc;
-        if (!raw.trim()) throw new Error("The model returned an empty reply.");
+        /* A picture is a reply. An image model asked for one often returns it
+           with no sentence around it at all, and this guard would have thrown
+           away the most expensive thing in the app. */
+        if (!raw.trim() && !drawn.length) throw new Error("The model returned an empty reply.");
+
+        /* Out of the reply and into the file store before the variant is
+           written, so the variant never holds base64 and never points at bytes
+           that were not kept. */
+        /* Titled by what was asked for — the last thing the learner typed
+           before this reply, which is the sentence the picture is of. */
+        const asked = [...c.turns.slice(0, upToIndex + 1)].reverse().find((t) => t.role === "user");
+        const images = drawn.length
+          ? await keepGenerated(drawn, asked ? chatStore.activeContent(asked) : c.title)
+          : undefined;
 
         /* Pull any save-to-memory block out of the markdown *before* it is
            stored or rendered. Stripping rendered HTML instead would be an
@@ -535,7 +555,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           saved,
           citations,
           trace,
-          agentProposed
+          agentProposed,
+          images: images?.length ? images : undefined
         });
         targetTurn.active = targetTurn.variants.length - 1;
         targetTurn.error = undefined;
