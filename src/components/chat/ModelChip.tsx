@@ -30,12 +30,23 @@ function shortName(id: string): string {
 export default function ModelChip({
   conversation,
   draftModel,
-  onDraftModel
+  onDraftModel,
+  restrict,
+  restrictNote,
+  heading
 }: {
   /** Null on the empty screen, where no conversation exists yet. */
   conversation: Conversation | null;
   draftModel: string;
   onDraftModel: (m: string) => void;
+  /** Narrow the list to one kind of model — the image composer passes
+   *  `canDraw`, so a thread whose every message is a picture cannot be
+   *  pointed at a model that only writes. */
+  restrict?: (id: string) => boolean;
+  restrictNote?: string;
+  /** Overrides the popover's heading, so a restricted picker can say what it
+   *  is restricted to instead of the generic line. */
+  heading?: string;
 }) {
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -105,7 +116,7 @@ export default function ModelChip({
       {open && (
         <div className="modelpop">
           <div className="modelpop-head">
-            <span>{conversation ? "Model for this conversation" : "Model for the next conversation"}</span>
+            <span>{heading || (conversation ? "Model for this conversation" : "Model for the next conversation")}</span>
             {pinned && (
               <button className="modelpop-clear" onClick={() => choose("")}>
                 use the default
@@ -119,6 +130,8 @@ export default function ModelChip({
             backend={(backend || resolved.type) as BackendType}
             value={resolved.model}
             onChoose={choose}
+            restrict={restrict}
+            restrictNote={restrictNote}
             autoFocus
           />
         </div>

@@ -17,7 +17,7 @@ import { catalogueEntry, loadPricing, priceForModel } from "@/services/pricing";
 import { recentModels, recordModelUse } from "@/lib/recentModels";
 import type { BackendType } from "@/types";
 
-type Category = "recent" | "all" | "free" | "think";
+type Category = "recent" | "all" | "free" | "think" | "draw";
 
 /** "anthropic/claude-sonnet-4" groups under "anthropic"; a bare id (Ollama,
  *  a custom server) groups under "local" rather than being left ungrouped.
@@ -57,6 +57,23 @@ function isFree(backend: BackendType | "", id: string): boolean {
 
 function canThink(id: string): boolean {
   return !!catalogueEntry(id)?.reasoning;
+}
+
+/**
+ * Whether this model returns pictures.
+ *
+ * Read off `output_modalities`, which is the only place the catalogue says so
+ * — `supported_parameters` does not list a single image control for any of
+ * them, which is why lib/imageSpec.ts's dials report instead of being gated.
+ *
+ * Absent means no, not unknown, and that is the one place this file departs
+ * from the three-state rule elsewhere. A model that cannot be shown to draw
+ * must not be offered under a filter that promises drawing: the cost of
+ * wrongly excluding one is that you type its name, and the cost of wrongly
+ * including it is a thread that silently answers in words forever.
+ */
+export function canDraw(id: string): boolean {
+  return !!catalogueEntry(id)?.outputModalities?.includes("image");
 }
 
 /** What it takes in beyond text, in one word — "image", "file", or both.
@@ -104,6 +121,13 @@ function rowTitle(backend: BackendType | "", id: string): string {
 }
 
 export interface ModelPickerPanelProps {
+  /** Narrow the whole picker to one kind of model. The image composer passes
+   *  `canDraw` so a text model cannot be chosen for a thread whose every
+   *  message is a picture. */
+  restrict?: (id: string) => boolean;
+  /** Said above the list when `restrict` has excluded everything, so an empty
+   *  picker explains itself rather than looking broken. */
+  restrictNote?: string;
   /** Every id this backend's key can reach, unsorted — the picker does its
    *  own grouping and filtering rather than trusting caller order. */
   models: string[];
@@ -115,7 +139,16 @@ export interface ModelPickerPanelProps {
   autoFocus?: boolean;
 }
 
-export default function ModelPickerPanel({ models, loading, backend, value, onChoose, autoFocus }: ModelPickerPanelProps) {
+export default function ModelPickerPanel({
+  models,
+  loading,
+  backend,
+  value,
+  onChoose,
+  autoFocus,
+  restrict,
+  restrictNote
+}: ModelPickerPanelProps) {
   const [query, setQuery] = useState("");
   const [cat, setCat] = useState<Category>("all");
   const [, forceRepaint] = useState(0);
@@ -138,23 +171,37 @@ export default function ModelPickerPanel({ models, loading, backend, value, onCh
     let base = cat === "recent" ? recents : models;
     if (cat === "free") base = base.filter((m) => isFree(backend, m));
     else if (cat === "think") base = base.filter((m) => canThink(m));
+    else if (cat === "draw") base = base.filter((m) => canDraw(m));
+    /* A caller that only wants one kind of model narrows everything, the
+       category strip included — the image composer must not offer a text
+       model under any tab. Applied after the category so "Recent" inside a
+       restricted picker means "recent models that draw". */
+    if (restrict) base = base.filter(restrict);
     return q ? base.filter((m) => m.toLowerCase().includes(q)) : base;
-  }, [models, recents, cat, query, backend]);
+  }, [models, recents, cat, query, backend, restrict]);
+
+  /* The catalogue is fetched lazily and can be empty on first paint or behind
+     a backend that publishes none. Restricting against nothing would show an
+     empty picker and read as "your key reaches no image models", so an empty
+     restricted list falls back to everything with the reason written above
+     it. Saying why beats showing a blank. */
+  const restrictedEmpty = !!restrict && !rows.length && !query.trim() && models.length > 0;
+  const shown = restrictedEmpty ? models : rows;
 
   /* Grouped by provider once there is enough on screen to make headers worth
      it — recency order matters more than alphabetising for "Recent", and a
      five-model Ollama list does not need sectioning at all. */
   const grouped = useMemo(() => {
-    if (cat === "recent" || rows.length < 8) return null;
+    if (cat === "recent" || shown.length < 8) return null;
     const by = new Map<string, string[]>();
-    for (const id of rows) {
+    for (const id of shown) {
       const p = providerOf(id);
       const list = by.get(p);
       if (list) list.push(id);
       else by.set(p, [id]);
     }
     return [...by.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [rows, cat]);
+  }, [shown, cat]);
 
   function choose(id: string) {
     const v = id.trim();
@@ -201,25 +248,39 @@ export default function ModelPickerPanel({ models, loading, backend, value, onCh
       />
 
       <div className="modelpop-cats">
-        {recents.length > 0 && (
+        {/* Hidden when the picker is already narrowed to one kind: "Free" and
+            "Thinks" inside an image-only list are filters on a list that has
+            one property in common, and the strip would mostly return nothing. */}
+        {!restrict && recents.length > 0 && (
           <button type="button" className={"modelpop-cat" + (cat === "recent" ? " on" : "")} onClick={() => setCat("recent")}>
             Recent
           </button>
         )}
-        <button type="button" className={"modelpop-cat" + (cat === "all" ? " on" : "")} onClick={() => setCat("all")}>
-          All
-        </button>
-        <button type="button" className={"modelpop-cat" + (cat === "free" ? " on" : "")} onClick={() => setCat("free")}>
-          Free
-        </button>
-        <button type="button" className={"modelpop-cat" + (cat === "think" ? " on" : "")} onClick={() => setCat("think")}>
-          Thinks
-        </button>
+        {!restrict && (
+          <>
+            <button type="button" className={"modelpop-cat" + (cat === "all" ? " on" : "")} onClick={() => setCat("all")}>
+              All
+            </button>
+            <button type="button" className={"modelpop-cat" + (cat === "free" ? " on" : "")} onClick={() => setCat("free")}>
+              Free
+            </button>
+            <button type="button" className={"modelpop-cat" + (cat === "think" ? " on" : "")} onClick={() => setCat("think")}>
+              Thinks
+            </button>
+            {/* Findable from ordinary chat too. The Image switch lets any
+                thread come back with a picture, and before this there was no
+                way to discover which models could actually do it. */}
+            <button type="button" className={"modelpop-cat" + (cat === "draw" ? " on" : "")} onClick={() => setCat("draw")}>
+              Draws
+            </button>
+          </>
+        )}
       </div>
 
       <div className="modelpop-list">
         {loading && <div className="modelpop-empty">fetching what your key can reach…</div>}
-        {!loading && rows.length === 0 && (
+        {!loading && restrictedEmpty && restrictNote && <div className="modelpop-note">{restrictNote}</div>}
+        {!loading && shown.length === 0 && (
           <div className="modelpop-empty">
             {cat === "recent"
               ? "Nothing recent yet."
@@ -228,7 +289,7 @@ export default function ModelPickerPanel({ models, loading, backend, value, onCh
                 : "No list available — type an id and press enter."}
           </div>
         )}
-        {!loading && rows.length > 0 && !grouped && rows.map(row)}
+        {!loading && shown.length > 0 && !grouped && shown.map(row)}
         {!loading &&
           grouped &&
           grouped.map(([provider, ids]) => (

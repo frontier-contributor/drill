@@ -61,10 +61,6 @@ interface Props {
    *  Passed in rather than built here so the composer stays ignorant of
    *  conversations. */
   tools?: ReactNode;
-  /** A row above the text box, for controls that describe the message rather
-   *  than the thread. Null in every mode but Image, so nothing here changes
-   *  the composer's shape for anyone who is not drawing. */
-  bar?: ReactNode;
   /** The right of the tool row — the model chip. Separated from `tools`
    *  because the split is the layout: what the message is set to sits on one
    *  side, what will answer it on the other, and the gap between them is what
@@ -101,7 +97,6 @@ export default function Composer({
   commands,
   references,
   tools,
-  bar,
   trailing,
   onSend,
   onStop,
@@ -430,8 +425,6 @@ export default function Composer({
               ))}
             </div>
           )}
-
-          {bar}
 
           {/* Send sits beside the box rather than under it, which is the whole
               reason an empty composer is one line tall. */}

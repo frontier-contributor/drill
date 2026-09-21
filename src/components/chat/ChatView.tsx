@@ -46,7 +46,7 @@ import ChatEmpty from "./ChatEmpty";
 import ReadProgress from "./ReadProgress";
 import ModelChip from "./ModelChip";
 import ToolsMenu from "./ToolsMenu";
-import ImageBar from "./ImageBar";
+import ImageComposer from "./ImageComposer";
 import ListenBar from "./ListenBar";
 import ErrorGuard from "../ui/ErrorGuard";
 import AttachmentPreview from "./AttachmentPreview";
@@ -589,6 +589,11 @@ It is built from your memories and what the review loop says you keep getting wr
   const readiness = AI.ready(c ? { backend: c.backend, model: c.model } : undefined);
   const contextTokens = c ? estimateTurnTokens(c.turns) : 0;
 
+  /* Which surface the composer slot holds. Reads the conversation once one
+     exists and the draft before then, the same inheritance every control in
+     the composer follows. */
+  const drawing = (c ? c.mode : chat.draftMode) === "image";
+
   return (
     /* The conversation index is passed to the shared sidebar rather than
        rendered as a second one. Chat used to carry its own 268px pane, its
@@ -729,6 +734,14 @@ It is built from your memories and what the review loop says you keep getting wr
         />
 
         {!c || c.turns.length === 0 ? (
+          /* The chat welcome is chat's: its starters are questions, and
+             offering "What should I revise today?" above a surface whose only
+             verb is Draw is the mixing this mode exists to undo. Nested inside
+             the empty branch rather than wrapping it — hoisted out, the same
+             test swallowed the transcript itself the moment the thread had a
+             picture in it. Kept when the app is not ready, because that panel
+             is also where "no key yet" is said. */
+          drawing && readiness.ok ? null : (
           <ChatEmpty
             ready={readiness}
             onStart={(prompt, opts) => {
@@ -741,6 +754,7 @@ It is built from your memories and what the review loop says you keep getting wr
             }}
             onPrefill={(text) => setSeed({ text, nonce: Date.now() })}
           />
+          )
         ) : (
           <div className="msgs" ref={scrollRef}>
             <div className="msgs-inner">
@@ -805,6 +819,24 @@ It is built from your memories and what the review loop says you keep getting wr
           <ListenBar scrollRef={scrollRef} />
         </ErrorGuard>
 
+        {/* Image mode swaps the composer out rather than decorating it. The
+            two share the send path and nothing else: slash commands,
+            @-references, follow-up seeding and the drop queue are chat things,
+            and a drawing surface carrying all of them was the "very mixed into
+            chat" this replaced. Keyed the same way, so the remount when the
+            first message creates a conversation still clears the draft rather
+            than leaking it into the new thread. */}
+        {drawing ? (
+          <ImageComposer
+            key={(conversationId || "new") + ":img"}
+            disabled={!readiness.ok}
+            busy={chat.busy}
+            droppedNonce={dropNonce}
+            takeDropped={takeDropped}
+            onSend={(text, attachments) => void chat.send(text, attachments)}
+            onStop={chat.stop}
+          />
+        ) : (
         <Composer
           key={conversationId || "new"}
           disabled={!readiness.ok}
@@ -812,11 +844,6 @@ It is built from your memories and what the review loop says you keep getting wr
           commands={commands}
           references={references}
           tools={<ToolsMenu />}
-          /* Only in Image mode, which is the whole argument for the mode: two
-             dials wanted on every message when the thread is for drawing and
-             on none of them otherwise. Rendered nowhere else, so it cannot
-             crowd the composer of a thread that is not drawing. */
-          bar={(c ? c.mode : chat.draftMode) === "image" ? <ImageBar /> : null}
           trailing={<ModelChip conversation={c} draftModel={chat.draftModel} onDraftModel={chat.setDraftModel} />}
           seed={seed}
           droppedNonce={dropNonce}
@@ -829,6 +856,7 @@ It is built from your memories and what the review loop says you keep getting wr
           onSend={(text, attachments) => void chat.send(text, attachments)}
           onStop={chat.stop}
         />
+        )}
       </div>
 
       {palette && <CommandPalette actions={paletteActions} onClose={() => setPalette(false)} />}

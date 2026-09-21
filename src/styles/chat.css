@@ -2871,116 +2871,327 @@
 }
 
 /* ============================================================================
- * ImageBar — the picture's shape and size.
+ * ImageComposer — the drawing surface.
  *
- * Its own row above the text box, not a member of `.composer-tools`. That row
- * already carries six controls in two clusters and is the one thing in this
- * app that has run out of horizontal room before; adding two more groups to
- * it would reflow the model chip on a narrow window and push Send around.
- * A separate row cannot do that, and it renders in exactly one mode, so every
- * other thread's composer is byte-identical to what it was.
+ * It replaces the chat composer rather than sitting inside it, so it is free
+ * to be a different object: a raised plate with its own heading, not a text
+ * box with a strip of chips above it. The first attempt was that strip, and
+ * it read as cheap for a reason worth writing down — six controls of equal
+ * weight in a flat row under two shouting caps labels, so nothing on it
+ * looked like the thing you came here to do.
  *
- * It wraps rather than scrolls. A horizontally scrolling strip of radio
- * buttons hides options off-screen with no affordance saying so — the shape
- * you wanted would simply not be there — whereas a wrapped second line is
- * visibly the same row continued.
+ * The hierarchy is the whole design: the prompt in the reading face is the
+ * work, the plate beside it is the one setting you check before pressing,
+ * Draw is the only filled control on the surface, and everything else recedes
+ * into a quiet deck along the bottom.
  * ========================================================================== */
-.ibar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s-2) var(--s-4);
-  padding: var(--s-2) var(--s-1) var(--s-3);
-  border-bottom: 1px solid var(--rule-soft);
-  margin-bottom: var(--s-2);
+.imgc {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--rule-soft);
+  padding: var(--s-3) var(--gutter) var(--s-4);
+  background: var(--page);
 }
 
-.ibar-group {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s-1);
-  min-width: 0;
+.imgc-inner {
+  width: 100%;
+  max-width: var(--page-w);
+  margin: 0 auto;
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-4);
+  background: var(--surface);
+  box-shadow: var(--lift-2), var(--inset-highlight);
+  transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
 }
-
-.ibar-cap {
-  margin-right: var(--s-1);
-  color: var(--ink-3);
-  font-family: var(--sans);
-  font-size: var(--t-3xs);
-  letter-spacing: var(--track-caps);
-  text-transform: uppercase;
-}
-
-/* One fixed square per shape, so the row is a steady grid of targets and the
-   swatch inside it is what varies. Sizing the *button* to the aspect would
-   make the ultrawide five times the click target of the tall one. */
-.ibar-btn {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--r-2);
-  background: transparent;
-  color: var(--ink-3);
-  font: inherit;
-  font-family: var(--sans);
-  font-size: var(--t-3xs);
-  cursor: pointer;
-  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease), color var(--fast) var(--ease);
-}
-.ibar-btn.wide {
-  width: auto;
-  min-width: 34px;
-  padding: 0 var(--s-2);
-}
-.ibar-btn:hover {
-  background: var(--surface-2);
-  color: var(--ink-2);
-}
-.ibar-btn.on {
+.imgc-inner:focus-within {
   border-color: var(--accent-45);
-  background: var(--accent-10);
+  box-shadow: var(--lift-2), var(--accent-glow);
+}
+
+/* ------------------------------------------------------------------ head -- */
+.imgc-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding-bottom: var(--s-3);
+  margin-bottom: var(--s-3);
+  border-bottom: 1px solid var(--rule-soft);
+}
+.imgc-mark {
+  flex: 0 0 auto;
   color: var(--accent);
 }
-
-/* The swatch is the control's meaning, so it carries the state colour and the
-   button behind it stays quiet. Outlined rather than filled: a filled block
-   at 16px reads as a dot, an outline reads as a frame — which is what an
-   aspect ratio is. */
-.ibar-swatch {
-  display: block;
-  border: 1.5px solid currentColor;
-  border-radius: 1.5px;
+.imgc-title {
+  font-family: var(--serif);
+  font-size: var(--t-md);
+  font-weight: 600;
+  letter-spacing: var(--track-tight);
+  color: var(--ink);
 }
-/* Auto has no shape to draw, so it gets the absence of one: a dashed frame at
-   the largest size in the row, meaning "whatever fits". */
-.ibar-auto {
-  display: block;
-  width: 16px;
-  height: 16px;
-  border: 1.5px dashed currentColor;
-  border-radius: 1.5px;
-  opacity: 0.75;
+/* What this surface is, in a clause. Truncated rather than wrapped: a head
+   that grows to two lines pushes the model chip off the end of it. */
+.imgc-sub {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--ink-3);
+  font-family: var(--sans);
+  font-size: var(--t-2xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* The model cannot draw. Takes the whole row — it is the reason nothing below
-   it will work, and a note tucked beside the dials would be read after they
-   had already been set. */
-.ibar-warn {
-  flex: 1 0 100%;
-  margin: 0 0 var(--s-1);
+.imgc-warn {
+  margin: 0 0 var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--amber-edge);
+  border-radius: var(--r-2);
+  background: var(--amber-tint);
   color: var(--amber);
   font-family: var(--sans);
   font-size: var(--t-2xs);
   line-height: var(--lh-snug);
 }
 
-/* The picture did not come back the shape it was asked to be. Amber, not red:
-   nothing failed and nothing was lost — the model drew something and charged
-   for it, it just ignored one parameter. */
-.vis-foot-warn {
-  color: var(--amber);
+/* ------------------------------------------------------------------ body -- */
+.imgc-body {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-4);
+}
+
+/* The plate: a fixed square of room with the chosen ratio drawn inside it, so
+   changing shape changes the picture and never the layout. */
+.imgc-plate {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-2);
+  background: var(--page-2);
+  box-shadow: inset 0 0 0 1px var(--rule-soft);
+}
+.imgc-frame {
+  display: block;
+  border-radius: var(--r-1);
+  background: linear-gradient(150deg, var(--accent-25), var(--accent-05));
+  box-shadow: 0 0 0 1px var(--accent-45);
+  /* Width and height are written inline from the ratio — one of the few
+     places a component may set a measured value — and this transition is what
+     turns a readout into a demonstration of the setting. */
+  transition: width var(--med) var(--ease-spring), height var(--med) var(--ease-spring);
+}
+.imgc-frame.auto {
+  background: none;
+  box-shadow: none;
+  border: 1.5px dashed var(--ink-3);
+  opacity: 0.6;
+}
+
+.imgc-promptwrap {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* The reading face, because an image prompt is written rather than commanded.
+   The only thing on this surface set at reading size. */
+.imgc-prompt {
+  display: block;
+  width: 100%;
+  min-height: 3em;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: var(--t-read);
+  line-height: var(--lh-snug);
+  resize: none;
+}
+.imgc-prompt:focus {
+  outline: none;
+}
+.imgc-prompt::placeholder {
+  color: var(--ink-3);
+  opacity: 0.8;
+}
+/* Names what the plate shows: a frame alone cannot tell 3:2 from 4:3. */
+.imgc-readout {
+  margin: var(--s-2) 0 0;
+  color: var(--ink-3);
+  font-family: var(--sans);
+  font-size: var(--t-3xs);
+  letter-spacing: 0.02em;
+}
+
+.imgc-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+
+/* ------------------------------------------------------------------ deck -- */
+/* Everything that is not the prompt, in one quiet row. It wraps rather than
+   scrolls: a horizontally scrolling strip of radio buttons hides options with
+   nothing saying so, and the shape you wanted would simply not be there. */
+.imgc-deck {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--rule-soft);
+}
+.imgc-spacer {
+  flex: 1 1 auto;
+}
+
+/* One uniform target per shape, with the swatch inside doing the varying.
+   Sizing the button to its aspect would make the ultrawide five times the
+   click target of the tall one. */
+.imgc-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-2);
+}
+.imgc-shape {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-1);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.imgc-shape:hover {
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+.imgc-shape.on {
+  background: var(--accent-16);
+  color: var(--accent);
+}
+/* Outlined, not filled: a solid block at 15px reads as a dot, an outline
+   reads as a frame — and a frame is what an aspect ratio is. */
+.imgc-swatch {
+  display: block;
+  border: 1.5px solid currentColor;
+  border-radius: 1.5px;
+  transition: width var(--fast) var(--ease), height var(--fast) var(--ease);
+}
+.imgc-swatch.auto {
+  width: 15px;
+  height: 15px;
+  border-style: dashed;
+  opacity: 0.8;
+}
+
+/* The size tiers as one linked control rather than four loose pills: they are
+   exclusive and ordered, and a segmented control says both. */
+.imgc-seg {
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-2);
+}
+.imgc-segbtn {
+  padding: 3px var(--s-2);
+  border: 0;
+  border-radius: var(--r-1);
+  background: transparent;
+  color: var(--ink-3);
+  font-family: var(--sans);
+  font-size: var(--t-3xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.imgc-segbtn:hover {
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+.imgc-segbtn.on {
+  background: var(--accent-16);
+  color: var(--accent);
+}
+
+.imgc-attach {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--r-2);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.imgc-attach:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+.imgc-attach:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* The only filled control on the surface, because it is the only one that
+   spends money. */
+.imgc-draw {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-4);
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--sans);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--accent-glow);
+  transition: filter var(--fast) var(--ease), box-shadow var(--fast) var(--ease), opacity var(--fast) var(--ease);
+}
+.imgc-draw:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.imgc-draw:disabled {
+  opacity: 0.45;
+  box-shadow: none;
+  cursor: default;
+}
+.imgc-draw.stop {
+  background: var(--surface-2);
+  color: var(--ink-2);
+  box-shadow: none;
+}
+
+/* Narrow: the plate cannot be read at a quarter of the width it needs, and
+   the prompt is what matters. */
+@media (max-width: 560px) {
+  .imgc-plate,
+  .imgc-sub {
+    display: none;
+  }
+}
+
+/* Said above a restricted model list that came back empty, so a picker with
+   nothing in it explains itself instead of looking broken. */
+.modelpop-note {
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--rule-soft);
+  color: var(--ink-3);
+  font-family: var(--sans);
+  font-size: var(--t-3xs);
+  line-height: var(--lh-snug);
 }
