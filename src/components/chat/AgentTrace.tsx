@@ -14,6 +14,7 @@
  * ========================================================================== */
 import { useState } from "react";
 import Icon from "@/components/ui/Icon";
+import ThinkingPanel from "./ThinkingPanel";
 import type { AgentPlan, ToolCall, ToolRun } from "@/types/agent";
 
 /** The shape both callers flatten to. Deliberately not `AgentStep`: a live
@@ -23,6 +24,10 @@ export interface TraceStep {
   thought: string;
   calls: ToolCall[];
   runs: ToolRun[];
+  /** The model's working on this round, when the provider sent it. Live only
+   *  — the saved trace keeps the calls and their results, which is the half
+   *  you can actually check an answer against. */
+  reasoning?: string;
 }
 
 /** A bare tool name reads like an internal. This is the same act said the way
@@ -204,8 +209,16 @@ export default function AgentTrace({
 
       {shown && (
         <div className="atrace-body">
-          {steps.map((s) => (
+          {steps.map((s, i) => (
             <div key={s.step} className="atrace-step">
+              {/* Before the round's stated intent, because it came before it:
+                  this is what the model worked through, and `thought` is what
+                  it decided to say about it. Live only, and open only on the
+                  round still going — an earlier round's scratchpad is noise
+                  once its lookups have come back. */}
+              {s.reasoning && (
+                <ThinkingPanel text={s.reasoning} compact running={!!running && i === steps.length - 1} />
+              )}
               {s.thought && <p className="atrace-thought">{s.thought}</p>}
               <ul className="atrace-rows">
                 {s.calls.map((call, i) => (

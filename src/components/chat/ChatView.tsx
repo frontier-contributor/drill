@@ -755,6 +755,7 @@ It is built from your memories and what the review loop says you keep getting wr
                      MessageTurn so exactly one turn can ever show it — the
                      one being streamed into. */
                   agentLive={chat.streamingTurnId === t.id ? chat.agentLive : null}
+                  thinking={chat.streamingTurnId === t.id ? chat.thinking : null}
                   streamingText={chat.streamingTurnId === t.id ? chat.streaming : null}
                   busy={chat.busy}
                   conversation={c}

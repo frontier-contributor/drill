@@ -265,6 +265,41 @@ function readImages(node: unknown): string[] {
 }
 
 /**
+ * The model's working, wherever this provider decided to put it.
+ *
+ * Three carriers, because OpenRouter normalises a field that four upstream
+ * vendors invented separately: `reasoning` (its own normalised form, and what
+ * most models arrive as), `reasoning_content` (DeepSeek's spelling, which some
+ * providers pass through untouched), and `reasoning_details[]` (the structured
+ * form, used when a chain comes back in signed or redacted blocks).
+ *
+ * All three are read on both the delta and the message for the same reason
+ * citations are: where a non-text artefact hangs off a stream is undocumented
+ * and differs by provider, and reasoning that arrived in a shape this did not
+ * look in is reasoning that was billed as output tokens and never shown.
+ *
+ * A redacted block carries no text and is correctly skipped — it is evidence
+ * that thinking happened, which `reasoned` already records, not something a
+ * person can read.
+ */
+function readReasoning(node: unknown): string {
+  const n = node as { reasoning?: unknown; reasoning_content?: unknown; reasoning_details?: unknown[] };
+  if (!n) return "";
+  if (typeof n.reasoning === "string" && n.reasoning) return n.reasoning;
+  if (typeof n.reasoning_content === "string" && n.reasoning_content) return n.reasoning_content;
+  if (Array.isArray(n.reasoning_details)) {
+    let out = "";
+    for (const raw of n.reasoning_details) {
+      const d = raw as { text?: unknown; summary?: unknown };
+      if (typeof d?.text === "string") out += d.text;
+      else if (typeof d?.summary === "string") out += d.summary;
+    }
+    return out;
+  }
+  return "";
+}
+
+/**
  * Reassemble tool calls from a stream.
  *
  * Streamed calls arrive as fragments keyed by `index`, with the name on the
@@ -559,7 +594,11 @@ function openAICompatible(
         const images = readImages(message);
         if (images.length && opts.onImages) opts.onImages(images);
         const text = message.content || "";
-        const reasoning = String(message.reasoning || message.reasoning_content || "");
+        const reasoning = readReasoning(message);
+        /* Reported even on the non-streaming path, where there is nothing to
+           stream: a one-shot caller ignores it, and the agent loop's final
+           round arrives here whenever tools were compiled without streaming. */
+        if (reasoning && opts.onReasoning) opts.onReasoning(reasoning, reasoning);
         /* Reasoning shows up in any of three places depending on the model and
            the provider behind the gateway — plain text, structured details, or
            only as a count in usage — and each is evidence it happened. */
@@ -582,6 +621,7 @@ function openAICompatible(
       }
       let out = "";
       let reasoned = false;
+      let reasonAcc = "";
       let finish: string | undefined;
       let usage: TokenUsage | undefined;
       /* Where citations arrive in a stream is not documented and differs by
@@ -607,7 +647,20 @@ function openAICompatible(
         const d = choice.delta;
         if (!d) return;
         calls.add(d);
-        if (d.reasoning || d.reasoning_content || (Array.isArray(d.reasoning_details) && d.reasoning_details.length)) reasoned = true;
+        /* The second stream. Accumulated separately from `out` and handed over
+           through its own channel, because the working is not the answer:
+           splicing it into the reply would put the model's scratchpad into the
+           transcript, the title, the read-aloud text and every later send. */
+        const think = readReasoning(d);
+        if (think) {
+          reasoned = true;
+          reasonAcc += think;
+          opts.onReasoning?.(think, reasonAcc);
+        } else if (Array.isArray(d.reasoning_details) && d.reasoning_details.length) {
+          /* Structured blocks with no readable text — a redacted chain. It
+             happened; there is simply nothing to show. */
+          reasoned = true;
+        }
         if (d.content) {
           out += d.content;
           delivered = true;
@@ -868,19 +921,29 @@ export const BACKENDS: Record<BackendType, BackendDef> = {
         reportOllamaUsage(j);
         const text = (j.message && j.message.content) || j.response || "";
         const thinking = String((j.message && j.message.thinking) || "");
+        if (thinking && opts.onReasoning) opts.onReasoning(thinking, thinking);
         opts.onFinish?.({ reason: j.done_reason, reasoned: !!thinking, partial: j.done_reason === "length" });
         if (!text) throw emptyReplyError("Ollama", j.done_reason, thinking);
         return text;
       }
       let out = "";
       let thought = false;
+      let thinkAcc = "";
       let doneReason: string | undefined;
       await readNDJSON(res, (j) => {
         if (j.done) {
           reportOllamaUsage(j);
           doneReason = j.done_reason;
         }
-        if (j.message && j.message.thinking) thought = true;
+        /* Ollama streams its thinking on the same message object as the
+           content, under its own key, one chunk at a time like any other
+           delta. */
+        const think = j.message && j.message.thinking;
+        if (typeof think === "string" && think) {
+          thought = true;
+          thinkAcc += think;
+          opts.onReasoning?.(think, thinkAcc);
+        }
         const t = (j.message && j.message.content) || j.response;
         if (t) {
           out += t;

@@ -416,6 +416,22 @@ export interface ChatOpts {
   temperature?: number;
   maxTokens?: number;
   onToken?: (token: string, acc: string) => void;
+  /**
+   * The model's working, as it arrives — the second stream a reasoning model
+   * produces alongside its answer.
+   *
+   * A side channel like `onCitations` and `onImages`, for the same reason:
+   * `chat()` resolves to the answer and fifteen callers depend on that. Called
+   * with the delta and the accumulation, mirroring `onToken`, because the
+   * panel that shows this scrolls and a caller that only got the whole thing
+   * at the end could not stream it.
+   *
+   * Absent text is not absent reasoning. Plenty of models think and show
+   * nothing — `FinishInfo.reasoned` and `TokenUsage.reasoningTokens` are the
+   * evidence in that case, and lib/reasoning.ts is where the three states are
+   * phrased.
+   */
+  onReasoning?: (chunk: string, acc: string) => void;
   /** Reported once at the end of a call, when the backend returns counts. */
   onUsage?: (u: TokenUsage) => void;
   /** Aborts the request. A cancelled call rejects with an AbortError, which

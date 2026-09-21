@@ -22,7 +22,8 @@ import Picture from "../visuals/Picture";
 import ErrorGuard from "../ui/ErrorGuard";
 import MemorySaved from "./MemorySaved";
 import AgentTrace, { stepsFromTrace } from "./AgentTrace";
-import type { AgentLive } from "@/context/ChatContext";
+import type { AgentLive, ThinkingLive } from "@/context/ChatContext";
+import ThinkingPanel from "./ThinkingPanel";
 import Sources from "./Sources";
 import RegenerateMenu from "./RegenerateMenu";
 import ListenButton from "./ListenButton";
@@ -45,6 +46,10 @@ interface Props {
   /** The agent loop mid-flight, when this is the turn being answered into.
    *  Null everywhere else, including in chat mode. */
   agentLive?: AgentLive | null;
+  /** The model's working mid-flight, on the turn being answered into. Same
+   *  rule as agentLive: handed down rather than read from context, so exactly
+   *  one turn can ever show it. */
+  thinking?: ThinkingLive | null;
   streamingText: string | null;
   busy: boolean;
   /** Backend/model of the conversation this turn belongs to, so Regenerate
@@ -71,6 +76,7 @@ export default function MessageTurn({
   turn,
   isLast,
   agentLive,
+  thinking,
   streamingText,
   busy,
   conversation,
@@ -331,6 +337,24 @@ export default function MessageTurn({
         <div className="turn-body">{content}</div>
       ) : (
         <div className="turn-body" ref={bodyRef}>
+          {/* First of the three, because it is first in time: the model
+              thought, then it looked things up, then it answered. In agent
+              mode the live chain belongs on the step that produced it and the
+              trace renders it there, so this one stands down. */}
+          {thinking && !agentLive ? (
+            <ThinkingPanel
+              text={thinking.text}
+              running={thinking.endedAt == null && (!!thinking.text || thinking.asked)}
+              since={thinking.startedAt}
+              ms={thinking.endedAt != null ? thinking.endedAt - thinking.startedAt : undefined}
+            />
+          ) : !streaming && variant?.reasoning ? (
+            <ThinkingPanel text={variant.reasoning} ms={variant.reasoningMs} tokens={variant.usage?.reasoningTokens} />
+          ) : !streaming && variant?.reasoningMs ? (
+            /* It thought and published nothing. The panel says so rather than
+               showing an empty disclosure, which would read as a bug. */
+            <ThinkingPanel text="" ms={variant.reasoningMs} tokens={variant.usage?.reasoningTokens} />
+          ) : null}
           {/* Above the reply, because it happened before it — and because a
               collapsed one-line summary reads as provenance, which is what it
               is, rather than as an appendix nobody opens. */}

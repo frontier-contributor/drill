@@ -189,6 +189,13 @@ export async function runAgent(opts: RunAgentOpts): Promise<AgentResult> {
         acc = all;
         emit({ kind: "token", step, token, acc: all });
       },
+      /* Per round, and reset with it: each round is its own request, so a
+         model that thinks on step two is not still thinking on step three.
+         The accumulation is passed rather than the delta because the renderer
+         is a scrolling window over the whole chain, not a log of chunks. */
+      onReasoning: (_chunk: string, all: string) => {
+        emit({ kind: "reasoning", step, acc: all });
+      },
       ...(isFinal || !native
         ? {}
         : {

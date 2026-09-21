@@ -2727,3 +2727,145 @@
 .attach-btn.open {
   color: var(--accent);
 }
+
+/* ============================================================================
+ * ThinkingPanel — the model's working.
+ *
+ * Marginalia, like the agent trace it sits beside: a rule down the left rather
+ * than a box, type a step below the body, and the accent only while it is
+ * live. The reply is the text; this is the apparatus.
+ *
+ * Two pieces of motion, and both are tied to a fact rather than decorating
+ * one. The shimmer travels only while a request is genuinely open, so it stops
+ * the instant the first answer token lands. The mask fades the top of the
+ * live window because the chain scrolls under it — older working dissolves
+ * rather than being cut off by a hard edge, which is what makes a fixed-height
+ * window read as a stream passing through rather than as a cropped box.
+ * ========================================================================== */
+.think {
+  margin: 0 0 var(--s-3);
+  font-size: var(--t-xs);
+}
+.think.compact {
+  margin: 0 0 var(--s-2);
+}
+
+.think-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-2);
+  margin-left: calc(var(--s-2) * -1);
+  border: 0;
+  border-radius: var(--r-2);
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  cursor: pointer;
+  transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+.think-toggle:hover:not(:disabled) {
+  color: var(--ink-2);
+  background: var(--surface);
+}
+.think-toggle:disabled {
+  cursor: default;
+}
+.think.live .think-toggle {
+  color: var(--accent);
+}
+.think.live .think-toggle svg {
+  animation: think-breathe 2.4s var(--ease) infinite;
+}
+@keyframes think-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.92); }
+}
+
+/* The label's own light. A highlight travels across the glyphs rather than
+   the whole row pulsing — the row is a control and blinking one reads as
+   "disabled"; a moving sheen reads as "working", which is what it is. */
+.think-label.shimmer {
+  background: linear-gradient(
+    100deg,
+    var(--accent) 20%,
+    color-mix(in oklab, var(--accent) 35%, var(--ink)) 42%,
+    var(--accent) 64%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: think-sheen 2.6s linear infinite;
+}
+@keyframes think-sheen {
+  from { background-position: 180% 0; }
+  to { background-position: -60% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .think-label.shimmer {
+    background: none;
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+    color: var(--accent);
+  }
+}
+
+.think-hidden {
+  color: var(--ink-3);
+  opacity: 0.72;
+  font-size: var(--t-3xs);
+  font-style: italic;
+}
+
+.think-chev {
+  transition: transform var(--fast) var(--ease);
+}
+.think-chev.on {
+  transform: rotate(180deg);
+}
+
+/* 0fr → 1fr is the whole trick: a grid row can interpolate between them, so a
+   panel of unknown height opens and closes smoothly without anything having
+   measured it. `min-height: 0` on the child is what lets the row actually
+   shrink below its content. */
+.think-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--med) var(--ease-out);
+}
+.think-wrap.on {
+  grid-template-rows: 1fr;
+}
+.think-clip {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.think-body {
+  margin-top: var(--s-2);
+  padding-left: var(--s-3);
+  border-left: 1px solid var(--rule-soft);
+  max-height: 11em;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* Live, the window is shorter and the top is masked, so the chain reads as
+   passing through rather than as a box that happens to be scrolled. */
+.think.live .think-body {
+  max-height: 7.5em;
+  border-left-color: var(--accent-25);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 2.4em);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 2.4em);
+}
+
+.think-text {
+  margin: 0;
+  padding-right: var(--s-2);
+  color: var(--ink-3);
+  font-family: var(--sans);
+  font-size: var(--t-2xs);
+  line-height: var(--lh-snug);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

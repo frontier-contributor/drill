@@ -124,6 +124,21 @@ export interface Variant {
   usage?: Usage;
   /** ms spent streaming, for the "12.4s · 830 tok" footer */
   elapsed?: number;
+  /**
+   * The model's working, when the provider sent it as text. Capped by
+   * lib/reasoning.ts, which keeps both ends and elides the middle.
+   *
+   * Persisted, unlike the agent loop's live state, for the reason the trace is
+   * persisted: a reply you cannot audit is a reply you cannot correct. The
+   * cost is real — a conversation is rewritten whole on every message — which
+   * is what the cap is for.
+   */
+  reasoning?: string;
+  /** ms from the request starting to the first answer token: how long it
+   *  thought. Set even when `reasoning` is absent, because "it thought for
+   *  nine seconds and will not show you the working" is the honest reading of
+   *  a model that hides its chain, and the panel says exactly that. */
+  reasoningMs?: number;
   createdAt: number;
   /** Present when this reply saved something to memory. */
   saved?: SavedMemory;

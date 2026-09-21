@@ -43,6 +43,7 @@ import { collapseCanvases } from "@/lib/visuals/artifacts";
 import type { AgentPlan, AgentTrace, ToolCall, ToolRun } from "@/types/agent";
 import type { ChatActionId } from "@/lib/chatActions";
 import type { BackendType, ChatMessage, Citation, Memory } from "@/types";
+import { capReasoning } from "@/lib/reasoning";
 
 /** A one-off backend/model for a single regenerate call — applied to that
  *  variant only, never written to conversation.backend/model. */
@@ -77,6 +78,10 @@ export interface LiveStep {
   thought: string;
   calls: ToolCall[];
   runs: ToolRun[];
+  /** What the model worked through before this round's calls, when the
+   *  provider sends it. Live only: the saved trace keeps the calls and their
+   *  results, which is the auditable half. */
+  reasoning?: string;
 }
 
 export interface AgentLive {
@@ -85,6 +90,31 @@ export interface AgentLive {
   /** Deep mode's plan, updated in place as steps close. */
   plan: AgentPlan | null;
   notes: string[];
+}
+
+/**
+ * The model thinking, right now.
+ *
+ * Three states fall out of two fields, which is why there is no `kind` here:
+ * text arriving is the chain itself; `asked` with no text and no answer yet is
+ * a model that thinks behind a curtain; neither is an ordinary reply. Only the
+ * first two put anything on screen, and lib/reasoning.ts does the phrasing.
+ *
+ * Live state only — the durable half is Variant.reasoning, written once when
+ * the reply lands, exactly as AgentLive relates to Variant.trace.
+ */
+export interface ThinkingLive {
+  /** The chain so far, or "" when the provider hides it. */
+  text: string;
+  /** When the request went out. */
+  startedAt: number;
+  /** Set by the first answer token: from here on it is writing, not thinking. */
+  endedAt: number | null;
+  /** The Think action was on for this send, so a silent gap before the first
+   *  answer token is the model working rather than the network being slow.
+   *  Without this the opaque case — a model that reasons and shows nothing —
+   *  would be indistinguishable from a slow connection. */
+  asked: boolean;
 }
 
 /** Upsert one step, without mutating the array React is rendering. */
@@ -124,6 +154,8 @@ interface ChatState {
   /** The agent loop as it happens, or null outside agent mode. Live state
    *  only — the durable record is Variant.trace. */
   agentLive: AgentLive | null;
+  /** The model's working as it arrives, or null when nothing is in flight. */
+  thinking: ThinkingLive | null;
   busy: boolean;
   error: string | null;
   followups: string[];
@@ -173,6 +205,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [streaming, setStreaming] = useState<string | null>(null);
   const [streamingTurnId, setStreamingTurnId] = useState<string | null>(null);
   const [agentLive, setAgentLive] = useState<AgentLive | null>(null);
+  const [thinking, setThinking] = useState<ThinkingLive | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [followups, setFollowups] = useState<string[]>([]);
@@ -382,6 +415,25 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setStreamingTurnId(targetTurn.id);
 
       const started = Date.now();
+      /* Seeded before the request rather than on the first reasoning chunk, so
+         the panel can start counting from when the model got the question. A
+         chain that arrives four seconds in did not take zero seconds to
+         produce, and a counter that starts at the first chunk would say it
+         did. */
+      setThinking({ text: "", startedAt: started, endedAt: null, asked: (c.actions || []).includes("think") });
+      /* Kept outside React state as well: setState is async and batched, and
+         the variant written at the end of this function needs the final chain,
+         not whatever the last render happened to see. */
+      let chain = "";
+      let reasoned = false;
+      let thoughtUntil: number | null = null;
+      /** The first answer token ends thinking. Idempotent — every token calls
+       *  it and only the first one means anything. */
+      const answerStarted = () => {
+        if (thoughtUntil != null) return;
+        thoughtUntil = Date.now();
+        setThinking((t) => (t ? { ...t, endedAt: thoughtUntil } : t));
+      };
       let usage: Usage | undefined;
       let citations: Citation[] | undefined;
       /* Data URLs, briefly. They are in the file store before the variant is
@@ -450,6 +502,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               if (e.kind === "token") {
                 acc = e.acc;
                 setStreaming(e.acc);
+              } else if (e.kind === "reasoning") {
+                reasoned = true;
+                /* The loop's rounds each reason separately, so the durable
+                   chain is the last round's — the one that produced the
+                   answer. The earlier rounds stay on their steps in the live
+                   trace, where they belong next to the lookups they explain. */
+                chain = e.acc;
+                setAgentLive((st) => (st ? patchStep(st, e.step, (x) => ({ ...x, reasoning: e.acc })) : st));
               } else if (e.kind === "thought") {
                 setAgentLive((s) => (s ? patchStep(s, e.step, (st) => ({ ...st, thought: e.text })) : s));
               } else if (e.kind === "calling") {
@@ -470,6 +530,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               } else if (e.kind === "note") {
                 setAgentLive((s) => (s ? { ...s, notes: [...s.notes, e.text] } : s));
               } else if (e.kind === "answering") {
+                answerStarted();
                 setAgentLive((s) => (s ? { ...s, answering: true } : s));
               }
             }
@@ -492,8 +553,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             actions: c.actions,
             pdfEngine,
             onToken: (_t, a) => {
+              answerStarted();
               acc = a;
               setStreaming(a);
+            },
+            onReasoning: (_chunk, all) => {
+              reasoned = true;
+              chain = all;
+              setThinking((t) => (t ? { ...t, text: all } : t));
+            },
+            /* The evidence in the opaque case. A model can reason without
+               sending a word of it, and `reasoned` here is the difference
+               between "thought for nine seconds, working not shown" and a
+               reply that was simply slow to start. */
+            onFinish: (info) => {
+              if (info.reasoned) reasoned = true;
             },
             onCitations: (cs) => {
               citations = cs;
@@ -511,6 +585,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                  two used to disagree: this line looked the model up in the
                  catalogue regardless of where the call actually went, so a
                  local or free backend reported a cost it never charged. */
+              if (u.reasoningTokens) reasoned = true;
               usage = { ...u, cost: u.reportedCost ?? costOf(u, priceForModel(AI.resolve({ backend: runBackend, model: runModel }).type, runModel)) };
             }
           },
@@ -546,11 +621,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           saved = memoryCapture.summarise(result);
         }
 
+        /* Both halves of the record, and both are conditional on evidence.
+           The chain is capped because a conversation is rewritten whole on
+           every message; the duration is written only when something actually
+           said the model reasoned, or it would be latency wearing the word
+           "thought". */
+        const kept = reasoned ? capReasoning(chain) : { text: "", clipped: false };
         targetTurn.variants.push({
           content,
           model: runModel,
           usage,
           elapsed: Date.now() - started,
+          reasoning: kept.text || undefined,
+          reasoningMs: reasoned ? (thoughtUntil ?? Date.now()) - started : undefined,
           createdAt: Date.now(),
           saved,
           citations,
@@ -577,6 +660,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               content: acc,
               model: runModel,
               elapsed: Date.now() - started,
+              /* Kept on the stopped path for the reason the half-answer is:
+                 you pressed stop *because* of what you were reading, and the
+                 working is half of what you were reading. */
+              reasoning: reasoned ? capReasoning(chain).text || undefined : undefined,
+              reasoningMs: reasoned ? (thoughtUntil ?? Date.now()) - started : undefined,
               createdAt: Date.now(),
               /* Whatever the loop got through before the stop is still the
                  honest account of how that half-answer was reached. */
@@ -620,6 +708,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         setBusy(false);
         setStreaming(null);
         setStreamingTurnId(null);
+        setThinking(null);
         setAgentLive(null);
         rerender();
       }
@@ -831,6 +920,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     loading,
     streaming,
     streamingTurnId,
+    thinking,
     agentLive,
     busy,
     error,

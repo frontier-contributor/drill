@@ -248,6 +248,10 @@ export type AgentEvent =
    *  renderer having to know which tools happen to mutate a plan. */
   | { kind: "plan"; plan: AgentPlan }
   | { kind: "note"; text: string }
+  /** The model's working on this round, accumulated. Separate from `thought`,
+   *  which is what the model *said* on a tool round — this is what it thought
+   *  before saying it, and a round can produce either, both or neither. */
+  | { kind: "reasoning"; step: number; acc: string }
   /** The loop is done looking; what streams from here is the reply. */
   | { kind: "answering"; step: number }
   | { kind: "token"; step: number; token: string; acc: string };
