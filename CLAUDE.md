@@ -301,8 +301,8 @@ the whole picture. Four things bite:
   re-registered only when the palette or drawer moves and otherwise holds a
   first-render closure.
 
-**The paperclip asks what kind, and `lib/files/kinds.ts` is the one list it
-asks from** — the row, the `accept` the OS dialog opens on, the size quoted
+**The composer's + asks what kind, and `lib/files/kinds.ts` is the one list
+it asks from** — the row, the `accept` the OS dialog opens on, the size quoted
 before you pick, and the modality the model needs. It replaced three
 hand-written `accept` strings that had already drifted, and `sniff.ts` owns the
 extension list both read, so the menu cannot offer what ingest refuses. A kind

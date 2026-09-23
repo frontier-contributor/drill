@@ -32,8 +32,8 @@ openrouter.ai.
   a question this answers with facts rather than a guess, and `/today` asks it
   in one keystroke. It is also the first thing a new chat offers you, on a day
   you have already started.
-- **Attach what you are studying from** — the paperclip asks what kind first,
-  and opens the file dialog on that kind alone. A kind the model cannot read is
+- **Attach what you are studying from** — the **+** on the composer asks what
+  kind first, and opens the file dialog on that kind alone. A kind the model cannot read is
   dimmed and says why, before you have picked anything rather than after it has
   been read. Pictures and screenshots (paste, drop anywhere on the chat, or
   pick), PDFs, Word, Excel, CSV, text and code.
@@ -44,8 +44,8 @@ openrouter.ai.
   Scanned PDF pages are sent as pictures, or read by OpenRouter's parser if you
   choose it in Settings → Chat. Pin a file to keep it on every message in that
   thread; click any card to see exactly what the model was given.
-- **It can generate pictures** — switch **Image** on in the tools menu and the
-  reply can come back with a picture as well as words. OpenRouter only, and
+- **It can generate pictures** — switch **Image** on (the picture glyph on the
+  composer) and the reply can come back with a picture as well as words. OpenRouter only, and
   only on models that can draw: the switch says which, and says plainly when it
   is guessing. Billed per picture rather than per token, so the Usage page
   counts pictures beside tokens rather than showing an image reply as a row of

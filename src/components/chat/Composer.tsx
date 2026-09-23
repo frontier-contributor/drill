@@ -21,14 +21,24 @@
  * attached to every message in the thread. A reference or an attachment is for
  * the sentence you are writing now — unless it is pinned.
  *
- * The composer earns its height. At rest it is one line - the box and Send,
- * nothing else - because on a laptop window this bar was 172px of a 522px
- * screen and the transcript above it had barely half the page to read in.
- * The tool row and the key hints appear once the composer has focus or
- * something in it, which is exactly when they are worth their room and never
- * while you are reading. The row itself is two clusters — what the message is
- * set to on the left, what will answer it on the right — because it used to be
- * one flat run of six controls and read as an instrument panel.
+ * One box, two rows, and nothing written on it. The text is the top row and
+ * gets the room; the bottom row is glyphs — add, how to answer, the switches —
+ * on the left, and the model and Send on the right, because what the message
+ * is set to and what will answer it are different questions and the gap
+ * between them is what stops the row reading as an instrument panel.
+ *
+ * It used to be cleverer and worse. The tool row hid until the box had focus,
+ * which saved 40px while reading and cost every newcomer the discovery that
+ * there was a model picker at all; and under it ran a line of key hints
+ * ("enter sends · shift+enter newline · / and @") that everyone read once and
+ * then looked past for ever. The row is always there now, it is quiet enough
+ * not to need hiding, and "@" and "/" are rows in the + menu instead of
+ * instructions on the bar. The shortcuts sheet still lists the keys.
+ *
+ * The corner button makes the box tall, for the message that is a page rather
+ * than a line. It is not remembered: a long draft is the exception, and a
+ * composer that stayed half the screen after it was sent would be taking the
+ * transcript's room back for nothing.
  * ========================================================================== */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as U from "@/lib/util";
@@ -123,6 +133,7 @@ export default function Composer({
    *  with the new text and the old caret, and that one frame is enough to
    *  match "@" again and leave the menu stuck open. */
   const [refOff, setRefOff] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   /** One controller for every file being read in this composer. Aborted when
@@ -158,8 +169,12 @@ export default function Composer({
     const el = ref.current;
     if (!el) return;
     el.style.height = "auto";
-    if (text) el.style.height = Math.min(el.scrollHeight, 220) + "px";
-  }, [text]);
+    /* Expanded, the stylesheet's min-height holds the room open and this only
+       lets a longer draft grow past it, to a cap measured against the window
+       rather than a fixed 220px — the point of expanding is more than 220px. */
+    const cap = expanded ? Math.round(window.innerHeight * 0.6) : 220;
+    if (text) el.style.height = Math.min(el.scrollHeight, cap) + "px";
+  }, [text, expanded]);
 
   const slashQuery = useMemo(() => {
     // only when "/" opens the message and no space has been typed yet
@@ -246,6 +261,27 @@ export default function Composer({
     setText("");
     setAttachments([]);
     setPending([]);
+    setExpanded(false);
+  }
+
+  /** Type `insert` at the caret and hand focus back to the box — what the +
+   *  menu's "@" and "/" rows do. A space goes before an "@" that would
+   *  otherwise touch a word, because the picker only opens on an "@" that
+   *  starts one. */
+  function typeAtCaret(insert: string) {
+    const at = ref.current?.selectionStart ?? text.length;
+    const before = text.slice(0, at);
+    const lead = insert === "@" && before && !/\s$/.test(before) ? " " : "";
+    const pos = at + lead.length + insert.length;
+    setText(before + lead + insert + text.slice(at));
+    setRefOff(false);
+    setCaret(pos);
+    requestAnimationFrame(() => {
+      const el = ref.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(pos, pos);
+    });
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -364,10 +400,7 @@ export default function Composer({
   }
 
   const attachedTokens = attachments.reduce((n, a) => n + attachmentTokens(a), 0);
-  /* Focus alone opens the tool row (CSS :focus-within); this keeps it open
-     once there is something to send, so it does not shut under your hands
-     when you tab away mid-draft. */
-  const armed = !!text || attachments.length > 0 || pending.length > 0;
+  const canSend = !disabled && !reading && (!!text.trim() || attachments.length > 0);
 
   return (
     <div className="composer">
@@ -403,7 +436,7 @@ export default function Composer({
           </div>
         )}
 
-        <div className={"composer-box" + (armed ? " armed" : "")}>
+        <div className={"composer-box" + (expanded ? " expanded" : "")}>
           {(attachments.length > 0 || pending.length > 0) && (
             <div className="att-row">
               {attachments.map((a) => (
@@ -426,15 +459,13 @@ export default function Composer({
             </div>
           )}
 
-          {/* Send sits beside the box rather than under it, which is the whole
-              reason an empty composer is one line tall. */}
-          <div className="composer-row">
+          <div className="composer-field">
             <textarea
               ref={ref}
               rows={1}
               value={text}
               disabled={disabled}
-              placeholder={placeholder || "Ask anything — / for commands"}
+              placeholder={placeholder || "Ask anything"}
               onChange={(e) => {
                 setText(e.target.value);
                 setCaret(e.target.selectionStart ?? e.target.value.length);
@@ -445,36 +476,31 @@ export default function Composer({
               onKeyDown={onKeyDown}
               onPaste={onPaste}
             />
-            {busy ? (
-              <button className="csend stop" onClick={onStop} title="Stop generating" aria-label="Stop generating">
-                <Icon name="stop" size={13} />
-              </button>
-            ) : (
-              <button
-                className="csend"
-                onClick={submit}
-                disabled={disabled || reading || (!text.trim() && !attachments.length)}
-                title={reading ? "Still reading the attached file" : "Send  (enter)"}
-                aria-label="Send"
-              >
-                <Icon name="send" size={15} />
-              </button>
-            )}
+            <button
+              type="button"
+              className="composer-grow"
+              onClick={() => {
+                setExpanded((v) => !v);
+                ref.current?.focus();
+              }}
+              title={expanded ? "Make the box small again" : "Make the box tall, for a long message"}
+              aria-label={expanded ? "Collapse the message box" : "Expand the message box"}
+              aria-pressed={expanded}
+            >
+              <Icon name={expanded ? "collapse" : "expand"} size={14} />
+            </button>
           </div>
 
-          {/* Opened by focus or by having something to send. Kept mounted
-              either way: a chip that unmounted on blur would close its own
-              popover the moment you clicked into it. */}
           <div className="composer-tools">
-            {/* Two clusters, not one row. Left is what the message is set to;
-                right is what will answer it. Six controls in a single flat run
-                read as a dashboard nobody parses — the gap is doing real work
-                here, not decoration. */}
             <div className="ctools-left">
               <AttachMenu
                 disabled={disabled}
                 verdicts={attachVerdicts || {}}
                 reasons={attachReasons || {}}
+                insert={{
+                  mention: () => typeAtCaret("@"),
+                  command: text ? null : () => typeAtCaret("/")
+                }}
                 onPick={(kind) => {
                   const el = fileRef.current;
                   if (!el) return;
@@ -500,12 +526,23 @@ export default function Composer({
               {tools}
             </div>
             <div className="ctools-right">
-              {attachedTokens > 0 && <span className="composer-hint">~{attachedTokens.toLocaleString()} tok attached</span>}
-              {/* The hint strip used to stand under the box for ever: three
-                  lines, 47px, instructions you had read on your first day. One
-                  line now, and only while there is nothing typed. */}
-              {!text && <span className="composer-hint keys">enter sends · shift+enter newline · / and @</span>}
+              {attachedTokens > 0 && <span className="composer-hint">~{attachedTokens.toLocaleString()} tok</span>}
               {trailing}
+              {busy ? (
+                <button className="csend stop" onClick={onStop} title="Stop generating" aria-label="Stop generating">
+                  <Icon name="stop" size={13} />
+                </button>
+              ) : (
+                <button
+                  className="csend"
+                  onClick={submit}
+                  disabled={!canSend}
+                  title={reading ? "Still reading the attached file" : "Send  (enter)"}
+                  aria-label="Send"
+                >
+                  <Icon name="arrow-up" size={17} />
+                </button>
+              )}
             </div>
           </div>
         </div>

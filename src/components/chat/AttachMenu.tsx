@@ -25,6 +25,12 @@
  * pasting one both bypass this menu entirely, and they still work — with the
  * warning on the card they always had. services/files/ingest.ts reads the
  * bytes and is the only thing that decides.
+ *
+ * The button is a plus rather than a paperclip because it adds more than
+ * files. "@" and "/" used to be taught by a line of key hints under the box
+ * that everyone had read once and then had to look past for ever; they are
+ * two rows here instead, so the way to find them is to press the button that
+ * says "add", and the bar carries no instructions at all.
  * ========================================================================== */
 import { useEffect, useRef, useState } from "react";
 import { ATTACH_KINDS, limitOf, type AttachKind, type AttachKindId } from "@/lib/files/kinds";
@@ -53,9 +59,13 @@ export interface Props {
   reasons: Record<string, string>;
   /** Open the file dialog on this kind. */
   onPick: (kind: AttachKind) => void;
+  /** Start an "@" reference, or a "/" command, in the box. `command` is null
+   *  while there is text in it: a command is the whole message, so offering
+   *  one mid-sentence would insert a slash that does nothing. */
+  insert?: { mention: () => void; command: (() => void) | null };
 }
 
-export default function AttachMenu({ disabled, verdicts, reasons, onPick }: Props) {
+export default function AttachMenu({ disabled, verdicts, reasons, onPick, insert }: Props) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement | null>(null);
 
@@ -84,20 +94,21 @@ export default function AttachMenu({ disabled, verdicts, reasons, onPick }: Prop
   return (
     <div className="attachmenu" ref={wrap}>
       <button
-        className={"cbtn ghost attach-btn" + (open ? " open" : "")}
+        type="button"
+        className={"ctool ctool-icon attach-btn" + (open ? " open" : "")}
         onClick={() => setOpen((v) => !v)}
         disabled={disabled}
-        title="Attach a file"
-        aria-label="Attach a file"
+        title="Add files, or something of yours"
+        aria-label="Add to this message"
         aria-expanded={open}
         aria-haspopup="menu"
       >
-        <Icon name="paperclip" size={13} />
+        <Icon name="plus" size={19} />
       </button>
 
       {open && (
         <div className="attach-pop" role="menu">
-          <div className="tools-head">Attach</div>
+          <div className="tools-head">Add to this message</div>
           {ATTACH_KINDS.map((k) => {
             /* Live unless the catalogue positively says this model cannot take
                it. No `needs` means anything can read it — a PDF, a Word file
@@ -128,6 +139,42 @@ export default function AttachMenu({ disabled, verdicts, reasons, onPick }: Prop
               </button>
             );
           })}
+
+          {insert && (
+            <div className="attach-more">
+              <button
+                className="tools-row attach-row"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  insert.mention();
+                }}
+              >
+                <span className="tools-icon attach-key" aria-hidden="true">@</span>
+                <span className="tools-text">
+                  <span className="tools-name">Something of yours</span>
+                  <span className="tools-blurb">A journal entry, a deck, a card, a memory, a book on the shelf.</span>
+                </span>
+              </button>
+              <button
+                className="tools-row attach-row"
+                role="menuitem"
+                disabled={!insert.command}
+                onClick={() => {
+                  setOpen(false);
+                  insert.command?.();
+                }}
+              >
+                <span className="tools-icon attach-key" aria-hidden="true">/</span>
+                <span className="tools-text">
+                  <span className="tools-name">A command</span>
+                  <span className="tools-blurb">
+                    {insert.command ? "Quiz yourself, make cards, remember something, open a board." : "A command is the whole message — clear the box first."}
+                  </span>
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

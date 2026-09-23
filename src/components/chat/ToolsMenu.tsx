@@ -15,17 +15,23 @@
  * the same everywhere: a menu can afford a sentence per option, a chip row
  * cannot afford three words.
  *
- * What stops it becoming hidden state is the pills. Anything switched *on*
- * comes back out of the menu and sits beside the button, labelled, and clicks
- * to turn itself off again. Off is quiet, on is loud. Nothing is ever in force
- * without being visible in the bar.
+ * The one exception is the capability switches, and they are an exception
+ * because they are not choices, they are switches. A switch behind a door is
+ * two clicks and a hunt for something you flip every few messages; a switch
+ * on the bar is one glyph that is itself the state. So each action in the
+ * registry is an icon on the bar — dim when off, lit when on — and nothing
+ * else about it needs a label. That also retired the pills: a lit globe *is*
+ * "Web is on", and a pill beside it saying so was the same fact twice.
  *
- * Three sections, in the order the decisions are actually made:
+ * What stops the rest becoming hidden state is the button's own label. It
+ * says "Tools" only while everything behind it is at its default, and names
+ * the mode or the pinned effort the moment either is not. Off is quiet, on is
+ * loud. Nothing is ever in force without being visible in the bar.
  *
- *   How to answer   direct / agent / deep. Each says what it costs in
+ * Two sections, in the order the decisions are actually made:
+ *
+ *   How to answer   direct / agent / deep / image. Each says what it costs in
  *                   requests, because that is the real question.
- *   Tools           the capability switches, from the registry in
- *                   lib/chatActions.ts.
  *   Effort          how much of everything one message gets.
  *
  * The model-dependent switch is new, and it is why this file asks
@@ -33,14 +39,16 @@
  * not a property of where the request goes: one OpenRouter key reaches models
  * that reason and models that do not, and the model chip is one control away.
  * So the answer is recomputed on every render from the *resolved* model, and a
- * model that cannot think leaves the row disabled with that model's own name
- * in the reason.
+ * model that cannot think leaves the switch dimmed with that model's own name
+ * in the reason — on hover, and in a toast when it is pressed, because a
+ * tooltip is not something a finger can reach.
  * ========================================================================== */
 import { useEffect, useRef, useState } from "react";
 import * as AI from "@/services/ai";
 import * as store from "@/services/store";
 import { loadPricing } from "@/services/pricing";
 import { useChat } from "@/context/ChatContext";
+import { useToast } from "@/context/ToastContext";
 import { ACTION_ORDER, CHAT_ACTIONS, availability, type ChatActionId } from "@/lib/chatActions";
 import { EFFORT_ORDER, budgetFor, deepSteps, effortMeans } from "@/lib/effort";
 import { resolveEffort } from "@/lib/resolveSetting";
@@ -108,6 +116,7 @@ export default function ToolsMenu() {
     draftActions,
     setDraftActions
   } = useChat();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement | null>(null);
 
@@ -183,29 +192,38 @@ export default function ToolsMenu() {
 
   const scope = conversation ? "this conversation" : "the next conversation";
   const current = MODES.find((m) => m.id === mode) || MODES[0];
-  const currentSteps = current.steps(agentSteps);
+
+  /* What the button says is what is in force behind it. At rest that is
+     nothing worth reporting, so it says what it is; once the mode or the
+     effort is not the default, it says that instead and lights up. */
+  const modeSet = mode !== "direct";
+  const label = modeSet
+    ? current.label + (pinnedEffort ? " · " + pinnedEffort : "")
+    : pinnedEffort
+      ? pinnedEffort[0].toUpperCase() + pinnedEffort.slice(1) + " effort"
+      : "Tools";
 
   /* An action switched on but not currently available — you turned Think on,
      then moved the model chip to something that cannot — stays in `actions`
      rather than being stripped, so it comes back when you move the model back.
-     It just does not get a pill, and the send path will not send it. */
-  const livePills = ACTION_ORDER.filter(
-    (id) => actions.includes(id) && availability(id, resolved.backend.supports, resolved.model).can
-  );
+     It just shows as off, and the send path will not send it. Image mode
+     draws every message by itself (actionsFor), so its switch would be a
+     control that can only ever read "on"; it is left off the bar there. */
+  const switches = ACTION_ORDER.filter((id) => !(id === "image" && mode === "image"));
 
   return (
     <>
       <div className="toolsmenu" ref={wrap}>
         <button
           type="button"
-          className={"cbtn ghost tools-btn" + (open ? " open" : "")}
+          className={"ctool tools-btn" + (open ? " open" : "") + (modeSet || pinnedEffort ? " set" : "")}
           onClick={() => setOpen((v) => !v)}
           aria-haspopup="menu"
           aria-expanded={open}
-          title="How this message is answered, and what it is allowed to use"
+          title={modeSet ? current.blurb : "How this message is answered, and how much effort it gets"}
         >
-          <Icon name="sliders" size={13} />
-          <span>Tools</span>
+          <Icon name={modeSet ? current.icon : "sliders"} size={17} />
+          <span className="ctool-label">{label}</span>
         </button>
 
         {open && (
@@ -234,40 +252,6 @@ export default function ToolsMenu() {
                       <span className="tools-blurb">{m.blurb}</span>
                     </span>
                     {m.id === mode && <Icon name="check" size={13} className="tools-tick" />}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="tools-sect">
-              <div className="tools-head">Tools</div>
-              {ACTION_ORDER.map((id) => {
-                const action = CHAT_ACTIONS[id];
-                const av = availability(id, resolved.backend.supports, resolved.model);
-                const on = actions.includes(id) && av.can;
-                return (
-                  <button
-                    key={id}
-                    className={"tools-row switch" + (on ? " on" : "")}
-                    role="menuitemcheckbox"
-                    aria-checked={on}
-                    disabled={!av.can}
-                    title={av.why}
-                    onClick={() => toggleAction(id)}
-                  >
-                    <Icon name={ACTION_ICON[id]} size={14} className="tools-icon" />
-                    <span className="tools-text">
-                      <span className="tools-name">
-                        {action.label}
-                        {/* A guess is labelled as a guess. The catalogue can
-                            answer for a hosted model and cannot for a local
-                            one, and pretending otherwise is how a hedge turns
-                            into a promise. */}
-                        {av.can && !av.certain && <span className="tools-cost">unverified</span>}
-                      </span>
-                      <span className="tools-blurb">{av.can ? action.blurb : av.why}</span>
-                    </span>
-                    <span className={"tools-sw" + (on ? " on" : "")} aria-hidden="true" />
                   </button>
                 );
               })}
@@ -305,34 +289,34 @@ export default function ToolsMenu() {
         )}
       </div>
 
-      {mode !== "direct" && (
-        <button className="cpill on" onClick={() => setOpen(true)} title={current.blurb}>
-          <Icon name={current.icon} size={11} />
-          <span>
-            {current.label}
-            {currentSteps ? " · " + currentSteps : ""}
-          </span>
-        </button>
-      )}
-
-      {livePills.map((id) => (
-        <button
-          key={id}
-          className="cpill on"
-          onClick={() => toggleAction(id)}
-          title={CHAT_ACTIONS[id].blurb + "  (click to turn off)"}
-        >
-          <Icon name={ACTION_ICON[id]} size={11} />
-          <span>{CHAT_ACTIONS[id].label}</span>
-          <Icon name="close" size={10} className="cpill-x" />
-        </button>
-      ))}
-
-      {pinnedEffort && (
-        <button className="cpill" onClick={() => setOpen(true)} title={effortMeans(effort, mode)}>
-          <span>{pinnedEffort} effort</span>
-        </button>
-      )}
+      {switches.map((id) => {
+        const action = CHAT_ACTIONS[id];
+        const av = availability(id, resolved.backend.supports, resolved.model);
+        const on = actions.includes(id) && av.can;
+        /* A guess is labelled as a guess. The catalogue can answer for a
+           hosted model and cannot for a local one, and pretending otherwise
+           is how a hedge turns into a promise. */
+        const title = av.can
+          ? `${action.label}${on ? " is on" : ""} — ${action.blurb}${av.certain ? "" : " (unverified for this model)"}`
+          : `${action.label} — ${av.why}`;
+        return (
+          <button
+            key={id}
+            type="button"
+            className={"ctool ctool-icon" + (on ? " on" : "") + (av.can ? "" : " unable")}
+            role="switch"
+            aria-checked={on}
+            /* aria-disabled rather than disabled: a disabled button swallows
+               the hover that shows why, and the press that toasts it. */
+            aria-disabled={!av.can}
+            aria-label={action.label}
+            title={title}
+            onClick={() => (av.can ? toggleAction(id) : toast(av.why, 5000))}
+          >
+            <Icon name={ACTION_ICON[id]} size={18} />
+          </button>
+        );
+      })}
     </>
   );
 }

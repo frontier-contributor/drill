@@ -852,7 +852,7 @@ It is built from your memories and what the review loop says you keep getting wr
           attachVerdicts={attachVerdicts}
           attachReasons={attachReasons}
           onPreview={setPreview}
-          placeholder={readiness.ok ? "Ask anything — / for commands" : readiness.why}
+          placeholder={readiness.ok ? "Ask anything" : readiness.why}
           onSend={(text, attachments) => void chat.send(text, attachments)}
           onStop={chat.stop}
         />

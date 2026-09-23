@@ -27,6 +27,9 @@ export type IconName =
   | "archive"
   | "copy"
   | "send"
+  | "arrow-up"
+  | "expand"
+  | "collapse"
   | "stop"
   | "home"
   | "review"
@@ -87,6 +90,13 @@ const PATHS: Record<IconName, { d: string; fill?: boolean }[]> = {
   archive: [{ d: "M3 7h18v3H3zM5 10v9h14v-9M10 14h4" }],
   copy: [{ d: "M9 9h11v11H9zM5 15H4V4h11v1" }],
   send: [{ d: "M4.5 12h15M13 5.5 19.5 12 13 18.5" }],
+  /* The composer's Send. Up rather than across because the message goes up
+     into the thread above it, which is where it is about to appear. */
+  "arrow-up": [{ d: "M12 19V5.5M5.8 11.7 12 5.5l6.2 6.2" }],
+  /* Two corners, not four: at 14px a full frame of arrows is a smudge, and
+     the diagonal pair already says "this can be bigger". */
+  expand: [{ d: "M14.5 4.5h5v5M9.5 19.5h-5v-5" }],
+  collapse: [{ d: "M19.5 9.5h-5v-5M4.5 14.5h5v5" }],
   stop: [{ d: "M7 7h10v10H7z" }],
   /* The four sections. Drawn as the object each one is — a stack of cards,
      an open book, a marked paper, a spoken line — rather than as abstract

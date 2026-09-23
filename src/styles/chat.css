@@ -1285,14 +1285,13 @@
 }
 
 /* ------------------------------------------------------------ composer -- */
-/* Sized to what it is doing. Empty and unfocused it is one line: the box and
-   Send, 68px of the window instead of the 172px it used to take — a third of
-   a laptop screen spent on an input nobody was using while they read. The
-   tool row and the key hints are inside the box and open on focus. */
+/* One box on the page, with no rule above it: the box is its own edge. Two
+   rows inside — the text, then a quiet row of glyphs — and one filled thing,
+   Send, which is only filled when there is something to send. Everything
+   else is ink on the box's own surface until you point at it. */
 .composer {
   flex: 0 0 auto;
-  border-top: 1px solid var(--rule-soft);
-  padding: var(--s-3) var(--gutter);
+  padding: var(--s-2) var(--gutter) var(--s-4);
   background: var(--page);
 }
 .composer-inner {
@@ -1303,97 +1302,165 @@
 }
 .composer-box {
   border: 1px solid var(--rule);
-  border-radius: var(--r-3);
-  background: var(--page-2);
-  box-shadow: var(--lift-1);
-  transition: border-color var(--fast), background var(--fast), box-shadow var(--fast);
-}
-.composer-box:focus-within {
-  border-color: var(--accent-45);
+  border-radius: var(--r-4);
   background: var(--surface);
-  box-shadow: 0 0 0 3px var(--accent-10), var(--lift-2);
+  box-shadow: var(--lift-1);
+  transition: box-shadow var(--fast), border-color var(--fast);
 }
-/* The text and Send share one line, which is what keeps the resting height to
-   a single row. Bottom-aligned so Send stays on the last line as the box
-   grows rather than drifting to the middle of a paragraph. */
-.composer-row {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--s-2);
-  padding: var(--s-1) var(--s-2) var(--s-1) 0;
+/* Focus deepens the shadow and nothing else. The accent ring it used to wear
+   was the loudest thing on the screen while you were typing, which is the
+   one moment the box needs no help being found. */
+.composer-box:focus-within {
+  box-shadow: var(--lift-2);
+}
+.composer-box .att-row {
+  padding: var(--s-3) var(--s-3) 0;
+  margin-bottom: 0;
+}
+/* The text, with the expand corner laid over its top right. The textarea
+   keeps the width to the right of its last word clear of the corner by its
+   own right padding, so the button never sits on top of what you typed. */
+.composer-field {
+  position: relative;
 }
 .composer-box textarea {
-  flex: 1 1 auto;
-  min-width: 0;
+  display: block;
   width: 100%;
+  min-height: 24px;
+  max-height: 220px;
+  padding: var(--s-4) var(--s-7) var(--s-2) var(--s-4);
   background: none;
   border: none;
-  color: var(--ink);
+  outline: none;
   resize: none;
+  color: var(--ink);
   font-family: var(--sans);
   font-size: calc(var(--t-md) * var(--text-scale));
   line-height: 1.5;
-  padding: var(--s-2) var(--s-3);
-  outline: none;
-  max-height: 220px;
-  min-height: 24px;
-  display: block;
 }
 .composer-box textarea::placeholder {
   color: var(--ink-3);
 }
-/* Closed until the composer has focus or something to send. `display` rather
-   than a height transition on purpose: the model and effort chips open
-   popovers upward out of this row, and anything that clips to animate a
-   height clips those too. */
+.composer-box.expanded textarea {
+  min-height: 40vh;
+  max-height: 60vh;
+}
+.composer-grow {
+  position: absolute;
+  top: var(--s-3);
+  right: var(--s-3);
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-2);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background var(--fast), color var(--fast);
+}
+.composer-grow:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+/* The row of glyphs. Two clusters, as separate flex boxes rather than one run
+   with a spacer, so that a narrow window wraps them as two groups instead of
+   shuffling the model in among the switches. */
 .composer-tools {
-  display: none;
+  display: flex;
   align-items: center;
   gap: var(--s-2);
   flex-wrap: wrap;
   row-gap: var(--s-1);
-  padding: 0 var(--s-2) var(--s-2) var(--s-3);
-  animation: tools-in var(--fast) var(--ease);
+  padding: var(--s-1) var(--s-2) var(--s-2);
 }
-/* The two clusters. Left is what the message is set to, right is what will
-   answer it; they are separate flex boxes rather than one run with a spacer so
-   that a narrow window wraps them as two groups instead of shuffling the model
-   chip in among the pills. */
 .ctools-left,
 .ctools-right {
   display: flex;
   align-items: center;
-  gap: var(--s-2);
   min-width: 0;
-  flex-wrap: wrap;
-  row-gap: var(--s-1);
 }
 .ctools-left {
   flex: 1 1 auto;
+  gap: 2px;
+  flex-wrap: wrap;
 }
 .ctools-right {
   flex: 0 1 auto;
+  gap: var(--s-2);
   margin-left: auto;
-  flex-wrap: nowrap;
 }
-/* Icon-only. The word "Attach" was 46px spent restating a paperclip, and this
-   row now has a menu button to fit beside it. */
-.attach-btn {
-  padding: 0;
-  width: 26px;
-  justify-content: center;
+
+/* The one control shape on the bar. No border and no fill at rest — a row of
+   outlined buttons is a form, and this is meant to read as a line of type
+   with a few words you can press. A lit control takes the accent's tint, which
+   is how a switch that is on can be told from one that is off at a glance
+   without a pill beside it saying so. */
+.ctool {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  height: 32px;
+  min-width: 32px;
+  padding: 0 var(--s-3) 0 var(--s-2);
+  border: 0;
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--fast), color var(--fast), transform var(--fast);
 }
-.composer-box:focus-within .composer-tools,
-.composer-box.armed .composer-tools {
-  display: flex;
+.ctool-icon {
+  padding: 0;
 }
-@keyframes tools-in {
-  from {
-    opacity: 0;
-    transform: translateY(-2px);
-  }
+.ctool:hover,
+.ctool.open {
+  background: var(--surface-2);
+  color: var(--ink);
 }
+.ctool:active {
+  transform: scale(0.94);
+}
+.ctool.on,
+.ctool.set {
+  background: var(--accent-10);
+  color: var(--accent);
+}
+.ctool.on:hover,
+.ctool.set:hover {
+  background: var(--accent-16);
+}
+/* A switch this model or backend cannot use stays where it is, dimmed. It is
+   still pressable, because pressing it is how a phone asks why. */
+.ctool.unable,
+.ctool:disabled {
+  opacity: 0.38;
+}
+.ctool.unable:hover {
+  background: transparent;
+  color: var(--ink-2);
+}
+.ctool:disabled {
+  cursor: default;
+}
+.ctool:disabled:hover {
+  background: transparent;
+}
+.ctool.unable:active,
+.ctool:disabled:active {
+  transform: none;
+}
+
 /* Still used by the edit box on a turn, which keeps the old stacked shape. */
 .composer-bar {
   display: flex;
@@ -1435,32 +1502,31 @@
   padding: var(--s-2) var(--s-3);
   margin-bottom: 0;
 }
-/* The main composer's Send/Stop is an icon-only circle, not the wider
-   labelled pill used in the edit bar below: the resting box is only ~40px
-   tall and the default `.btn.pri` glow (accent-glow) spilled past its own
-   bottom border in a box that tight, reading as a misaligned button. */
-.composer-row .csend {
-  width: 32px;
-  height: 32px;
+/* Send is a circle with an arrow in it, and it is the only filled control on
+   the box — but only once there is something to send. Empty, it is the same
+   quiet grey as the surface around it, so the box at rest has nothing in it
+   asking to be pressed. */
+.composer-tools .csend {
+  width: 34px;
+  height: 34px;
   padding: 0;
-  border-radius: 999px;
-  box-shadow: none;
-  margin-bottom: 4px;
-  align-self: flex-end;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.csend.stop {
-  --btn-bg: var(--red-tint);
-  --btn-edge: var(--red);
-  --btn-fg: var(--red);
+  border-radius: var(--r-full);
   box-shadow: none;
 }
+.composer-tools .csend:disabled,
+.composer-tools .csend:disabled:hover {
+  --btn-bg: var(--surface-2);
+  --btn-edge: var(--surface-2);
+  --btn-fg: var(--ink-3);
+  cursor: default;
+  transform: none;
+}
+.csend.stop,
 .csend.stop:hover {
   --btn-bg: var(--red-tint);
   --btn-edge: var(--red);
   --btn-fg: var(--red);
+  box-shadow: none;
 }
 .composer-hint {
   font-family: var(--mono);
@@ -1471,36 +1537,29 @@
   flex-wrap: wrap;
   min-width: 0;
 }
-/* The key hints give way first: they are the least of what is in the row, and
-   on a narrow window Send matters more than being told what enter does. */
-.composer-hint.keys {
-  /* flex: 0 1 auto and ellipsising — it gives way before the model chip does,
-     instead of wrapping the tool row onto a second line the moment the rail is
-     open and the composer is 200px narrower. */
-  flex: 0 1 auto;
-  min-width: 0;
-  text-align: right;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  display: block;
-}
-/* Below this the row is doing well to hold the Tools button, the pills and the
-   model; a reminder of what enter does is the first thing to go. */
-@media (max-width: 980px) {
-  .composer-hint.keys {
-    display: none;
-  }
-}
-/* On a phone the word "Send" costs 46px the placeholder needs more: the
-   arrow says the same thing, and the button keeps its label for screen
-   readers either way. */
+/* On a phone the bar keeps every control and gives up words: the Tools
+   button shows its glyph alone — still tinted when something behind it is
+   set — and the model name is cut shorter. The box also takes more of the
+   width, as every phone composer does. Measured to hold one row at 360px;
+   past that it wraps as two clusters, which is the fallback, not the design. */
 @media (max-width: 560px) {
-  .csend span {
+  .composer {
+    padding-left: var(--s-3);
+    padding-right: var(--s-3);
+  }
+  .ctool-label {
     display: none;
   }
-  .csend {
-    padding: var(--s-2);
+  .ctool {
+    min-width: 30px;
+  }
+  .ctool-icon,
+  .tools-btn {
+    width: 30px;
+    padding: 0;
+  }
+  .composer-tools .modelchip-btn {
+    max-width: 104px;
   }
 }
 
@@ -1606,6 +1665,24 @@
    pinned to this conversation. */
 .modelchip {
   position: relative;
+  min-width: 0;
+}
+.composer-tools .modelchip-btn {
+  height: 32px;
+  padding: 0 var(--s-2) 0 var(--s-3);
+  border: 0;
+  border-radius: var(--r-full);
+  color: var(--ink-2);
+}
+.composer-tools .modelchip-btn:hover {
+  --btn-bg: var(--surface-2);
+  color: var(--ink);
+}
+/* The chip sits at the right edge of the box, so its list opens leftward
+   from there. Anchored left it ran 260px past the box and under the rail. */
+.ctools-right .modelpop {
+  left: auto;
+  right: 0;
 }
 .modelchip-btn {
   display: inline-flex;
@@ -2443,26 +2520,21 @@
 }
 
 /* ---------------------------------------------------------------------------
- * The Tools menu, and the pills that report what it has switched on.
+ * The Tools menu.
  *
- * One popover holding three sections, replacing four chips that each owned a
- * popover of their own. Sectioned rather than merely stacked: the headings are
- * what let a row afford a full sentence of explanation, which is the only
+ * One popover holding the mode and the effort, replacing chips that each owned
+ * a popover of their own. Sectioned rather than merely stacked: the headings
+ * are what let a row afford a full sentence of explanation, which is the only
  * reason "up to 6 lookups, each one a request" fits anywhere at all.
  *
- * The pills are the other half of the bargain. Hiding controls behind a menu
- * is only honest if what is *on* comes back out, so anything in force is a
- * labelled pill in the bar that clicks itself off.
+ * Hiding controls behind a menu is only honest if what is *on* comes back
+ * out. The button's own label does that for the mode and the effort, and the
+ * switches never went behind it: they are the lit glyphs beside it (`.ctool`).
  * ------------------------------------------------------------------------- */
 .toolsmenu {
   position: relative;
   display: inline-flex;
   flex: 0 0 auto;
-}
-.tools-btn.open {
-  --btn-bg: var(--surface-2);
-  --btn-edge: var(--rule);
-  --btn-fg: var(--ink);
 }
 .tools-pop {
   position: absolute;
@@ -2653,47 +2725,6 @@
   line-height: var(--lh-snug);
 }
 
-/* A pill is a setting that is currently in force. Smaller and rounder than the
-   buttons beside it, because it reports rather than invites. */
-.cpill {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-1);
-  height: 26px;
-  padding: 0 var(--s-2);
-  border-radius: var(--r-full);
-  border: 1px solid var(--rule);
-  background: var(--surface);
-  color: var(--ink-2);
-  font-family: var(--sans);
-  font-size: var(--t-3xs);
-  text-transform: capitalize;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background var(--fast), border-color var(--fast), color var(--fast), transform var(--fast);
-}
-.cpill:hover {
-  background: var(--surface-2);
-  border-color: var(--rule);
-  color: var(--ink);
-}
-.cpill:active {
-  transform: scale(0.96);
-}
-.cpill.on {
-  background: var(--accent-10);
-  border-color: var(--accent-45);
-  color: var(--accent);
-}
-.cpill-x {
-  opacity: 0.55;
-  margin-left: 1px;
-}
-.cpill:hover .cpill-x {
-  opacity: 1;
-}
-
 /* ------------------------------------------------------------ attach menu -- */
 /* The paperclip asks what kind of file first, so the dialog can be opened on
    that kind alone and so a kind this model cannot read can say so before you
@@ -2724,8 +2755,20 @@
 .attach-row .tools-text {
   padding-right: var(--s-1);
 }
-.attach-btn.open {
-  color: var(--accent);
+/* "@" and "/" under the file kinds, set off by a hairline: the rows above
+   open a dialog, these two type into the box. */
+.attach-more {
+  border-top: 1px solid var(--rule-soft);
+  margin-top: var(--s-1);
+  padding-top: var(--s-1);
+}
+.attach-key {
+  width: 14px;
+  margin-top: 0;
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  line-height: 1.3;
+  text-align: center;
 }
 
 /* ============================================================================
@@ -2916,6 +2959,17 @@
   padding-bottom: var(--s-3);
   margin-bottom: var(--s-3);
   border-bottom: 1px solid var(--rule-soft);
+}
+/* The chat composer's controls, a size down: this head is a caption line over
+   the plate and the prompt, and at full size the switches out-shouted the
+   title they sit beside. */
+.imgc-head .ctool {
+  height: 28px;
+  min-width: 28px;
+  font-size: var(--t-xs);
+}
+.imgc-head .ctool-icon {
+  padding: 0;
 }
 .imgc-mark {
   flex: 0 0 auto;
