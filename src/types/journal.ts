@@ -12,8 +12,10 @@
 export interface RawLog {
   id: string;
   at: number;
-  via: "typed" | "file" | "chat";
-  /** filename, conversation title, or "" for typed input */
+  /** "elsewhere" is a session in another AI brought in through the capture
+   *  bridge (lib/capture.ts); its label is where it happened. */
+  via: "typed" | "file" | "chat" | "elsewhere";
+  /** filename, conversation title, the other AI's name, or "" for typed input */
   label: string;
   text: string;
 }

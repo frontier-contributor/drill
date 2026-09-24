@@ -150,7 +150,8 @@ export default function DistillReview({ entry, project, onClose }: { entry: Jour
                 <>
                   {dupes.size > 0 && (
                     <div className="note" style={{ marginBottom: 10 }}>
-                      {dupes.size} of these look close to a card you already have — greyed below, matched card shown.
+                      {dupes.size === 1 ? "One of these looks" : `${dupes.size} of these look`} close to a card you
+                      already have — greyed below, matched card shown.
                     </div>
                   )}
                   {dupes.size > 0 && (

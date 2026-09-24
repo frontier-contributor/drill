@@ -15,6 +15,7 @@ import { useToast } from "@/context/ToastContext";
 import { acceptFor, TEXT_ONLY_KINDS } from "@/lib/files/kinds";
 import { ago } from "@/lib/util";
 import type { JournalEntry } from "@/types/journal";
+import BridgeSheet from "./BridgeSheet";
 
 /* Derived, not written out: this box keeps text, so it takes everything the
    app reads except a picture — which ingest refuses here with its own
@@ -26,6 +27,7 @@ export default function CaptureBox({ entry }: { entry: JournalEntry }) {
   const [text, setText] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [reading, setReading] = useState<string | null>(null);
+  const [bridging, setBridging] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   function save() {
@@ -94,7 +96,12 @@ export default function CaptureBox({ entry }: { entry: JournalEntry }) {
         <button className="btn sm" disabled={!!reading} onClick={() => fileRef.current?.click()}>
           {reading ? `Reading ${reading}…` : "Attach a file…"}
         </button>
+        {/* The third way a day gets captured: a session somewhere else. */}
+        <button className="btn sm" onClick={() => setBridging(true)}>
+          From another AI…
+        </button>
       </div>
+      {bridging && <BridgeSheet entry={entry} onClose={() => setBridging(false)} />}
       <input ref={fileRef} type="file" multiple accept={ACCEPT} className="hidden-file" onChange={onFile} />
 
       {entry.raw.length > 0 && (

@@ -21,11 +21,11 @@ especially its **Project layout** section. Do not restate it here.
 npm run dev     # vite; usually :5173, falls back to :5174 if taken
 npm run lint    # tsc --noEmit. The only lint there is
 npm test        # tsx --test src/**/*.test.ts
-                # 319 tests: fsrs, cardFormat, memory*, effort, title,
+                # 330 tests: fsrs, cardFormat, memory*, effort, title,
                 # thinking, agent/loop, settings/catalogue, logBudget,
                 # storage, storeBoot, autoBackup, activity, gaps, retry, budget,
                 # ai/structured,
-                # weeks, rememberArg, dayBrief, files/parts (the sweep),
+                # weeks, rememberArg, dayBrief, capture, files/parts (the sweep),
                 # visuals/{srcdoc (the walls), keep},
                 # speech/{words, availability, player},
                 # voice/{turns, chunker, heard (+ wav), session}
@@ -288,6 +288,15 @@ round-robin so one big confusion cannot crowd out the rest, then
 source reads it too). `scope.gaps` is frozen on the exam so "more questions"
 aims at the same list. The review rail hands off through `lib/examIntent.ts`,
 which imports nothing, because the rail is in the entry chunk.
+
+**The capture bridge makes no call, and that is the point of it.**
+`lib/capture.ts` writes a prompt for *another* AI and parses what the learner
+pastes back; `journal/BridgeSheet.tsx` reviews it in three piles. The parse is
+forgiving on purpose (a `drill` fence, any fence, then both outer spans, with
+clipboard repairs tried only after a clean parse fails, since curly quotes are
+legal inside a JSON string) and says what it dropped. The paste is untrusted:
+cards go through `store.normCard` like every other card, and nothing commits
+without a press. `capture.test.ts` holds the damage cases.
 
 **Backends and credentials.** `services/ai/backends.ts` holds one entry per
 provider — OpenRouter, Groq, Ollama, and a generic OpenAI-compatible one — and

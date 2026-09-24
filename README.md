@@ -181,6 +181,14 @@ anything.
   two could disagree about meaning.
 - **Capture anything, any time** — type it, drop a file on it, or let a
   `/remember` from a conversation file itself under the day it happened.
+- **Bring in a session from another AI** — **From another AI…** gives you a
+  prompt to paste at the end of a conversation in ChatGPT, Claude, Gemini or
+  anything else. It knows the project: its goal, what you keep getting wrong,
+  the tags your cards use. Paste the reply back and Drill reads it locally, no
+  key and no call, into cards, notes, memory proposals and a line in today's
+  log, each reviewed before anything is saved. It copes with what a chat app
+  does to JSON on the way through a clipboard, and with a model that ignores
+  the format and writes Q:/A: pairs instead.
 - **It goes somewhere** — distil an entry into memories and flashcards, both
   proposed and neither saved until you pick them; roll a week up into a summary
   that also proposes what to merge and retire in memory.

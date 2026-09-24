@@ -31,7 +31,7 @@
 ### v2 — Depth
 | 7 | Chat on the journal | **done** |
 | 8 | Files, attachments, `@` picker | **done** |
-| 9 | Capture bridge from other AI apps | not started |
+| 9 | Capture bridge from other AI apps | **done** 2026-09-24 — `lib/capture.ts` (the project-aware prompt and a forgiving parser, no API call) and `journal/BridgeSheet.tsx` (three piles, each reviewed) |
 | 10 | Context inspector and cache tuning | **done** (inspector; cache tuning not started) |
 
 ### v3 — Later
@@ -195,8 +195,8 @@ what follows is the list as it actually stands on 2026-09-06.*
 - **Drafts reset on navigation.** `draftModel`, `draftEffort`, `draftMode` and
   `draftActions` live in `ChatContext` state; leaving chat and coming back
   loses an unsent choice. Long-standing, minor, one fix for all four.
-- **Phase 9 (capture bridge) is not started**, and cache tuning from Phase 10
-  is not either. Phase 11 (auto-backup) shipped 2026-09-24.
+- **Cache tuning from Phase 10 is not started.** Phases 9 (the capture bridge)
+  and 11 (auto-backup) both shipped 2026-09-24.
 - **The review log lives in localStorage, and that is the wrong drawer.**
   Decks, scheduling and the whole review log share one ~5MB origin quota,
   because `store.ts` is synchronous and everything reads `db.log` without

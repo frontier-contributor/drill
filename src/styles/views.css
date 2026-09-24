@@ -347,3 +347,32 @@
   white-space: nowrap;
   flex: 0 0 auto;
 }
+
+/* ------------------------------------------------------------ bridge -- */
+/* BridgeSheet: a session from another AI, brought into the journal. The
+   prompt is read-only and set small, because it is for copying, not reading;
+   the paste box is the one you actually type into. */
+.bridge-lead {
+  margin: 0 0 var(--s-3);
+}
+.bridge-prompt {
+  min-height: 9rem;
+  max-height: 16rem;
+  font-size: var(--t-2xs);
+  line-height: var(--lh-snug);
+  color: var(--ink-2);
+  resize: vertical;
+}
+.bridge-paste {
+  min-height: 8rem;
+  resize: vertical;
+}
+.bridge-summary {
+  font-family: var(--serif);
+  font-size: var(--t-read);
+  line-height: var(--lh-body);
+  color: var(--ink);
+  border-left: 2px solid var(--accent);
+  padding-left: var(--s-3);
+  margin: 0 0 var(--s-4);
+}
