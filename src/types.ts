@@ -204,6 +204,9 @@ export interface TalkSettings {
   style: VoiceStyle;
   /** The model voice turns are answered by. "" follows the conversation. */
   model: string;
+  /** The language you speak, as an ISO 639-1 code ("en", "hi"). "" lets the
+   *  engine work it out — which Whisper does badly on a two-word phrase. */
+  lang: string;
 }
 
 /* --------------------------------------------------------------- speech -- */

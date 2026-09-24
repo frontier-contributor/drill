@@ -24,6 +24,7 @@
 
 import * as AI from "@/services/ai";
 import * as store from "@/services/store";
+import { recognitionTag } from "@/lib/voice/langs";
 import type { HearEngineId } from "@/types";
 
 export interface Ears {
@@ -68,11 +69,11 @@ function recognitionCtor(): RecognitionCtor | null {
   return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 }
 
-/** The language recognition listens for. Hinglish is English spoken in India,
- *  and en-IN recognises it far better than en-US does. */
+/** The tag the browser's recognition listens with — the language chosen
+ *  under Settings → Voice, or this browser's own. */
 export function listenLang(): string {
-  if (store.settings().lang === "hinglish") return "en-IN";
-  return (typeof navigator !== "undefined" && navigator.language) || "en-US";
+  const s = store.settings();
+  return recognitionTag(s.talk.lang, (typeof navigator !== "undefined" && navigator.language) || "en-US", s.lang === "hinglish");
 }
 
 function hostedModel(id: Exclude<HearEngineId, "browser">): string {
@@ -123,7 +124,10 @@ export function openEars(id: HearEngineId): Ears {
       id,
       label: earsLabel(id),
       async transcribe(wav, seconds, signal) {
-        const r = await AI.transcribe(wav, seconds, { engine: id, model: hostedModel(id) }, { signal });
+        /* Named when one was chosen: Whisper guessing the language of a
+           two-word phrase is where "yes, go on" comes back as Welsh. */
+        const language = store.settings().talk.lang || undefined;
+        const r = await AI.transcribe(wav, seconds, { engine: id, model: hostedModel(id) }, { language, signal });
         return r.text;
       },
       close() {

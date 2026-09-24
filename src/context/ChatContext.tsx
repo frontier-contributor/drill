@@ -481,7 +481,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // A regenerate can ask for a different model without pinning the
       // conversation to it — c.backend/c.model stay untouched either way.
       // A voice turn may be answered by a model set for talking, in
-      // Settings → Listening → Talking, without the thread being pinned to it.
+      // Settings → Voice, without the thread being pinned to it.
       const runBackend = override?.backend ?? c.backend;
       const runModel = override?.model ?? ((voice && store.settings().talk.model) || c.model);
       const controller = new AbortController();

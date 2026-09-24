@@ -17,10 +17,31 @@
  *
  * With reduced motion it stops moving and keeps meaning: a still disc with a
  * ring whose weight is the level — it still tells you it hears you.
+ *
+ * It draws the call by default. Settings' microphone check hands it a source
+ * of its own, and "ready" is the one phase only that source uses: set up and
+ * in colour, but still — because the microphone is closed, and an orb that
+ * breathed there would be claiming to listen.
  * ========================================================================== */
 import { useEffect, useRef } from "react";
 import { figureTheme } from "@/services/visuals/theme";
 import { voice, type VoicePhase } from "@/services/voice";
+
+export type OrbPhase = VoicePhase | "ready";
+
+/** Whatever the orb is showing, read on every frame. */
+export interface OrbSource {
+  phase(): OrbPhase;
+  muted(): boolean;
+  /** 0..1 each: the microphone above the room, and the reply's own loudness. */
+  levels(): { mic: number; voice: number };
+}
+
+const CALL: OrbSource = {
+  phase: () => voice.get().phase,
+  muted: () => voice.get().muted,
+  levels: () => voice.levels()
+};
 
 interface Target {
   amp: number;
@@ -30,9 +51,11 @@ interface Target {
   grey: number;
 }
 
-function target(phase: VoicePhase, muted: boolean, mic: number, out: number, t: number): Target {
+function target(phase: OrbPhase, muted: boolean, mic: number, out: number, t: number): Target {
   if (muted || phase === "off" || phase === "error") return { amp: 0.004, scale: 0.8, glow: 0.05, spin: 0, grey: 1 };
   switch (phase) {
+    case "ready":
+      return { amp: 0.006, scale: 0.86, glow: 0.2, spin: 0, grey: 0 };
     case "starting":
       return { amp: 0.02, scale: 0.84 + 0.02 * Math.sin(t * 5), glow: 0.2, spin: 0, grey: 0.4 };
     case "listening":
@@ -58,7 +81,7 @@ function rgba(hex: string, a: number): string {
   return `rgba(${n[0]},${n[1]},${n[2]},${a})`;
 }
 
-export default function VoiceOrb({ size }: { size: number }) {
+export default function VoiceOrb({ size, source = CALL }: { size: number; source?: OrbSource }) {
   const ref = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -88,9 +111,8 @@ export default function VoiceOrb({ size }: { size: number }) {
         theme = figureTheme();
       }
 
-      const st = voice.get();
-      const lv = voice.levels();
-      const want = target(st.phase, st.muted, lv.mic, lv.voice, t);
+      const lv = source.levels();
+      const want = target(source.phase(), source.muted(), lv.mic, lv.voice, t);
       /* Eased toward the state, never jumped: a change of phase is a change of
          mood, and a snap reads as a glitch. Fast enough that a syllable still
          lands as one. */
@@ -190,7 +212,7 @@ export default function VoiceOrb({ size }: { size: number }) {
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [size]);
+  }, [size, source]);
 
   /* Width and height are measured values — the canvas has to be told its
      size in CSS pixels to match the device pixels it is drawn at. */

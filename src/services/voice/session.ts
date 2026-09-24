@@ -237,9 +237,13 @@ export function createVoiceSession(deps: SessionDeps): VoiceSession {
   function onFrame(f: { speech: boolean; level: number; t: number; ms: number }) {
     micLevel = f.level;
     if (!turns || state.muted) return;
+    const talk = deps.talk();
+    /* Read on every frame, like the switch below, so a pause changed in
+       Settings → Voice mid-call is the pause the next sentence gets. */
+    turns.timing = TIMING[talk.sensitivity];
     /* Interrupting by voice switched off: while it talks, nothing said is a
        turn — only a tap or a key stops it. */
-    const deaf = !deps.talk().bargeIn && !!mouth?.speaking && !barge;
+    const deaf = !talk.bargeIn && !!mouth?.speaking && !barge;
     for (const e of turns.frame(f.speech && !deaf, f.t, f.ms)) onTurn(e);
   }
 

@@ -261,7 +261,7 @@ export interface Conversation {
    *  different shape from one you opened to draw a wallpaper. */
   image?: ImageSpec;
   /** How voice mode shapes its replies in this thread. Absent follows
-   *  Settings → Listening → Talking. */
+   *  Settings → Voice. */
   voiceStyle?: VoiceStyle;
 
   context: ContextSource[];

@@ -11,6 +11,7 @@
  * ========================================================================== */
 import { useEffect, useState } from "react";
 import { voice } from "@/services/voice";
+import { useSettings } from "@/context/SettingsContext";
 import type { VoiceStyle } from "@/types";
 import VoiceOrb from "./VoiceOrb";
 import { StyleSwitch, VoiceButtons, captionLine, statusLine, useVoice } from "./VoiceControls";
@@ -24,6 +25,7 @@ function orbSize(): number {
 
 export default function VoiceStage({ onCollapse, onStyle }: { onCollapse: () => void; onStyle: (s: VoiceStyle) => void }) {
   const st = useVoice();
+  const settings = useSettings();
   const cap = captionLine(st);
   const talking = st.phase === "speaking" || st.phase === "thinking";
   const [size, setSize] = useState(orbSize);
@@ -61,7 +63,13 @@ export default function VoiceStage({ onCollapse, onStyle }: { onCollapse: () => 
         <VoiceButtons st={st} expanded onExpand={onCollapse} onEnd={() => voice.stop()} />
       </div>
       <p className="vs-foot">
-        {st.earsLabel && st.voiceLabel ? `Hearing with ${st.earsLabel} · speaking with ${st.voiceLabel}` : ""}
+        {st.earsLabel && st.voiceLabel ? `Hearing with ${st.earsLabel} · speaking with ${st.voiceLabel} · ` : ""}
+        {/* The call carries on underneath: Settings covers it and Escape
+            closes Settings first. Pauses and interrupting apply at once; the
+            voice and reply style chosen there are for the next call. */}
+        <button type="button" className="textlink" onClick={() => settings.open("voice")}>
+          Voice settings
+        </button>
       </p>
     </div>
   );

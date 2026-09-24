@@ -24,6 +24,7 @@ export type CatId =
   | "conversation"
   | "connection"
   | "chat"
+  | "voice"
   | "listening"
   | "memory"
   | "review"
@@ -82,9 +83,15 @@ export const CATEGORY_META: CategoryMeta[] = [
     group: "assistant"
   },
   {
+    id: "voice",
+    label: "Voice",
+    blurb: "Talking with the assistant: try the microphone, choose its voice, and how a conversation takes turns.",
+    group: "assistant"
+  },
+  {
     id: "listening",
     label: "Listening",
-    blurb: "Replies read aloud and voice conversations: the voice, what hears you, and the audio it keeps.",
+    blurb: "Replies read aloud: the engine and voice, the speed, and the audio it keeps.",
     group: "assistant"
   },
   {
@@ -219,11 +226,53 @@ export const SECTIONS = sections({
     ]
   },
 
+  /* ------------------------------------------------------------------- voice -- */
+  "voice.check": {
+    cat: "voice",
+    title: "Try it here",
+    sub: "Check it hears you and sounds right before a conversation depends on either — and see the whole chain, from your voice to its.",
+    finds: [
+      "voice mode", "voice chat", "voice conversation", "conversation mode", "talk", "talking", "call", "hands free",
+      "microphone", "mic", "test", "check", "mic check", "level", "echo", "echo cancellation", "headphones",
+      "can't hear me", "not working", "realtime", "chatgpt voice", "advanced voice"
+    ]
+  },
+  "voice.voice": {
+    cat: "voice",
+    title: "Its voice",
+    sub: "Who answers you. Press one to hear it. It is the voice that reads replies aloud too — the app has one voice, not two.",
+    finds: ["voice", "voices", "assistant voice", "sound", "accent", "male", "female", "sample", "preview", "kokoro", "orpheus", "speaker"]
+  },
+  "voice.hearing": {
+    cat: "voice",
+    title: "Hearing you",
+    sub: "What turns your speech into words, and the language to listen for.",
+    finds: [
+      "speech to text", "stt", "transcription", "transcribe", "whisper", "recognition", "dictation", "hear", "language",
+      "hindi", "english", "groq", "openrouter", "parakeet", "deepgram", "privacy"
+    ]
+  },
+  "voice.turns": {
+    cat: "voice",
+    title: "Taking turns",
+    sub: "How long a pause has to be before it answers, and whether talking over it stops it.",
+    finds: [
+      "pause", "pauses", "patience", "sensitivity", "endpoint", "turn", "turn taking", "cuts me off", "interrupt",
+      "barge in", "talk over", "cut in", "noisy room", "keys", "shortcuts", "space", "mute"
+    ]
+  },
+  "voice.replies": {
+    cat: "voice",
+    title: "Replies",
+    sub: "How a spoken answer is shaped, and which model gives it.",
+    finds: ["talk", "show", "code on screen", "short answers", "style", "voice model", "model", "fast model", "latency", "slow"]
+  },
+
   /* --------------------------------------------------------------- listening -- */
   "listening.voice": {
     cat: "listening",
     title: "Voice",
-    sub: "Who reads replies aloud. Only voices that can actually speak from here are offered — a hosted one needs its key on the Connection page.",
+    sub: "Who reads replies aloud, and who answers in a voice conversation. Only voices that can actually speak from here are offered — a hosted one needs its key on the Connection page.",
     finds: [
       "voice", "voices", "read aloud", "listen", "listening", "text to speech", "tts", "speech", "narrator", "audio",
       "kokoro", "openrouter voice", "groq voice", "device voice", "browser voice", "speech model", "sample", "preview"
@@ -234,17 +283,6 @@ export const SECTIONS = sections({
     title: "Playback",
     sub: "How fast it reads, and whether the page follows along.",
     finds: ["speed", "rate", "faster", "slower", "playback", "follow along", "highlight", "auto-scroll", "karaoke"]
-  },
-  "listening.talking": {
-    cat: "listening",
-    title: "Talking",
-    sub: "Voice conversations: what hears you, how long a pause has to be before it is your turn to be answered, and how replies are shaped.",
-    finds: [
-      "talk", "talking", "voice mode", "voice chat", "voice conversation", "conversation mode", "speak", "speaking",
-      "microphone", "mic", "speech to text", "stt", "transcription", "transcribe", "whisper", "dictation", "hear",
-      "pause", "patience", "sensitivity", "endpoint", "turn", "interrupt", "barge in", "talk over", "hands free",
-      "show", "code on screen", "voice model", "realtime", "chatgpt voice", "advanced voice"
-    ]
   },
   "listening.audio": {
     cat: "listening",

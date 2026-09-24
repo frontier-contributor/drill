@@ -315,14 +315,16 @@ export function switchToDevice(): void {
 export const SAMPLE_TURN = "voice-sample";
 
 /** A sentence in the chosen voice, for Settings. Played through the same
- *  player as a reply, so it costs, caches and is counted like one. */
-export function playSample(): boolean {
+ *  player as a reply, so it costs, caches and is counted like one. The Voice
+ *  page says a different sentence, because there it is the voice that talks
+ *  to you rather than the one that reads to you. */
+export function playSample(sentence = "This is how replies will sound when they are read aloud."): boolean {
   return listen({
     conversationId: "",
     projectId: "",
     turnId: SAMPLE_TURN,
     variant: 0,
     title: "Voice sample",
-    sentences: ["This is how replies will sound when they are read aloud."]
+    sentences: [sentence]
   });
 }

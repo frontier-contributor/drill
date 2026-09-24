@@ -11,6 +11,10 @@
  * Automatic is a row of its own rather than a default hidden behind the first
  * engine, because it is a different promise: the best voice this browser can
  * reach, which changes the moment a key is added.
+ *
+ * The voice chosen here is also the one that answers in voice mode. Everything
+ * else about talking — the microphone, turn-taking, reply style — is on the
+ * Voice page, which shows this same voice as tiles you can press and hear.
  * ========================================================================== */
 import { useEffect, useState } from "react";
 import * as store from "@/services/store";
@@ -39,7 +43,6 @@ import SelectRow from "../../ui/SelectRow";
 import SwitchRow from "../../ui/SwitchRow";
 import TextRow from "../../ui/TextRow";
 import Section from "../Section";
-import Talking from "./Talking";
 import type { SpeechSettings } from "@/types";
 
 const CAPS: SpeechSettings["cacheMB"][] = [0, 25, 100];
@@ -243,10 +246,6 @@ export default function Listening() {
           onToggle={() => update({ follow: !s.follow })}
         />
       </Section>
-
-      {/* Voice conversations use the voice chosen above; what hears you, and
-          how patiently, is its own group. */}
-      <Talking />
 
       <Section id="listening.audio">
         <div className="seg">

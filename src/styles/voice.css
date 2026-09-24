@@ -1,8 +1,9 @@
 /* ============================================================================
- * voice.css — voice mode: the bar in the composer's place, and the stage.
+ * voice.css — voice mode: the bar in the composer's place, the stage, and
+ * the Voice page in Settings.
  *
- * Imported by the voice components, so it rides chat's lazy chunk and costs
- * the review loop nothing. Tokens only; the one filled control is the red
+ * Imported by the voice components and by that page, so it rides the chat
+ * and settings chunks and costs the review loop nothing. Tokens only; the one filled control is the red
  * End, because ending a call is the one thing on it that is not undone by
  * pressing again.
  * ========================================================================== */
@@ -260,9 +261,365 @@
   text-align: center;
 }
 
+/* ------------------------------------------------------ Settings: Voice -- */
+/* The check: the call's own orb, and one line of what it is doing. Set on the
+   second paper so it reads as a thing to use rather than another row. */
+.vset-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--s-5);
+  padding: var(--s-4) var(--s-5) var(--s-4) var(--s-3);
+  margin-bottom: var(--s-4);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-3);
+  background: var(--page-2);
+  transition: border-color var(--med) var(--ease);
+}
+.vset-hero.live {
+  border-color: var(--accent-45);
+}
+.vset-orb {
+  flex: none;
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-full);
+  background: transparent;
+  cursor: pointer;
+}
+.vset-orb:disabled {
+  cursor: default;
+}
+.vset-orb:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.vset-hero-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.vset-state {
+  font-family: var(--serif);
+  font-size: var(--t-lg);
+  color: var(--ink);
+  letter-spacing: var(--track-tight);
+}
+.vset-line {
+  margin-top: var(--s-1);
+  font-family: var(--sans);
+  font-size: var(--t-xs);
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+.vset-line.you {
+  font-family: var(--serif);
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+}
+.vset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+.vset-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+/* What the check heard, in the words it came back as. */
+.vset-heard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-1) var(--s-3);
+  margin: 0 0 var(--s-4);
+  padding: var(--s-3) var(--s-4);
+  border-left: 2px solid var(--accent);
+  font-family: var(--sans);
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+  animation: vb-in var(--med) var(--ease-spring);
+}
+.vset-heard.warn {
+  border-left-color: var(--amber);
+  color: var(--amber);
+}
+.vset-quote {
+  font-family: var(--serif);
+  font-size: var(--t-md);
+  color: var(--ink);
+}
+.vset-by {
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+}
+
+/* The chain, in the order a turn travels it: what hears you, what answers,
+   what speaks. Each is a link to the group that sets it. */
+.vset-chain {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: var(--s-4);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-3);
+  overflow: hidden;
+}
+.vset-link {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+  padding: var(--s-3) var(--s-4);
+  border: 0;
+  border-right: 1px solid var(--rule-soft);
+  background: none;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--fast);
+}
+.vset-link:last-child {
+  border-right: 0;
+}
+.vset-link:hover {
+  background: var(--surface-2);
+}
+.vset-k {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.vset-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-full);
+  background: var(--accent-10);
+  color: var(--accent);
+  letter-spacing: 0;
+}
+.vset-v {
+  font-family: var(--sans);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.vset-link.warn .vset-v {
+  color: var(--amber);
+}
+
+/* Voices as tiles: pressing one chooses it and plays it. */
+.vtiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-2);
+  margin-bottom: var(--s-4);
+}
+.vtile {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: var(--s-3);
+  align-items: center;
+  padding: var(--s-3);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-3);
+  background: none;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color var(--fast), background var(--fast);
+}
+.vtile:hover {
+  background: var(--surface-2);
+}
+.vtile.on {
+  border-color: var(--accent-45);
+  background: var(--accent-05);
+}
+.vtile-play {
+  grid-row: 1 / span 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  transition: background var(--fast), color var(--fast);
+}
+.vtile.on .vtile-play {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.vtile.loading .vtile-play {
+  opacity: 0.6;
+}
+.vtile-name {
+  font-family: var(--sans);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vtile-detail {
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Three bars, only while the sample is actually sounding. */
+.vtile-bars {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 12px;
+}
+.vtile-bars i {
+  display: block;
+  width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background: currentColor;
+  transform-origin: center;
+  animation: vtile-bar 0.9s var(--ease) infinite;
+}
+.vtile-bars i:nth-child(2) {
+  animation-delay: -0.3s;
+}
+.vtile-bars i:nth-child(3) {
+  animation-delay: -0.6s;
+}
+@keyframes vtile-bar {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+/* A choice explained in place: pauses, and Talk or Show. */
+.vopts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-2);
+  margin-bottom: var(--s-4);
+}
+.vopts.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.vopt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-3);
+  background: none;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color var(--fast), background var(--fast);
+}
+.vopt:hover {
+  background: var(--surface-2);
+}
+.vopt.on {
+  border-color: var(--accent-45);
+  background: var(--accent-05);
+  box-shadow: inset 0 0 0 1px var(--accent-25);
+}
+.vopt-t {
+  font-family: var(--sans);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink);
+}
+.vopt.on .vopt-t {
+  color: var(--accent);
+}
+.vopt-s {
+  font-family: var(--sans);
+  font-size: var(--t-xs);
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+.vopt-m {
+  margin-top: auto;
+  padding-top: var(--s-1);
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  color: var(--ink-3);
+}
+
+/* The call's keys, as a line to glance at rather than a table to read. */
+.vkeys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-5);
+  padding: var(--s-4) 0 0;
+  font-family: var(--sans);
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+}
+.vkeys span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+@media (max-width: 560px) {
+  .vset-hero {
+    flex-direction: column;
+    text-align: center;
+    padding: var(--s-4);
+  }
+  .vset-actions {
+    justify-content: center;
+  }
+  .vset-chain {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .vset-link {
+    border-right: 0;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .vset-link:last-child {
+    border-bottom: 0;
+  }
+  .vtiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .vopts,
+  .vopts.three {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .voicebar,
-  .voice-stage {
+  .voice-stage,
+  .vset-heard {
     animation: none;
+  }
+  .vtile-bars i {
+    animation: none;
+    transform: scaleY(0.7);
   }
 }

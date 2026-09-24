@@ -75,6 +75,8 @@ export interface Recording {
 export interface Capture {
   /** The browser says echo cancellation is running on this microphone. */
   readonly echoCancelled: boolean;
+  /** What the system calls the microphone, for Settings' check. Can be "". */
+  readonly device: string;
   onFrame(fn: (f: CaptureFrame) => void): void;
   /** Start keeping what is heard, from a little before now. */
   begin(): void;
@@ -179,6 +181,7 @@ export async function openCapture(ctx: AudioContext): Promise<Capture> {
 
   return {
     echoCancelled: settings.echoCancellation === true,
+    device: track?.label || "",
     onFrame(fn) {
       listeners.push(fn);
     },

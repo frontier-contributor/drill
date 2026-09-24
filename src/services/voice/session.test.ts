@@ -21,6 +21,7 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 
 class FakeCapture implements Capture {
   echoCancelled = true;
+  device = "";
   private fn: ((f: CaptureFrame) => void) | null = null;
   private t = 0;
   recording = false;
@@ -138,7 +139,7 @@ class FakeBrain implements Brain {
   }
 }
 
-const TALK: TalkSettings = { ears: "", hearModels: {}, sensitivity: "balanced", bargeIn: true, style: "talk", model: "" };
+const TALK: TalkSettings = { ears: "", hearModels: {}, sensitivity: "balanced", bargeIn: true, style: "talk", model: "", lang: "" };
 
 function rig(heardQueue: string[]) {
   const capture = new FakeCapture();

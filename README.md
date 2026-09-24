@@ -127,7 +127,9 @@ openrouter.ai.
   by Whisper on Groq or OpenRouter (fractions of a cent an hour) or your
   browser's own recognition for free, and answered in the voice Listening
   uses. The orb moves with your voice and with its own, and a full-screen view
-  is one click away.
+  is one click away. **Settings → Voice** is where to try it before you need
+  it: check the microphone on the same orb and see what it heard, press a
+  voice to hear it, name the language you speak, and set how long a pause is.
 
 ### Figures
 
@@ -225,10 +227,10 @@ anything.
 One panel, the same one from every section (`ctrl + ,`), and everything is
 in it — no section keeps a settings menu of its own.
 
-- **Ten pages, grouped** — Connection, Chat, Listening and Memory; Review and
-  the project; Appearance, Usage and Data. Plus **This chat** while you are in a
-  conversation, because a thread, a project and the app are one inheritance
-  chain and every row says which level its value came from.
+- **Eleven pages, grouped** — Connection, Chat, Voice, Listening and Memory;
+  Review and the project; Appearance, Usage and Data. Plus **This chat** while
+  you are in a conversation, because a thread, a project and the app are one
+  inheritance chain and every row says which level its value came from.
 - **Search finds the control, not the page** — type "backup", "retention",
   "delete deck" or "what did it send" and it takes you to the group that holds
   it, and marks it.
@@ -584,7 +586,7 @@ src/
                           surface shared across every section
     views.css            journal + exam            (lazy)
     chat.css             chat                      (lazy)
-    voice.css            voice mode                (lazy, with chat)
+    voice.css            voice mode                (lazy, with chat and settings)
     home.css             home, and the chapter opening cards and figures share
     cards.css            cards — and the toolbar and pills figures reuses (lazy)
     figures.css          the figure frame, drawn by chat and by the Figures
@@ -729,8 +731,9 @@ And for voice mode: what you say is recorded in this browser and, with a hosted
 engine, sent to Groq, OpenRouter or your own server to be transcribed. The
 browser's own recognition sends it to whoever makes the browser (Google for
 Chrome, Apple for Safari) unless the browser runs it on the device. Choose
-under **Settings → Listening → Talking**. Nothing is recorded while voice mode
-is off.
+under **Settings → Voice**. Nothing is recorded while voice mode is off, except
+during the microphone check on that page, which closes itself after thirty
+seconds.
 
 ---
 

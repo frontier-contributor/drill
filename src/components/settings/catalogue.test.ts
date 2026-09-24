@@ -88,6 +88,11 @@ const MUST_FIND: [string, string][] = [
   ["tts", "listening.voice"],
   ["speed", "listening.playback"],
   ["saved audio", "listening.audio"],
+  ["voice mode", "voice.check"],
+  ["microphone", "voice.check"],
+  ["whisper", "voice.hearing"],
+  ["language", "voice.hearing"],
+  ["interrupt", "voice.turns"],
   ["temperature", "conversation.sampling"]
 ];
 

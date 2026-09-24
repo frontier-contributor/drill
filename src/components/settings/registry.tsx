@@ -21,6 +21,7 @@ import UsageScope from "./UsageScope";
 import ConversationScope from "./ConversationScope";
 import Connection from "./sections/Connection";
 import ChatPrefs from "./sections/ChatPrefs";
+import Voice from "./sections/Voice";
 import Listening from "./sections/Listening";
 import Memory from "./sections/Memory";
 import Review from "./sections/Review";
@@ -37,6 +38,7 @@ const RENDER: Record<CatId, () => ReactNode> = {
   conversation: () => <ConversationScope />,
   connection: () => <Connection />,
   chat: () => <ChatPrefs />,
+  voice: () => <Voice />,
   listening: () => <Listening />,
   memory: () => <Memory />,
   review: () => <Review />,

@@ -89,7 +89,7 @@ export const DEFAULT_SETTINGS: Settings = {
   speech: { engine: "", rate: 1, follow: true, cacheMB: 25, voices: {} },
   pdfEngine: "local",
   visualsOff: [],
-  talk: { ears: "", hearModels: {}, sensitivity: "balanced", bargeIn: true, style: "talk", model: "" }
+  talk: { ears: "", hearModels: {}, sensitivity: "balanced", bargeIn: true, style: "talk", model: "", lang: "" }
 };
 
 let db: DrillDB = null as unknown as DrillDB;
@@ -262,7 +262,8 @@ function normTalk(v: unknown): TalkSettings {
     sensitivity: s.sensitivity === "patient" || s.sensitivity === "quick" ? s.sensitivity : d.sensitivity,
     bargeIn: typeof s.bargeIn === "boolean" ? s.bargeIn : d.bargeIn,
     style: s.style === "show" ? "show" : d.style,
-    model: typeof s.model === "string" ? s.model.trim() : ""
+    model: typeof s.model === "string" ? s.model.trim() : "",
+    lang: typeof s.lang === "string" && /^[a-z]{2,3}$/.test(s.lang) ? s.lang : ""
   };
 }
 

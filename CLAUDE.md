@@ -518,6 +518,17 @@ built. Six things bite:
   `window` (bubble), so they run after Shell's document listener; Shell and
   ChatView mark an Escape they used, and the call only ends on one nobody did.
 
+**Settings → Voice is where a call is tried as well as set.** Its microphone
+check opens the same parts a call does (`openCapture`, `openEars`) and drives
+the call's own `VoiceOrb` through an injected `OrbSource` — "ready" is the one
+phase only that source uses: in colour, but still, because the microphone is
+closed. The check never opens while a call has the microphone, stops itself
+after thirty seconds, and closes on unmount. Its voice tiles write the same
+`speech.voices` Listening's pickers do: the app has one voice, not one for
+reading and one for talking. Pauses and interrupting are read on every frame,
+so they change a call in progress; the voice, the ears and the reply style are
+fixed when a call starts.
+
 Turn-taking (`lib/voice/turns.ts`), the streaming chunker, and the noise/echo
 guards (`lib/voice/heard.ts`) are pure and tested — every regression there is
 silent: it talks over you, reads code aloud, or answers a chair creaking. Their
