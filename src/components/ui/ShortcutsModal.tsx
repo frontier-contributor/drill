@@ -61,6 +61,16 @@ const SHORTCUTS: ShortcutGroup[] = [
     ]
   },
   {
+    title: "Voice",
+    note: "In chat. The round button in the empty composer starts a call too.",
+    items: [
+      { keys: [MOD, "Shift", "V"], desc: "Start or end a voice conversation" },
+      { keys: ["Space"], desc: "Hold to keep the floor through pauses — and to cut in while it talks" },
+      { keys: ["M"], desc: "Mute or unmute the microphone" },
+      { keys: ["Esc"], desc: "Leave full screen, then end the call" }
+    ]
+  },
+  {
     title: "Listening",
     note: "While a reply is read with a hosted voice. Keyboard and headphone media keys reach it through the browser; this device's own voice cannot be reached that way.",
     items: [

@@ -35,6 +35,11 @@
  * not to need hiding, and "@" and "/" are rows in the + menu instead of
  * instructions on the bar. The shortcuts sheet still lists the keys.
  *
+ * With nothing in the box, Send has nothing to send, so the same circle
+ * starts a voice conversation instead — the one place the app offers it, and
+ * the moment it makes sense: you had not started typing. A letter typed
+ * turns it back into Send.
+ *
  * The corner button makes the box tall, for the message that is a page rather
  * than a line. It is not remembered: a long draft is the exception, and a
  * composer that stayed half the screen after it was sent would be taking the
@@ -98,6 +103,11 @@ interface Props {
   attachVerdicts?: Record<string, ModalityVerdict>;
   attachReasons?: Record<string, string>;
   onPreview?: (a: Attachment) => void;
+  /** Start a voice conversation — offered in Send's place while the box is
+   *  empty. Absent where voice has no meaning, like the drawing surface. */
+  onVoice?: () => void;
+  /** Why voice cannot start here, said on hover and on press. */
+  voiceWhy?: string;
 }
 
 export default function Composer({
@@ -116,7 +126,9 @@ export default function Composer({
   warnFor,
   attachVerdicts,
   attachReasons,
-  onPreview
+  onPreview,
+  onVoice,
+  voiceWhy
 }: Props) {
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -531,6 +543,16 @@ export default function Composer({
               {busy ? (
                 <button className="csend stop" onClick={onStop} title="Stop generating" aria-label="Stop generating">
                   <Icon name="stop" size={13} />
+                </button>
+              ) : onVoice && !text.trim() && !attachments.length && !pending.length ? (
+                <button
+                  className={"csend voice" + (voiceWhy ? " unable" : "")}
+                  onClick={onVoice}
+                  aria-disabled={!!voiceWhy}
+                  title={voiceWhy || "Talk instead  (Ctrl+Shift+V)"}
+                  aria-label="Start a voice conversation"
+                >
+                  <Icon name="waveform" size={17} />
                 </button>
               ) : (
                 <button

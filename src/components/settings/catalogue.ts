@@ -84,7 +84,7 @@ export const CATEGORY_META: CategoryMeta[] = [
   {
     id: "listening",
     label: "Listening",
-    blurb: "Replies read aloud: the voice, the speed, and the audio it keeps.",
+    blurb: "Replies read aloud and voice conversations: the voice, what hears you, and the audio it keeps.",
     group: "assistant"
   },
   {
@@ -234,6 +234,17 @@ export const SECTIONS = sections({
     title: "Playback",
     sub: "How fast it reads, and whether the page follows along.",
     finds: ["speed", "rate", "faster", "slower", "playback", "follow along", "highlight", "auto-scroll", "karaoke"]
+  },
+  "listening.talking": {
+    cat: "listening",
+    title: "Talking",
+    sub: "Voice conversations: what hears you, how long a pause has to be before it is your turn to be answered, and how replies are shaped.",
+    finds: [
+      "talk", "talking", "voice mode", "voice chat", "voice conversation", "conversation mode", "speak", "speaking",
+      "microphone", "mic", "speech to text", "stt", "transcription", "transcribe", "whisper", "dictation", "hear",
+      "pause", "patience", "sensitivity", "endpoint", "turn", "interrupt", "barge in", "talk over", "hands free",
+      "show", "code on screen", "voice model", "realtime", "chatgpt voice", "advanced voice"
+    ]
   },
   "listening.audio": {
     cat: "listening",

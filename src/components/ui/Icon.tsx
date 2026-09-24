@@ -23,6 +23,9 @@ export type IconName =
   | "star"
   | "star-filled"
   | "mic"
+  | "mic-off"
+  | "waveform"
+  | "lock"
   | "pencil"
   | "archive"
   | "copy"
@@ -86,6 +89,12 @@ const PATHS: Record<IconName, { d: string; fill?: boolean }[]> = {
   star: [{ d: "m12 3.7 2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.6 9.8l5.8-.8Z" }],
   "star-filled": [{ d: "m12 3.7 2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.6 9.8l5.8-.8Z", fill: true }],
   mic: [{ d: "M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3ZM19 11a7 7 0 0 1-14 0M12 18v3" }],
+  "mic-off": [{ d: "M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3ZM19 11a7 7 0 0 1-14 0M12 18v3" }, { d: "M4 4l16 16" }],
+  /* Voice mode. Bars of different heights read as "a voice" at any size, where
+     a microphone reads as "dictate into the box" — which is a different act. */
+  waveform: [{ d: "M4 10.5v3M8 7.5v9M12 4.5v15M16 7.5v9M20 10.5v3" }],
+  /* Holding the floor in voice mode: while it is held, no pause ends the turn. */
+  lock: [{ d: "M6.5 11h11v9h-11z" }, { d: "M8.5 11V8a3.5 3.5 0 0 1 7 0v3" }],
   pencil: [{ d: "M4 20h4L20 8a2.8 2.8 0 0 0-4-4L4 16Z" }],
   archive: [{ d: "M3 7h18v3H3zM5 10v9h14v-9M10 14h4" }],
   copy: [{ d: "M9 9h11v11H9zM5 15H4V4h11v1" }],

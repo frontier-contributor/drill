@@ -10,6 +10,7 @@
  * One voice at a time: starting a call stops whatever Listen was reading.
  * ========================================================================== */
 
+import * as AI from "@/services/ai";
 import * as store from "@/services/store";
 import { player } from "@/services/speech/player";
 import { createTalkEngine, deviceChoice, resolveChoice } from "@/services/speech/choice";
@@ -23,6 +24,31 @@ export { chooseEars, earsVerdict, earsLabel } from "./ears";
 
 let ctx: AudioContext | null = null;
 
+/**
+ * Open the connections a call will need before it needs them.
+ *
+ * The first question of a call otherwise pays for DNS, TCP and TLS to three
+ * hosts on top of its own latency — a few hundred milliseconds, spent exactly
+ * where a voice interface is judged. Anonymous, to match the credential-less
+ * CORS requests the backends make; a preconnect in the wrong mode is a
+ * connection the browser opens and then cannot use.
+ */
+function warm(urls: string[]): void {
+  for (const u of urls) {
+    try {
+      const origin = new URL(u).origin;
+      if (document.head.querySelector(`link[rel="preconnect"][href="${origin}"]`)) continue;
+      const link = document.createElement("link");
+      link.rel = "preconnect";
+      link.href = origin;
+      link.crossOrigin = "anonymous";
+      document.head.appendChild(link);
+    } catch {
+      /* not a URL — nothing to warm */
+    }
+  }
+}
+
 export const voice = createVoiceSession({
   prepare(hooks, spend) {
     const ears = chooseEars();
@@ -32,6 +58,11 @@ export const voice = createVoiceSession({
       throw new Error("Nothing here can speak. Add a key under Settings → Connection, or use a browser with voices of its own.");
     }
     player.stop();
+    warm([
+      AI.resolve().baseUrl,
+      ...(ears.id !== "browser" ? [AI.speechCreds(ears.id).baseUrl] : []),
+      ...(choice.info.id !== "device" ? [AI.speechCreds(choice.info.id).baseUrl] : [])
+    ]);
 
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AC) throw new Error("This browser cannot process audio for voice mode.");

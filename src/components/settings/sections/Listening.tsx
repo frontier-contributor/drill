@@ -39,6 +39,7 @@ import SelectRow from "../../ui/SelectRow";
 import SwitchRow from "../../ui/SwitchRow";
 import TextRow from "../../ui/TextRow";
 import Section from "../Section";
+import Talking from "./Talking";
 import type { SpeechSettings } from "@/types";
 
 const CAPS: SpeechSettings["cacheMB"][] = [0, 25, 100];
@@ -242,6 +243,10 @@ export default function Listening() {
           onToggle={() => update({ follow: !s.follow })}
         />
       </Section>
+
+      {/* Voice conversations use the voice chosen above; what hears you, and
+          how patiently, is its own group. */}
+      <Talking />
 
       <Section id="listening.audio">
         <div className="seg">

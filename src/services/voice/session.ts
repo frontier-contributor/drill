@@ -66,6 +66,9 @@ export interface VoiceState {
    *  own voice here, so interrupting takes a tap, a key, or speaking up. */
   duplex: "full" | "half";
   style: VoiceStyle;
+  /** This reply put something on screen — code, a figure, a table — which the
+   *  full-screen view cannot show, and says so. */
+  onScreen: boolean;
 }
 
 /** The part of Mouth the session drives — the real one, or a fake. */
@@ -133,7 +136,8 @@ function initial(): VoiceState {
     earsLabel: "",
     voiceLabel: "",
     duplex: "full",
-    style: "talk"
+    style: "talk",
+    onScreen: false
   };
 }
 
@@ -211,7 +215,7 @@ export function createVoiceSession(deps: SessionDeps): VoiceSession {
         return;
       }
       if (asking) asking.heard = chunk;
-      set({ phase: barge ? state.phase : "speaking", saying: chunk.text });
+      set({ phase: barge ? state.phase : "speaking", saying: chunk.text, ...(chunk.cue ? { onScreen: true } : {}) });
     },
     drained() {
       if (asking && !asking.done) return;
@@ -382,7 +386,7 @@ export function createVoiceSession(deps: SessionDeps): VoiceSession {
     const a: Asking = { turnId: null, chunker, acc: "", done: false, heard: null, filler: false };
     asking = a;
     mouth.begin();
-    set({ phase: "thinking", caption: text, saying: "", status: "", notice: null });
+    set({ phase: "thinking", caption: text, saying: "", status: "", notice: null, onScreen: false });
 
     const voice: VoiceTurn = {
       style: state.style,

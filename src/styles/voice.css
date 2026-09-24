@@ -1,0 +1,268 @@
+/* ============================================================================
+ * voice.css — voice mode: the bar in the composer's place, and the stage.
+ *
+ * Imported by the voice components, so it rides chat's lazy chunk and costs
+ * the review loop nothing. Tokens only; the one filled control is the red
+ * End, because ending a call is the one thing on it that is not undone by
+ * pressing again.
+ * ========================================================================== */
+
+/* ------------------------------------------------------------------ bar -- */
+/* The composer's own box, doing a different job: same edge, same surface,
+   same place, so starting a call moves nothing on the screen. */
+.voicebar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-height: 72px;
+  padding: var(--s-2) var(--s-2) var(--s-2) var(--s-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-4);
+  background: var(--surface);
+  box-shadow: var(--lift-1);
+  animation: vb-in var(--med) var(--ease-spring);
+}
+@keyframes vb-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.99);
+  }
+}
+
+.vb-orb,
+.vs-orb {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-full);
+  background: transparent;
+  cursor: pointer;
+}
+.vb-orb:active,
+.vs-orb:active {
+  transform: scale(0.97);
+}
+.vorb {
+  display: block;
+}
+
+.vb-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.vb-status {
+  font-family: var(--sans);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* While it hears you or answers you, the status is the news. */
+.ph-hearing .vb-status,
+.ph-speaking .vb-status,
+.ph-thinking .vb-status {
+  color: var(--ink-2);
+}
+.vb-caption {
+  margin-top: 2px;
+  font-family: var(--serif);
+  font-size: calc(var(--t-md) * var(--text-scale));
+  line-height: var(--lh-snug);
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* Your words are quoted; its words are said; a note is a note. */
+.vb-caption.you {
+  font-style: italic;
+  color: var(--ink-2);
+}
+.vb-caption.note {
+  font-family: var(--sans);
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+}
+
+.vb-tools {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Talk / Show: two exclusive values that each explain themselves on hover,
+   so a segmented pair rather than a menu. */
+.vb-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  margin-right: var(--s-1);
+  border-radius: var(--r-full);
+  background: var(--page-2);
+  box-shadow: inset 0 0 0 1px var(--rule-soft);
+}
+.vb-segbtn {
+  border: 0;
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--ink-3);
+  font-family: var(--sans);
+  font-size: var(--t-2xs);
+  font-weight: 500;
+  padding: var(--s-1) var(--s-3);
+  cursor: pointer;
+  transition: background var(--fast), color var(--fast);
+}
+.vb-segbtn:hover {
+  color: var(--ink);
+}
+.vb-segbtn.on {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--lift-1);
+}
+
+.vb-end {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  margin-left: var(--s-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--red);
+  border-radius: var(--r-full);
+  background: var(--red-tint);
+  color: var(--red);
+  cursor: pointer;
+  transition: transform var(--fast), background var(--fast);
+}
+.vb-end:active {
+  transform: scale(0.94);
+}
+
+/* A phone keeps every control and gives the words a line of their own. */
+@media (max-width: 560px) {
+  .voicebar {
+    flex-wrap: wrap;
+    row-gap: var(--s-1);
+  }
+  .vb-text {
+    flex-basis: calc(100% - 52px - var(--s-3));
+  }
+  .vb-tools {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .vb-seg {
+    margin-right: auto;
+  }
+}
+
+/* ---------------------------------------------------------------- stage -- */
+/* Over the chat column only: the orb, a line of status, a line of words, and
+   the controls along the bottom where a thumb finds them. */
+.voice-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--s-5) var(--gutter) var(--s-4);
+  background: var(--page);
+  animation: vs-in var(--med) var(--ease);
+}
+@keyframes vs-in {
+  from {
+    opacity: 0;
+  }
+}
+.vs-center {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: var(--page-w);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-3);
+  text-align: center;
+}
+.vs-status {
+  margin-top: var(--s-3);
+  font-family: var(--sans);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.ph-hearing .vs-status,
+.ph-speaking .vs-status,
+.ph-thinking .vs-status {
+  color: var(--ink-2);
+}
+.vs-caption {
+  min-height: calc(var(--t-lg) * 2 * var(--lh-snug));
+  max-width: 34rem;
+  font-family: var(--serif);
+  font-size: var(--t-lg);
+  line-height: var(--lh-snug);
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.vs-caption.you {
+  font-style: italic;
+  color: var(--ink-2);
+}
+.vs-caption.note {
+  font-family: var(--sans);
+  font-size: var(--t-sm);
+  color: var(--ink-3);
+}
+.vs-shown {
+  border: 1px solid var(--accent-45);
+  border-radius: var(--r-full);
+  background: var(--accent-10);
+  color: var(--accent);
+  font-family: var(--sans);
+  font-size: var(--t-xs);
+  padding: var(--s-1) var(--s-3);
+  cursor: pointer;
+}
+.vs-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: var(--s-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  box-shadow: var(--lift-2);
+}
+.vs-foot {
+  margin: var(--s-3) 0 0;
+  min-height: 1em;
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  color: var(--ink-3);
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voicebar,
+  .voice-stage {
+    animation: none;
+  }
+}

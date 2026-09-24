@@ -21,12 +21,13 @@ especially its **Project layout** section. Do not restate it here.
 npm run dev     # vite; usually :5173, falls back to :5174 if taken
 npm run lint    # tsc --noEmit. The only lint there is
 npm test        # tsx --test src/**/*.test.ts
-                # 273 tests: fsrs, cardFormat, memory*, effort, title,
+                # 312 tests: fsrs, cardFormat, memory*, effort, title,
                 # thinking, agent/loop, settings/catalogue, logBudget,
                 # storage, activity, gaps, retry, budget, ai/structured,
                 # weeks, rememberArg, dayBrief, files/parts (the sweep),
                 # visuals/{srcdoc (the walls), keep},
-                # speech/{words, availability, player}
+                # speech/{words, availability, player},
+                # voice/{turns, chunker, heard (+ wav), session}
 npm run build   # tsc -b && vite build
 ```
 
@@ -480,6 +481,48 @@ tokens. Four traps:
   open.
 - **`AI.speechCreds()` reads the credential vault**, so a voice can use a
   backend chat is not pointed at. It never writes `settings.backend`.
+
+**Voice mode is a call, not a feature of the composer.** The round button in
+an empty composer (or ctrl+shift+V) starts one; `services/voice/session.ts` is
+the state machine, and like `agent/loop.ts` it takes every part injected —
+capture, ears, mouth, the chat as a `Brain` — so `session.test.ts` plays whole
+calls with fakes. `services/voice/index.ts` is the only place the real parts are
+built. Six things bite:
+
+- **Never route the reply's audio through Web Audio.** Chrome's echo
+  cancellation only subtracts what it plays through an `<audio>` element (or a
+  WebRTC track). The mouth plays on the Listen engines' element and reads its
+  loudness by *decoding a copy* of each clip for the orb. Connect the element to
+  an AudioContext and the microphone hears the reply as someone interrupting.
+  The device voice (`speechSynthesis`) is never subtracted, which is why the
+  session drops to half duplex with it — a higher bar to interrupt.
+- **The AudioContext and the voice are made inside the click.** `start()` runs
+  `prepare()` synchronously before its first await; a context made after one
+  starts suspended on Safari. Keep it that way.
+- **There is no mode picker in voice, on purpose.** A voice turn takes the
+  *voice route* in `ChatContext.run()` whatever `c.mode` says: the agent loop
+  with `planning: "auto"` (plan tools offered, the prompt names the plan tool
+  from the catalogue via `opensPlan`, never by string) and `web_lookup` as a
+  tool where `availability("web")` allows. A plain question is still one
+  request. The thread's own mode is untouched.
+- **An interruption cuts the history.** `cutReply(turnId, text)` puts what was
+  heard in `content` and the rest in `Variant.interrupted.full`; the next
+  request replays history, and a model that remembers saying what nobody heard
+  answers the wrong conversation. `ChatContext` holds it pending until the
+  aborted run writes its variant.
+- **`send()` reads `busyRef`/`convRef`, not state.** The session calls it from a
+  closure several renders old, the moment an interrupted reply is stopped;
+  reading state there dropped the turn or created a second conversation. A
+  refused send is detected because `run()` calls `voice.onStart` synchronously.
+- **Escape is layered through `preventDefault`.** The call's keys are on
+  `window` (bubble), so they run after Shell's document listener; Shell and
+  ChatView mark an Escape they used, and the call only ends on one nobody did.
+
+Turn-taking (`lib/voice/turns.ts`), the streaming chunker, and the noise/echo
+guards (`lib/voice/heard.ts`) are pure and tested — every regression there is
+silent: it talks over you, reads code aloud, or answers a chair creaking. Their
+thresholds have been reasoned about, not yet tuned against a real microphone in
+a real room, and that is the first thing to do with a real key.
 
 **There is still no error boundary at the root.** A render crash in `Shell`,
 `Sidebar`, or a composer chip rendered before its new prop was threaded through

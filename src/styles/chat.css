@@ -1521,6 +1521,39 @@
   cursor: default;
   transform: none;
 }
+/* A turn said or answered out loud, marked by the head rather than the body:
+   it is where a turn came from, not what it says. */
+.turn-voice {
+  display: inline-flex;
+  color: var(--ink-3);
+}
+/* A reply talked over in voice mode. Not an error, so not the red strip: it
+   stopped because you spoke, which is the conversation working. */
+.cut-in {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+  margin-top: var(--s-2);
+  font-family: var(--sans);
+  font-size: var(--t-2xs);
+  color: var(--ink-3);
+}
+.cut-in button {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+/* The same circle, filled, starting a voice conversation while the box is
+   empty — the invitation the grey Send could not be. Dimmed, not hidden,
+   when voice cannot start here: pressing it says why. */
+.composer-tools .csend.voice.unable {
+  opacity: 0.45;
+}
 .csend.stop,
 .csend.stop:hover {
   --btn-bg: var(--red-tint);

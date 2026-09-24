@@ -113,6 +113,21 @@ openrouter.ai.
   nothing and work offline. Only voices that can actually speak from where you
   are get offered, every paid character is on the Usage page, and a replay
   comes from a capped cache for free.
+- **Talk instead of typing** — with the box empty, the round button beside it
+  (or `ctrl` + `shift` + `v`) starts a voice conversation in place of the
+  composer. Say something and stop: it hears the end of your turn, answers out
+  loud sentence by sentence while the reply is still being written, and both
+  sides land in the thread as you go. Talk over it and it stops and listens —
+  and the thread keeps only what you actually heard. Hold Space (or the lock)
+  to keep the floor through a long pause. There is no mode to pick: each turn
+  decides for itself whether it needs a plain answer, a look through your
+  record, a web search or a plan, and the bar says which it chose. **Talk**
+  answers in short spoken sentences with nothing on screen; **Show** may put
+  code, a figure or a table in the thread and tell you to look. You are heard
+  by Whisper on Groq or OpenRouter (fractions of a cent an hour) or your
+  browser's own recognition for free, and answered in the voice Listening
+  uses. The orb moves with your voice and with its own, and a full-screen view
+  is one click away.
 
 ### Figures
 
@@ -450,6 +465,10 @@ Press `?` anywhere for this list in the app.
 **Listening** — while a reply is read with a hosted voice, the media keys on a
 keyboard or headphones pause and resume it and skip a sentence either way.
 
+**Voice** — `ctrl` + `shift` + `v` starts or ends a call. During one, hold
+`space` to keep the floor (and to cut in while it talks), `m` mutes, and
+`esc` leaves full screen and then ends the call.
+
 ---
 
 ## Card format
@@ -508,6 +527,9 @@ src/
     speech/                 what a reply sounds like: maths to words, sentences,
                              chunking, and which voice can speak (all pure but
                              segment.ts, which reads the rendered reply)
+    voice/                  voice mode, pure: when a turn ends, a streaming reply
+                             as things to say, what is noise or echo, the Talk
+                             and Show instructions, and 16 kHz WAV
   services/
     storage.ts          review persistence — localStorage today; swap this file
                          if Drill ever grows a real backend
@@ -521,6 +543,10 @@ src/
     speech/              reading aloud: the one player, its two engines (the
                          browser's voice, hosted audio) and the capped cache,
                          which is its own IndexedDB and never in a backup
+    voice/               voice mode: the microphone (an AudioWorklet), the ears
+                         (hosted Whisper or the browser's own), the mouth over
+                         the Listen engines, and the session that ties them —
+                         every part injected, so a whole call is testable
     files/               attachments: one reader for every file (pdf.js, mammoth,
                          read-excel-file, all loaded on demand), the drill-files
                          store for originals, and the sweep for unused ones
@@ -558,6 +584,7 @@ src/
                           surface shared across every section
     views.css            journal + exam            (lazy)
     chat.css             chat                      (lazy)
+    voice.css            voice mode                (lazy, with chat)
     home.css             home, and the chapter opening cards and figures share
     cards.css            cards — and the toolbar and pills figures reuses (lazy)
     figures.css          the figure frame, drawn by chat and by the Figures
@@ -697,6 +724,13 @@ what you are studying, point the conversation at Ollama.
 The same goes for reading a reply aloud: a hosted voice is sent the reply's
 text. Your browser's own voice keeps it on the machine — pick it under
 **Settings → Listening**.
+
+And for voice mode: what you say is recorded in this browser and, with a hosted
+engine, sent to Groq, OpenRouter or your own server to be transcribed. The
+browser's own recognition sends it to whoever makes the browser (Google for
+Chrome, Apple for Safari) unless the browser runs it on the device. Choose
+under **Settings → Listening → Talking**. Nothing is recorded while voice mode
+is off.
 
 ---
 

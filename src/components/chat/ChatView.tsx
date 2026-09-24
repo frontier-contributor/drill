@@ -6,7 +6,7 @@
  * where chat reaches into the drill half of the app and it is worth having
  * that wiring in one readable list rather than scattered through components.
  * ========================================================================== */
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from "react";
 import * as chatStore from "@/services/chatStore";
 import * as store from "@/services/store";
 import * as AI from "@/services/ai";
@@ -48,6 +48,10 @@ import ModelChip from "./ModelChip";
 import ToolsMenu from "./ToolsMenu";
 import ImageComposer from "./ImageComposer";
 import ListenBar from "./ListenBar";
+import VoiceBar from "./voice/VoiceBar";
+import VoiceStage from "./voice/VoiceStage";
+import { voice, voiceReady, type Brain } from "@/services/voice";
+import type { VoiceStyle } from "@/types";
 import ErrorGuard from "../ui/ErrorGuard";
 import AttachmentPreview from "./AttachmentPreview";
 
@@ -163,8 +167,13 @@ export default function ChatView() {
         /* Settings is not handled here. It is one surface for the whole app
            now, and Shell — which mounts it — owns its Escape, so closing it
            from chat must not also clear the message you were writing. */
-        if (palette) setPalette(false);
-        else if (cardSource) setCardSource(null);
+        if (palette) {
+          setPalette(false);
+          e.preventDefault();
+        } else if (cardSource) {
+          setCardSource(null);
+          e.preventDefault();
+        }
       }
     };
     document.addEventListener("keydown", onKey);
@@ -172,6 +181,131 @@ export default function ChatView() {
   }, [palette, cardSource]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const newChat = useCallback(() => chat.newConversation(), [chat]);
+
+  /* ---------------------------------------------------------------- voice -- */
+
+  const vs = useSyncExternalStore(voice.subscribe, voice.get, voice.get);
+  const voiceOn = vs.phase !== "off";
+  const [stage, setStage] = useState(false);
+
+  /* The chat, as voice mode reaches it — through a ref, because the session
+     holds this object for the whole call and every render makes a new `chat`.
+     A brain that closed over the first one would send every turn into the
+     conversation that was open when the call began, or into none. */
+  const chatRef = useRef(chat);
+  chatRef.current = chat;
+  const brain = useMemo<Brain>(
+    () => ({
+      ask: (text, v) => chatRef.current.send(text, [], v),
+      cut: (id, text) => chatRef.current.cutReply(id, text),
+      stop: () => chatRef.current.stop(),
+      /* What saying the replies cost goes on the thread's running total, the
+         same place a reply read aloud with Listen puts it. */
+      spend: (_chars, cost) => {
+        const conv = chatRef.current.conversation;
+        if (!conv || !cost) return;
+        chatStore.addUsageTo(conv, { promptTokens: 0, completionTokens: 0, cost });
+        chatStore.persist(conv);
+      }
+    }),
+    []
+  );
+
+  const voiceStyle = (s: VoiceStyle) => {
+    voice.setStyle(s);
+    if (chat.conversation) chat.update({ voiceStyle: s });
+  };
+
+  /** Why voice cannot start here, or "" — the same checks the button's hover
+   *  text makes, asked again at the press because a key may have been added
+   *  in between. */
+  const voiceBlocked = (): string => {
+    const r = AI.ready(c ? { backend: c.backend, model: c.model } : undefined);
+    if (!r.ok) return r.why || "Set up a model first.";
+    const v = voiceReady();
+    return v.ok ? "" : v.why;
+  };
+
+  /* Must run inside the click or key press: the session opens its audio and
+     its voice there, while the browser still counts it as a gesture. */
+  const startVoice = () => {
+    const why = voiceBlocked();
+    if (why) {
+      toast(why, 6000);
+      return;
+    }
+    if (chat.busy) {
+      toast("Let the reply finish first — or stop it — then start talking.");
+      return;
+    }
+    void voice.start(brain, c?.voiceStyle || store.settings().talk.style);
+  };
+  const startVoiceRef = useRef(startVoice);
+  startVoiceRef.current = startVoice;
+
+  useEffect(() => {
+    if (!voiceOn) setStage(false);
+  }, [voiceOn]);
+
+  /* A call belongs to the conversation it is in. The first spoken turn of a
+     new chat creates the conversation, which moves the route from nothing to
+     something — that is the call continuing, not leaving. Moving from one
+     conversation to another is leaving. */
+  const lastConv = useRef(conversationId);
+  useEffect(() => {
+    const prev = lastConv.current;
+    lastConv.current = conversationId;
+    if (prev && prev !== conversationId && voice.get().phase !== "off") voice.stop();
+  }, [conversationId]);
+  useEffect(() => () => voice.stop(), []);
+
+  /* The call's keys. On window, in the bubble phase, so they run after Shell's
+     document listener: Escape closes Settings or the shortcut sheet first,
+     and only ends the call when there was nothing over it — Shell marks the
+     keypress it used with preventDefault. */
+  useEffect(() => {
+    const typing = (el: Element | null) =>
+      !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || (el as HTMLElement).isContentEditable);
+    const down = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      const on = voice.get().phase !== "off";
+      if (mod && e.shiftKey && e.key.toLowerCase() === "v") {
+        e.preventDefault();
+        if (on) voice.stop();
+        else startVoiceRef.current();
+        return;
+      }
+      if (!on || settings.cat) return;
+      if (e.key === "Escape") {
+        if (e.defaultPrevented) return;
+        if (stage) setStage(false);
+        else voice.stop();
+        return;
+      }
+      if (typing(document.activeElement) || mod || e.altKey) return;
+      if (e.key === " ") {
+        e.preventDefault();
+        if (e.repeat) return;
+        const p = voice.get().phase;
+        if (p === "speaking" || p === "thinking") voice.interrupt();
+        voice.setLocked(true);
+      } else if (e.key.toLowerCase() === "m") {
+        voice.setMuted(!voice.get().muted);
+      }
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key === " " && voice.get().locked) {
+        e.preventDefault();
+        voice.setLocked(false);
+      }
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, [stage, settings.cat]);
 
   /* ------------------------------------------------------------ actions -- */
 
@@ -826,7 +960,13 @@ It is built from your memories and what the review loop says you keep getting wr
             chat" this replaced. Keyed the same way, so the remount when the
             first message creates a conversation still clears the draft rather
             than leaking it into the new thread. */}
-        {drawing ? (
+        {/* A call takes the composer's place and its shape: the thread above
+            stays live, and what is said lands in it as it happens. */}
+        {voiceOn ? (
+          <ErrorGuard>
+            <VoiceBar expanded={stage} onExpand={() => setStage((v) => !v)} onStyle={voiceStyle} />
+          </ErrorGuard>
+        ) : drawing ? (
           <ImageComposer
             key={(conversationId || "new") + ":img"}
             disabled={!readiness.ok}
@@ -855,7 +995,15 @@ It is built from your memories and what the review loop says you keep getting wr
           placeholder={readiness.ok ? "Ask anything" : readiness.why}
           onSend={(text, attachments) => void chat.send(text, attachments)}
           onStop={chat.stop}
+          onVoice={startVoice}
+          voiceWhy={voiceBlocked()}
         />
+        )}
+
+        {voiceOn && stage && (
+          <ErrorGuard>
+            <VoiceStage onCollapse={() => setStage(false)} onStyle={voiceStyle} />
+          </ErrorGuard>
         )}
       </div>
 

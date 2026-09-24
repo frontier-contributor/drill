@@ -136,9 +136,18 @@ export default function Shell({
       } else if (e.key === "Escape") {
         /* Innermost first. Settings sits over everything else, so it is the
            thing Escape means while it is open. */
-        if (settings.cat) settings.close();
-        else if (shortcuts) setShortcuts(false);
-        else if (drawer) setDrawer(false);
+        /* Marked when used, so a layer beneath — a voice call, listening on
+           window after this — can tell the keypress has been spent. */
+        if (settings.cat) {
+          settings.close();
+          e.preventDefault();
+        } else if (shortcuts) {
+          setShortcuts(false);
+          e.preventDefault();
+        } else if (drawer) {
+          setDrawer(false);
+          e.preventDefault();
+        }
       }
     }
     document.addEventListener("keydown", onKey);

@@ -105,11 +105,18 @@ export default function MessageTurn({
      five-line list unfolding above every long answer would cost more reading
      height than it gives back. */
   const [tocOpen, setTocOpen] = useState(false);
+  /* A reply talked over in voice mode keeps what it had written; this shows
+     it. Off by default, because what the thread says is what was heard. */
+  const [showUnsaid, setShowUnsaid] = useState(false);
 
   const isUser = turn.role === "user";
   const streaming = streamingText != null;
-  const content = streaming ? streamingText : chatStore.activeContent(turn);
   const variant = turn.variants[turn.active];
+  const content = streaming
+    ? streamingText
+    : showUnsaid && variant?.interrupted
+      ? variant.interrupted.full
+      : chatStore.activeContent(turn);
 
   /* Which kinds of figure are switched on. ChatView subscribes to the store,
      so turning one off redraws every reply on screen. */
@@ -252,6 +259,11 @@ export default function MessageTurn({
     >
       <div className="turn-head">
         <span>{isUser ? "You" : "Assistant"}</span>
+        {turn.voice && (
+          <span className="turn-voice" title={isUser ? "Said out loud" : "Answered out loud"}>
+            <Icon name="waveform" size={11} />
+          </span>
+        )}
         {turn.starred && <Icon name="star-filled" size={11} style={{ color: "var(--amber)" }} />}
         {turn.variants.length > 1 && (
           <span className="variant-nav">
@@ -467,6 +479,13 @@ export default function MessageTurn({
           <button className="tact danger" onClick={onDelete} title="Delete message">
             <Icon name="close" size={11} />
           </button>
+        </div>
+      )}
+
+      {!isUser && !streaming && variant?.interrupted && (
+        <div className="cut-in">
+          <span>{showUnsaid ? "All of it — the part after you cut in was never said." : "You cut in here. The rest was never said."}</span>
+          <button onClick={() => setShowUnsaid((v) => !v)}>{showUnsaid ? "Show what was heard" : "Show what it had written"}</button>
         </div>
       )}
 
