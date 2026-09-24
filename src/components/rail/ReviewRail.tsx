@@ -18,6 +18,8 @@ import * as memoryStore from "@/services/memoryStore";
 import { useDrillStore } from "@/hooks/useDrillStore";
 import { useStoreSync } from "@/hooks/useStoreSync";
 import { useSheet } from "@/context/SheetContext";
+import { useRoute } from "@/context/RouteContext";
+import { requestWeakExam } from "@/lib/examIntent";
 import { streaks, week as weekOf } from "@/lib/activity";
 import { gapsFrom } from "@/lib/gaps";
 import { stripTags } from "@/lib/util";
@@ -56,6 +58,7 @@ export default function ReviewRail() {
   useStoreSync(examStore);
   useStoreSync(memoryStore);
   const { open } = useSheet();
+  const { openExam } = useRoute();
 
   const s = store.stats();
   const counts = store.counts();
@@ -149,11 +152,24 @@ export default function ReviewRail() {
             Nothing recurring yet. Turn on AI marking in Settings and this fills in as you write answers.
           </RailEmpty>
         ) : (
-          <RailList>
-            {gaps.map((g) => (
-              <RailItem key={g.text} mark={`${g.n}×`} text={g.text} />
-            ))}
-          </RailList>
+          <>
+            <RailList>
+              {gaps.map((g) => (
+                <RailItem key={g.text} mark={`${g.n}×`} text={g.text} />
+              ))}
+            </RailList>
+            <RailSub>
+              <button
+                className="textlink"
+                onClick={() => {
+                  requestWeakExam();
+                  openExam(null);
+                }}
+              >
+                Examine me on these
+              </button>
+            </RailSub>
+          </>
         )}
       </RailGroup>
 

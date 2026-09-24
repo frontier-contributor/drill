@@ -23,6 +23,14 @@ export interface ExamScope {
    *  material by relevance instead of by deck/tag. Kept on the scope so
    *  "more questions" replays the same target rather than losing it. */
   topic?: string;
+  /** "weak": aimed at what the learner keeps getting wrong rather than at a
+   *  subject or a period. The material is the cards those mistakes happened
+   *  on, plus leeches and lapsed cards; `gaps` is the list itself. */
+  focus?: "weak";
+  /** The recurring confusions this exam targets, in the marker's words,
+   *  frozen when it was built — so "more questions" aims at the same ones
+   *  rather than at whatever the log says by then. */
+  gaps?: string[];
 }
 
 export interface ExamSourceRef {

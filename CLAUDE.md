@@ -278,6 +278,17 @@ if you touch the clustering: match on a *ratio*, not a count of shared words
 against each cluster's fixed seed, not its accumulated union, or a gap stops
 recognising itself after four recordings. `gaps.test.ts` holds both.
 
+**A gap has one definition, fed from two places.** `gapsFrom` takes any
+`GapSource` (`t`, `m`, `c`), so a marked exam answer (`examMisses` in
+`lib/examScope.ts`) is clustered alongside review log entries rather than
+counted by exact string, which is what the exam rail did until 2026-09-24.
+The weak-spots exam (`focus: "weak"`) is built from those clusters' `cardIds`,
+round-robin so one big confusion cannot crowd out the rest, then
+`store.weakCardsOf` (the app's one weak-card ranking; chat's "weak spots"
+source reads it too). `scope.gaps` is frozen on the exam so "more questions"
+aims at the same list. The review rail hands off through `lib/examIntent.ts`,
+which imports nothing, because the rail is in the entry chunk.
+
 **Backends and credentials.** `services/ai/backends.ts` holds one entry per
 provider — OpenRouter, Groq, Ollama, and a generic OpenAI-compatible one — and
 anything speaking the OpenAI wire format needs only headers, via

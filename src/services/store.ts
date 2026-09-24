@@ -501,6 +501,31 @@ export function stateOf(d: Deck, id: string): SRSState {
 export function isLeech(st: SRSState | null | undefined): boolean {
   return FSRS.isLeech(st, params());
 }
+/**
+ * Cards the learner is measurably worst at: leeches first, then most lapses,
+ * then the lowest stability among cards actually in review. Cards never seen
+ * are excluded — not knowing something you have not studied is not a weak
+ * spot.
+ *
+ * One ranking for the app. Chat's "weak spots" source and the weak-spots exam
+ * both read it, so the tutor and the examiner cannot disagree about which
+ * cards those are.
+ */
+export function weakCardsOf(d: Deck, limit = Infinity): Card[] {
+  return d.cards
+    .map((c) => ({ c, st: d.srs[c.id] }))
+    .filter((x) => x.st && x.st.reps)
+    .sort((a, b) => {
+      const leechDelta = Number(isLeech(b.st)) - Number(isLeech(a.st));
+      if (leechDelta) return leechDelta;
+      const lapseDelta = (b.st!.lapses || 0) - (a.st!.lapses || 0);
+      if (lapseDelta) return lapseDelta;
+      return a.st!.S - b.st!.S;
+    })
+    .slice(0, limit)
+    .map((x) => x.c);
+}
+
 export function currentInterval(st: SRSState | null | undefined): number {
   return FSRS.currentIntervalMinutes(st, params());
 }

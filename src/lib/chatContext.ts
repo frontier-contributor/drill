@@ -56,21 +56,9 @@ function deckBlock(d: Deck, cards: Card[], heading: string): string {
   return `${heading}\n${lines.join("\n")}${more}`;
 }
 
-/** Cards the learner is measurably worst at: leeches first, then the lowest
- *  stability among cards actually in review. Cards never seen are excluded —
- *  not knowing something you have not studied is not a weak spot. */
+/** The app's one weak-card ranking — see store.weakCardsOf. */
 function weakCards(d: Deck): Card[] {
-  const scored = d.cards
-    .map((c) => ({ c, st: d.srs[c.id] }))
-    .filter((x) => x.st && x.st.reps)
-    .sort((a, b) => {
-      const leechDelta = Number(store.isLeech(b.st!)) - Number(store.isLeech(a.st!));
-      if (leechDelta) return leechDelta;
-      const lapseDelta = (b.st!.lapses || 0) - (a.st!.lapses || 0);
-      if (lapseDelta) return lapseDelta;
-      return a.st!.S - b.st!.S;
-    });
-  return scored.slice(0, MAX_CARDS).map((x) => x.c);
+  return store.weakCardsOf(d, MAX_CARDS);
 }
 
 function dueCards(d: Deck): Card[] {

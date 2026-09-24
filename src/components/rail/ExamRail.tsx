@@ -8,6 +8,8 @@
 import * as examStore from "@/services/examStore";
 import { useStoreSync } from "@/hooks/useStoreSync";
 import { ago } from "@/lib/util";
+import { gapsFrom } from "@/lib/gaps";
+import { examMisses } from "@/lib/examScope";
 import type { Exam } from "@/types/exam";
 import { RailEmpty, RailFigure, RailGroup, RailItem, RailList, RailSub } from "./Rail";
 
@@ -20,22 +22,14 @@ function scoreOf(e: Exam): { pct: number; answered: number } | null {
   return { pct: Math.round((got / answered.length) * 100), answered: answered.length };
 }
 
-/** The phrases the marker kept writing down. Normalised to lowercase so
- *  "Chain rule" and "chain rule" are one gap, not two. */
-function recurringGaps(exams: Exam[], limit: number): { text: string; n: number }[] {
-  const counts = new Map<string, { text: string; n: number }>();
-  for (const e of exams) {
-    for (const q of e.questions) {
-      for (const m of q.result?.missing || []) {
-        const k = m.trim().toLowerCase();
-        if (!k) continue;
-        const hit = counts.get(k);
-        if (hit) hit.n++;
-        else counts.set(k, { text: m.trim(), n: 1 });
-      }
-    }
-  }
-  return [...counts.values()].sort((a, b) => b.n - a.n).slice(0, limit);
+/** The phrases the marker kept writing down, clustered the way review
+ *  mistakes are (lib/gaps.ts). This counted exact lowercase strings until
+ *  2026-09-24, which put "chain rule ordering" and "the ordering in the chain
+ *  rule" in two buckets, and disagreed with the review rail and the weak-spots
+ *  exam about what a recurring mistake even was. A year, not a month: exams
+ *  are rare, and one from last spring still says something. */
+function recurringGaps(projectId: string, limit: number): { text: string; n: number }[] {
+  return gapsFrom(examMisses(projectId), { days: 365, limit, minCount: 1 });
 }
 
 export default function ExamRail({ projectId, onOpen }: { projectId: string; onOpen?: (id: string) => void }) {
@@ -43,7 +37,7 @@ export default function ExamRail({ projectId, onOpen }: { projectId: string; onO
 
   const exams = examStore.listForProject(projectId);
   const sat = exams.filter((e) => scoreOf(e));
-  const gaps = recurringGaps(exams, 5);
+  const gaps = recurringGaps(projectId, 5);
   const last = sat[0] ? scoreOf(sat[0]) : null;
 
   /* Average across the last five sat, so one bad morning does not read as a

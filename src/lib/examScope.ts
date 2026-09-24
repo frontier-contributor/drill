@@ -9,15 +9,28 @@
  * ========================================================================== */
 import * as store from "@/services/store";
 import * as journalStore from "@/services/journalStore";
+import * as examStore from "@/services/examStore";
 import { dayInRange, parseWhen, type WhenRange } from "@/lib/when";
 import { extractKeywords } from "@/lib/memoryRetrieval";
-import { stripTags } from "@/lib/util";
+import { gapsFrom, type Gap, type GapSource } from "@/lib/gaps";
+import { DAY, stripTags } from "@/lib/util";
 import type { ExamScope } from "@/types/exam";
-import type { Card } from "@/types";
+import type { Card, Deck } from "@/types";
 import type { JournalEntry } from "@/types/journal";
 
 const MAX_CARDS = 80;
 const MAX_ENTRIES = 30;
+
+/* A weak-spots exam is narrower on purpose. It is a set of questions about a
+   handful of confusions, and eighty cards of material would bury the ones
+   that matter under the ones that merely ride along. */
+const WEAK_CARDS = 36;
+const WEAK_ENTRIES = 8;
+const WEAK_GAPS = 8;
+/** How far back "keeps getting wrong" looks when no date is given. Longer
+ *  than the thirty days the prompts use, because an exam is where you go
+ *  looking for old trouble on purpose. */
+const WEAK_DAYS = 60;
 
 /** Keyword overlap, the same method memoryRetrieval.ts uses for memory — no
  *  embeddings (a locked decision), just counting how many of the topic's own
@@ -92,6 +105,63 @@ export function materialFromScope(scope: ExamScope): string {
   return buildMaterial(entries, cards);
 }
 
+/**
+ * Every marked exam answer in the project, as the same shape a review log
+ * entry has, so an exam's "missing" and a review's are clustered together by
+ * one definition of a gap. The card is whichever the question was built from,
+ * when it was built from one.
+ */
+export function examMisses(projectId: string): GapSource[] {
+  const out: GapSource[] = [];
+  for (const e of examStore.listForProject(projectId)) {
+    for (const q of e.questions) {
+      if (!q.result?.missing?.length || q.result.verdict === "got") continue;
+      out.push({
+        t: q.answeredAt || e.created,
+        m: q.result.missing,
+        c: q.sourceRefs.find((r) => r.kind === "card")?.id
+      });
+    }
+  }
+  return out;
+}
+
+/** What a weak-spots exam is made of: the recurring confusions, the cards
+ *  they happened on (most-missed first), then the weakest cards overall to
+ *  fill out the set. */
+function weakMaterial(projectId: string, decks: Deck[], range: WhenRange | null): { gaps: Gap[]; cards: Card[] } {
+  const inRange = (t: number) => (range ? t >= range.from && t <= range.to : true);
+  const sources: GapSource[] = [...store.logOf(decks), ...examMisses(projectId)].filter((e) => inRange(e.t));
+  const days = range ? Math.ceil((Date.now() - range.from) / DAY) + 1 : WEAK_DAYS;
+  const gaps = gapsFrom(sources, { days, limit: WEAK_GAPS });
+
+  const byId = new Map<string, Card>();
+  for (const d of decks) for (const c of d.cards) byId.set(c.id, c);
+
+  const picked: Card[] = [];
+  const seen = new Set<string>();
+  const add = (c: Card | undefined) => {
+    if (!c || seen.has(c.id) || picked.length >= WEAK_CARDS) return;
+    seen.add(c.id);
+    picked.push(c);
+  };
+  /* Round-robin across gaps, so the first confusion's twelve cards do not
+     crowd out the second confusion's only one. */
+  const lists = gaps.map((g) => g.cardIds);
+  for (let i = 0; lists.some((l) => i < l.length); i++) for (const l of lists) add(byId.get(l[i]));
+
+  /* Then the weakest cards overall (leeches, lapses) ranked the one way the
+     app ranks them. They are weak whether or not a marker ever wrote down
+     why. */
+  const weak = decks.flatMap((d) => store.weakCardsOf(d, WEAK_CARDS).map((c) => ({ c, st: d.srs[c.id] })));
+  weak.sort(
+    (a, b) => Number(store.isLeech(b.st)) - Number(store.isLeech(a.st)) || (b.st?.lapses || 0) - (a.st?.lapses || 0)
+  );
+  for (const w of weak) if ((w.st?.lapses || 0) > 0 || store.isLeech(w.st)) add(w.c);
+
+  return { gaps, cards: picked };
+}
+
 export interface ScopeInput {
   projectId: string;
   /** Free text, run through lib/when.ts first. Empty means no date filter. */
@@ -107,6 +177,9 @@ export interface ScopeInput {
    *  are in scope (every deck in the project, unless deckIds narrows that),
    *  rather than requiring an exact tag. Empty means no topic filter. */
   topic?: string;
+  /** Aim at what the learner keeps getting wrong. Dates, decks, tags and a
+   *  topic still narrow it. */
+  focus?: "weak";
 }
 
 export interface ResolvedScope {
@@ -117,8 +190,10 @@ export interface ResolvedScope {
   unparsed: boolean;
   entries: JournalEntry[];
   cards: Card[];
-  counts: { entries: number; cards: number; decks: number };
+  counts: { entries: number; cards: number; decks: number; gaps: number };
   material: string;
+  /** The recurring confusions a weak-spots exam targets; empty otherwise. */
+  gaps: Gap[];
 }
 
 export function resolveScope(input: ScopeInput): ResolvedScope {
@@ -131,31 +206,46 @@ export function resolveScope(input: ScopeInput): ResolvedScope {
   const topic = (input.topic || "").trim();
   const topicWords = topic ? extractKeywords(topic) : [];
 
+  const weak = input.focus === "weak";
+
   const allEntries = journalStore.listForProject(input.projectId).filter((e) => e.summary);
   let entries = range ? allEntries.filter((e) => dayInRange(e.day, range)) : allEntries;
-  entries = byTopic(entries, topicWords, journalText).slice(0, MAX_ENTRIES);
+  /* A weak-spots exam reads the days you wrote down being stuck, and only
+     those: the rest of the journal is what went fine. */
+  if (weak) entries = entries.filter((e) => e.summary!.stuck.length > 0);
+  entries = byTopic(entries, topicWords, journalText).slice(0, weak ? WEAK_ENTRIES : MAX_ENTRIES);
 
   const decks = input.deckIds.length ? input.deckIds.map((id) => store.get().decks[id]).filter(Boolean) : store.decksOf(input.projectId);
+  let gaps: Gap[] = [];
   let cards: Card[] = [];
-  for (const d of decks) cards = cards.concat(d.cards);
+  if (weak) {
+    const found = weakMaterial(input.projectId, decks, range);
+    gaps = found.gaps;
+    cards = found.cards;
+  } else {
+    for (const d of decks) cards = cards.concat(d.cards);
+  }
   if (input.tags.length) {
     const tagset = new Set(input.tags.map((t) => t.toLowerCase()));
     cards = cards.filter((c) => tagset.has(c.tag.toLowerCase()));
   }
-  cards = byTopic(cards, topicWords, cardText).slice(0, MAX_CARDS);
+  cards = byTopic(cards, topicWords, cardText).slice(0, weak ? WEAK_CARDS : MAX_CARDS);
+
+  const baseLabel = topic
+    ? topic + (range ? " · " + range.label : "")
+    : range?.label || (input.deckIds.length || input.tags.length ? "selected material" : "everything");
 
   const scope: ExamScope = {
     projectId: input.projectId,
     from: range?.from ?? null,
     to: range?.to ?? null,
-    label: topic
-      ? topic + (range ? " · " + range.label : "")
-      : range?.label || (input.deckIds.length || input.tags.length ? "selected material" : "everything"),
+    label: weak ? "What I keep getting wrong" + (topic || range ? " · " + baseLabel : "") : baseLabel,
     deckIds: input.deckIds,
     tags: input.tags,
     journalIds: entries.map((e) => e.id),
     cardIds: cards.map((c) => c.id),
-    topic: topic || undefined
+    topic: topic || undefined,
+    ...(weak ? { focus: "weak" as const, gaps: gaps.map((g) => g.text) } : {})
   };
 
   return {
@@ -164,7 +254,8 @@ export function resolveScope(input: ScopeInput): ResolvedScope {
     unparsed,
     entries,
     cards,
-    counts: { entries: entries.length, cards: cards.length, decks: decks.length },
-    material: buildMaterial(entries, cards)
+    counts: { entries: entries.length, cards: cards.length, decks: decks.length, gaps: gaps.length },
+    material: buildMaterial(entries, cards),
+    gaps
   };
 }

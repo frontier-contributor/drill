@@ -220,10 +220,6 @@ what follows is the list as it actually stands on 2026-09-06.*
   than letting it evaporate, which was the part that actually lost work, but
   the duplication is still there. The right end state is one chat surface,
   mounted in the sheet with the card as its context.
-- **Exam scope cannot target a gap.** `generateExam` is given the gap list in
-  its system prompt, so it weights toward them, but `lib/examScope.ts` still
-  selects material by time and deck alone. "Examine me on what I keep getting
-  wrong" is a scope, and it is the one somebody would actually pick.
 - **Two tabs still overwrite each other.** Detected and warned about, not
   merged. A real fix needs either a lock (Web Locks API, no Safari before 15.4)
   or per-record writes, which is the same IndexedDB move as above.

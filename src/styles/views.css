@@ -308,3 +308,42 @@
   color: var(--ink-3);
   margin: var(--s-4) 0 0;
 }
+
+/* -------------------------------------------------------- weak spots -- */
+/* The recurring mistakes a weak-spots exam will aim at, listed before the
+   exam is generated (ScopeBuilder). Ruled like the rail's list, not boxed:
+   it is a preview of the exam's subject, not a control. */
+.weak-aim {
+  margin-bottom: var(--s-5);
+}
+.weak-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--rule-soft);
+}
+.weak-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-2) 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.weak-t {
+  font-family: var(--serif);
+  font-size: var(--t-sm);
+  line-height: var(--lh-snug);
+  color: var(--ink);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.weak-n {
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--amber);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}

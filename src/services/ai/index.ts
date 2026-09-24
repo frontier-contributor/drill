@@ -998,6 +998,12 @@ const EXAM_SYS =
   "When a TOPIC is given, it is a hard boundary, not a hint: every question must be about it. If the material " +
   "below contains other subjects — it was found by keyword relevance and can carry noise — ignore anything that " +
   "is not actually about the topic rather than writing a question on it.\n\n" +
+  "When WEAK SPOTS are given, they are what this learner has repeatedly got wrong, in a marker's words, and they " +
+  "are the point of the exam: every question must test one of them, and between them the questions should cover " +
+  "as many of them as the material supports. Come at each from a different angle than the card that exposed it " +
+  "(apply it to a new case, diagnose a worked example that makes exactly that mistake, or connect it to something " +
+  "it is easily confused with) because re-asking the card tests memory of the card, not whether the confusion is " +
+  "gone. Never name the mistake in the question; a question that points at the trap cannot catch anyone in it.\n\n" +
   "Every question carries `sourceRefs` naming exactly what it was built from — items are tagged [card:id] or " +
   "[journal:id] in the material. If you cannot ground a question in the material, do not write it. Fewer, " +
   "well-founded questions beat a full set with invented ones.\n\n" +
@@ -1014,13 +1020,22 @@ function normDiff(v: unknown, fallback: Difficulty): Difficulty {
   return (DIFFICULTIES.find((d) => d === v) as Difficulty) || fallback;
 }
 
-export async function generateExam(material: string, level: Difficulty, exclude: string[], topic?: string): Promise<ExamQuestion[]> {
+export async function generateExam(
+  material: string,
+  level: Difficulty,
+  exclude: string[],
+  topic?: string,
+  weakSpots: string[] = []
+): Promise<ExamQuestion[]> {
   const t = (topic || "").trim();
   const usr =
     "LEVEL: " +
     level +
     "\n\n" +
     (t ? "TOPIC: " + t + " — see the system rules on what this means.\n\n" : "") +
+    (weakSpots.length
+      ? "WEAK SPOTS — see the system rules on what these mean:\n" + weakSpots.map((w) => "- " + w).join("\n") + "\n\n"
+      : "") +
     (exclude.length ? "ALREADY ASKED (do not repeat these or close variants):\n" + exclude.map((x) => "- " + x).join("\n") + "\n\n" : "") +
     "MATERIAL:\n" +
     material;
@@ -1028,7 +1043,7 @@ export async function generateExam(material: string, level: Difficulty, exclude:
      scored against when one is given — otherwise "matplotlib" would retrieve
      memory for whatever else happened to ride along in the material, which
      defeats the point of naming a topic at all. */
-  const sys = withMemory(EXAM_SYS, t || material);
+  const sys = withMemory(EXAM_SYS, t || (weakSpots.length ? weakSpots.join(" ") : material));
   const j = await structured({
     messages: [{ role: "system", content: sys }, { role: "user", content: usr }],
     label: "exam generation",

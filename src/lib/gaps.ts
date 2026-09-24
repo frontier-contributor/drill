@@ -43,7 +43,19 @@ export interface Gap {
   cards: number;
   /** Most recent occurrence, so a stale gap sinks. */
   last: number;
+  /** The cards it showed up on, most-missed first — what a weak-spots exam
+   *  is built from. Empty for gaps recorded without a card (older log
+   *  entries, exam questions not grounded in one). */
+  cardIds: string[];
 }
+
+/**
+ * What a gap is found in. A review log entry is one; so is a marked exam
+ * answer, turned into this shape by the caller — which is how the two sources
+ * of "what they got wrong" share one clustering instead of the exam rail
+ * counting exact strings on its own.
+ */
+export type GapSource = Pick<LogEntry, "t" | "m" | "c">;
 
 export interface GapOpts {
   /** How far back to look. A confusion you cleared up last month is not a
@@ -70,7 +82,8 @@ interface Cluster {
    *  marker actually reached for most rather than the first one recorded. */
   phrasings: Map<string, number>;
   n: number;
-  cards: Set<string>;
+  /** Card id → how many times this confusion was recorded on it. */
+  cards: Map<string, number>;
   last: number;
 }
 
@@ -116,7 +129,7 @@ function pickLabel(phrasings: Map<string, number>): string {
  * clustering available, and deliberately so — it is explainable, it is stable
  * as entries arrive, and it runs on every prompt build.
  */
-export function gapsFrom(entries: LogEntry[], opts: GapOpts = {}): Gap[] {
+export function gapsFrom<E extends GapSource>(entries: E[], opts: GapOpts = {}): Gap[] {
   const days = opts.days ?? 30;
   const limit = opts.limit ?? 5;
   const minCount = opts.minCount ?? 2;
@@ -146,19 +159,25 @@ export function gapsFrom(entries: LogEntry[], opts: GapOpts = {}): Gap[] {
       }
 
       if (!hit) {
-        hit = { seed: keys, phrasings: new Map(), n: 0, cards: new Set(), last: 0 };
+        hit = { seed: keys, phrasings: new Map(), n: 0, cards: new Map(), last: 0 };
         clusters.push(hit);
       }
       hit.phrasings.set(text, (hit.phrasings.get(text) || 0) + 1);
       hit.n++;
-      if (e.c) hit.cards.add(e.c);
+      if (e.c) hit.cards.set(e.c, (hit.cards.get(e.c) || 0) + 1);
       if (e.t > hit.last) hit.last = e.t;
     }
   }
 
   return clusters
     .filter((c) => c.n >= minCount)
-    .map((c) => ({ text: pickLabel(c.phrasings), n: c.n, cards: c.cards.size, last: c.last }))
+    .map((c) => ({
+      text: pickLabel(c.phrasings),
+      n: c.n,
+      cards: c.cards.size,
+      last: c.last,
+      cardIds: [...c.cards].sort((a, b) => b[1] - a[1]).map(([id]) => id)
+    }))
     .sort((a, b) => b.n - a.n || b.cards - a.cards || b.last - a.last)
     .slice(0, limit);
 }

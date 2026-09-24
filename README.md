@@ -202,6 +202,13 @@ anything.
   follow-up suggestions. Cards get written at the thing you keep missing rather
   than at the topic in general. The rail beside the card shows you the same
   list, so what the app tells you and what it tells the model are one answer.
+- **An exam on what you keep getting wrong** — **Examine me on these** under
+  that list (or *Aim at → What I keep getting wrong* on the Exam page) builds
+  an exam from those mistakes and the cards they happened on, leeches and
+  lapsed cards after them. Mistakes from marked exam answers join the same
+  list, so a confusion you showed in an exam counts as much as one you showed
+  in Review. Every question tests one of them from a different angle than the
+  card that caught it, because re-asking the card only tests the card.
 - **Interleaving** — consecutive cards from the same section get shuffled apart,
   and "Mix all decks" drills everything due together.
 - **Leech repair** — a card that lapses four times gets flagged, and the fix
