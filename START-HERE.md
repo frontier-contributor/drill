@@ -190,12 +190,6 @@ IndexedDB behind a sync cache, copying the `chatStore` pattern.
 *Both original entries here were fixed by Phases 3 and 6 and are removed;
 what follows is the list as it actually stands on 2026-09-06.*
 
-- **No error boundary at the root.** A render crash in `Shell`, `Sidebar` or the
-  composer takes down the whole app, not one view. This was hit for real during
-  Phase 12 (a component rendered before its new prop was threaded through) and
-  the whole tree went with it. `components/ui/ErrorGuard.tsx` now contains it
-  locally — the sheet router and the settings body use it — but nothing wraps
-  the tree above them.
 - **The agent loop has never run against a real model.** No API key in this
   environment. See §13, "What is verified, and what is not".
 - **Drafts reset on navigation.** `draftModel`, `draftEffort`, `draftMode` and

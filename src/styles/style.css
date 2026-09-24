@@ -3754,3 +3754,73 @@ select.fi.auto {
   color: var(--ink-3);
   line-height: 1.5;
 }
+
+/* ------------------------------------------------------------- rescue -- */
+/* What Drill shows instead of a white page (components/Rescue.tsx). Lives in
+   the eager stylesheet on purpose: the thing that failed may be the lazy
+   chunk that would have carried a section's own styles. */
+.rescue {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: var(--s-8) var(--gutter);
+}
+.rescue h2 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: var(--t-xl);
+  letter-spacing: var(--track-tight);
+  line-height: var(--lh-tight);
+  color: var(--ink);
+  margin: 0 0 var(--s-4);
+}
+.rescue p {
+  font-family: var(--serif);
+  font-size: var(--t-read);
+  line-height: var(--lh-body);
+  color: var(--ink-2);
+  margin: 0 0 var(--s-5);
+}
+.rescue-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-bottom: var(--s-4);
+}
+.rescue-acts a.btn {
+  text-decoration: none;
+}
+.rescue .rescue-note {
+  font-family: var(--sans);
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+  border-left: 2px solid var(--amber);
+  padding-left: var(--s-3);
+}
+.rescue-details {
+  margin-top: var(--s-6);
+  border-top: 1px solid var(--rule);
+  padding-top: var(--s-4);
+}
+.rescue-details summary {
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.rescue-details pre {
+  font-family: var(--mono);
+  font-size: var(--t-2xs);
+  line-height: var(--lh-snug);
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-2);
+  padding: var(--s-3);
+  margin: var(--s-3) 0;
+  max-height: 40vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

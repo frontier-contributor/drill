@@ -21,9 +21,10 @@ especially its **Project layout** section. Do not restate it here.
 npm run dev     # vite; usually :5173, falls back to :5174 if taken
 npm run lint    # tsc --noEmit. The only lint there is
 npm test        # tsx --test src/**/*.test.ts
-                # 312 tests: fsrs, cardFormat, memory*, effort, title,
+                # 316 tests: fsrs, cardFormat, memory*, effort, title,
                 # thinking, agent/loop, settings/catalogue, logBudget,
-                # storage, activity, gaps, retry, budget, ai/structured,
+                # storage, storeBoot, activity, gaps, retry, budget,
+                # ai/structured,
                 # weeks, rememberArg, dayBrief, files/parts (the sweep),
                 # visuals/{srcdoc (the walls), keep},
                 # speech/{words, availability, player},
@@ -83,8 +84,9 @@ the promise; the fallback it replaced reached outside the project
 project `createProject` has ever made — showed and drilled another project's
 cards. Never widen that fallback past `decksOf(activeProjectId)`.
 
-**A crash in `Shell`/`Sidebar` white-screens the whole app.** There is no
-error boundary above them, and `Sidebar` now calls `store.counts()` and
+**A crash in `Shell`/`Sidebar` takes down every section at once.** Only the
+root's `RootGuard` is above them, so it lands on the rescue page rather than a
+white one — but it is still the whole app. `Sidebar` calls `store.counts()` and
 `journalStore.unrolledEntries()` on every render in every view. Anything those
 touch is effectively a global dependency. Note `store.pool()` returns
 `[deck()]` when deck-mixing is off, and `deck()` is `db.decks[db.active]` — an
@@ -121,7 +123,10 @@ was reachable, not theoretical — the user lost hours.
 The rules now: `storage.write()` returns a `WriteResult`; `saveNow()` escalates
 on quota (shed old recall text, then trim the log, then give up) and keeps
 `store.getSaveState()`; every IndexedDB write goes through
-`persistence.guard(area, promise)`; and `components/ui/SaveAlarm.tsx` — mounted
+`persistence.guard(area, promise)` and is settled by its *transaction*, never
+its request — running out of room arrives as an abort at commit, after the
+request has already succeeded, so resolving on the request reported writes that
+never landed (`idb.ts` did that until 2026-09-24); and `components/ui/SaveAlarm.tsx` — mounted
 by `Shell`, outside `.app-scroll`, in every section — renders any of it. **Do
 not add a write that cannot report.** `lib/logBudget.ts` owns what may be shed
 and `logBudget.test.ts` enforces that shedding never touches a field the grid,
@@ -535,13 +540,28 @@ silent: it talks over you, reads code aloud, or answers a chair creaking. Their
 thresholds have been reasoned about, not yet tuned against a real microphone in
 a real room, and that is the first thing to do with a real key.
 
-**There is still no error boundary at the root.** A render crash in `Shell`,
-`Sidebar`, or a composer chip rendered before its new prop was threaded through
-white-screens the whole app. That happened for real while building Phase 12.
-`components/ui/ErrorGuard.tsx` is the local version — the sheet router and the
-settings body wrap themselves in it, so a pane or a settings page that throws
-costs you that panel rather than the session. Wrap anything that renders data
-it did not create; it does not help with a crash above it.
+**The root has a floor now, and it is not a substitute for a local guard.**
+`components/Rescue.tsx`'s `RootGuard` wraps `<App/>` in `main.tsx`, so a render
+crash anywhere — `Shell`, `Sidebar`, a composer chip rendered before its new
+prop was threaded through — lands on a page with Try again, Go to Review/Home,
+Reload and **Download a backup** rather than a white one. It clears itself when
+the hash changes, which is what makes its links work. A tab left open across a
+deploy whose lazy chunk has gone gets "Drill has been updated — Reload" instead
+of a stack trace (`isStaleChunk`). But the floor replaces the *whole* app,
+navigation included; `components/ui/ErrorGuard.tsx` is still the right tool
+for anything that renders data it did not create, because it costs you one
+panel. The sheet router and the settings body wrap themselves in it.
+
+**A database that will not parse is never written over.** `store.init()`
+throws `UnreadableDatabaseError` and `App` renders `BootRescue`, which offers
+the stored bytes (keys blanked, `storage.redactKeys`) and discards them only on
+a second press. It used to fall through to a fresh database and `saveNow()`
+it over the original — and a readable v2 key underneath won that fall-through,
+replacing newer history with older. `saveNow()` also refuses to run with no
+`db` loaded, since `JSON.stringify(null)` is a string. `storeBoot.test.ts`
+holds all of it. A fresh database goes through `migrateToV4` like a loaded
+one, because that pass is what creates the personal space; skipping it
+white-screened the project switcher on every brand-new install.
 
 ## Verifying
 

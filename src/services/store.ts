@@ -327,6 +327,12 @@ export function saveNow(): void {
     clearTimeout(saveTimer);
     saveTimer = null;
   }
+  /* Never write a database that was never loaded. When init() refuses an
+     unreadable one, `db` stays null, and JSON.stringify(null) is the string
+     "null" — which would land on top of the very bytes the rescue page is
+     offering to download. Nothing should reach here in that state; this is
+     so that nothing can. */
+  if (!db) return;
   const before = saveState;
   let dropped = 0;
   let tight = false;
@@ -554,15 +560,63 @@ interface LoadedRaw {
   text: string | null;
 }
 
+/**
+ * Thrown by init() when the database on disk is there but cannot be read.
+ *
+ * This used to fall through to a fresh database, and init() ends in
+ * saveNow() — so the first thing the app did with a database it could not
+ * parse was write an empty one over it. Whatever had damaged the bytes, the
+ * damage was then made permanent, silently, and the learner met a starter
+ * deck where months of history had been. Worse, a readable v2 key sitting
+ * underneath won that fall-through and replaced the newer data with the
+ * older.
+ *
+ * Nothing is written when this is thrown. App shows a rescue page that
+ * offers the stored bytes as a download and only discards them on an
+ * explicit second press. A database is never replaced because it was hard
+ * to read.
+ */
+export class UnreadableDatabaseError extends Error {
+  constructor(readonly reason: string, readonly bytes: number) {
+    super("The saved database could not be read (" + reason + ").");
+    this.name = "UnreadableDatabaseError";
+  }
+}
+
+/** Anything shaped like one of our databases, at any version. Deliberately
+ *  loose: migrateToV4 is the repair pass, and it copes with missing halves.
+ *  An object with no decks at all is still somebody's projects, log and
+ *  settings, which is why "has at least one deck" is not the test — it was,
+ *  and it sent a real database with an empty deck map down the fresh path. */
+function looksLikeDB(d: unknown): d is DrillDB {
+  if (!d || typeof d !== "object" || Array.isArray(d)) return false;
+  const o = d as Record<string, unknown>;
+  const isMap = (v: unknown) => !!v && typeof v === "object" && !Array.isArray(v);
+  return isMap(o.decks) || isMap(o.projects) || Array.isArray(o.log);
+}
+
 function loadRaw(): LoadedRaw | null {
-  try {
-    const r = storage.readCurrent();
-    if (r) {
-      const d = JSON.parse(r) as DrillDB;
-      if (d && d.decks && Object.keys(d.decks).length) return { data: d, text: r };
+  let shell: LoadedRaw | null = null;
+  const r = storage.readCurrent();
+  if (r) {
+    let d: unknown;
+    try {
+      d = JSON.parse(r);
+    } catch (e) {
+      throw new UnreadableDatabaseError((e as Error).message || "not valid JSON", r.length);
     }
-  } catch {
-    /* corrupt or unavailable storage falls through to v2 / fresh */
+    if (!looksLikeDB(d)) throw new UnreadableDatabaseError("it is not shaped like a Drill database", r.length);
+    const hasAnything =
+      Object.keys((d as DrillDB).decks || {}).length > 0 ||
+      Object.keys((d as DrillDB).projects || {}).length > 0 ||
+      ((d as DrillDB).log || []).length > 0;
+    if (hasAnything) return { data: d, text: r };
+    /* An empty shell. That is what a v3 key looked like when it was written
+       before the v2 upgrade had anything to put in it, so a readable v2
+       database underneath is worth trying first — and if there is none, the
+       shell itself is loaded rather than a fresh database, because its
+       settings (and the key in them) are still somebody's. */
+    shell = { data: d, text: r };
   }
   try {
     const r2 = storage.readLegacy();
@@ -574,9 +628,10 @@ function loadRaw(): LoadedRaw | null {
       }
     }
   } catch {
-    /* same */
+    /* An unreadable v2 key is left exactly where it is: it is never written
+       to, so it costs nothing to keep and may matter to somebody. */
   }
-  return null;
+  return shell;
 }
 
 function freshDB(cfg?: DrillConfig): DrillDB {
@@ -648,7 +703,13 @@ export function init(cfg?: DrillConfig): DrillDB {
   let backedUp = false;
   if (willMigrate && loaded && loaded.text) backedUp = storage.writeBackupOnce(loaded.text);
 
-  db = loaded ? migrate.migrateToV4(loaded.data) : freshDB(cfg);
+  /* A fresh database goes through the repair pass too. It used to skip it,
+     and migrateToV4 is what creates the personal space — so on a brand-new
+     install there was none until the first reload, and the project switcher,
+     which reads projects.personal().name, white-screened the whole app the
+     first time a new user opened it. The pass is idempotent; running it on
+     something that is already v4 costs nothing. */
+  db = migrate.migrateToV4(loaded ? loaded.data : freshDB(cfg));
   lastInit = { fresh, fromVersion, migrated: willMigrate, backedUp };
 
   db.settings = normSettings({ ...DEFAULT_SETTINGS, ...(db.settings || {}) });

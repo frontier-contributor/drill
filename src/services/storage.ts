@@ -102,6 +102,34 @@ export function storedBytes(): number | null {
   }
 }
 
+/* ------------------------------------------------------------------ rescue -- */
+
+/**
+ * The stored bytes with every API key blanked, for the rescue page's
+ * download. It works on text rather than a parsed object because the reason
+ * it exists is a database that does not parse.
+ *
+ * Every property named `key` in DrillDB is a secret — `settings.key` and each
+ * `settings.creds[id].key` — so blanking them all takes nothing else with it.
+ * A backup file is the kind of thing that gets mailed to yourself and
+ * attached to a bug report, and store.withoutCredentials holds every other
+ * export to the same rule.
+ */
+export function redactKeys(text: string): string {
+  return text.replace(/("key"\s*:\s*)"(?:[^"\\]|\\.)*"/g, '$1""');
+}
+
+/** Remove the main database, so the next load starts fresh. Only ever called
+ *  from the rescue page, after a second press that says what it discards. */
+export function discardCurrent(): boolean {
+  try {
+    localStorage.removeItem(KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /* ------------------------------------------------------ migration backup -- */
 
 /**

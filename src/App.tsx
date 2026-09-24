@@ -18,6 +18,7 @@ import { ReviewProvider } from "@/context/ReviewContext";
 import { RouteProvider, useRoute } from "@/context/RouteContext";
 import { ChatProvider } from "@/context/ChatContext";
 import AppShell from "@/components/AppShell";
+import { BootRescue } from "@/components/Rescue";
 
 /** Renders nothing — just keeps :root's appearance custom properties in sync
  *  with Settings, for both the drill and chat views. Split out so it can sit
@@ -127,7 +128,7 @@ function Views() {
 
 export default function App() {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<Error | null>(null);
   const booted = useRef(false);
 
   useEffect(() => {
@@ -155,7 +156,7 @@ export default function App() {
         setStatus("ready");
       })
       .catch((e: Error) => {
-        setError(e.message);
+        setError(e);
         setStatus("error");
       });
   }, []);
@@ -182,19 +183,8 @@ export default function App() {
     };
   }, []);
 
-  if (status === "error") {
-    return (
-      <div className="app">
-        <div className="app-scroll">
-          <div className="page">
-            <div className="msg">
-              <h2>Drill could not start</h2>
-              <p>{error}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+  if (status === "error" && error) {
+    return <BootRescue error={error} unreadable={error instanceof store.UnreadableDatabaseError} />;
   }
 
   if (status === "loading") return <LoadingShell />;

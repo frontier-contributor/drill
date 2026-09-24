@@ -37,9 +37,35 @@ export const STORE_USAGE = "usage";
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
+/**
+ * One connection for the life of the page — until something takes it away.
+ *
+ * Three things can, and each used to strand every read and write until a
+ * reload, because the promise was cached whatever became of it:
+ *
+ *  - **The open failing once.** A rejected promise stayed cached, so a
+ *    transient refusal (another tab mid-upgrade, a busy disk) became a
+ *    permanent one. The next caller now tries again.
+ *  - **A newer version in another tab.** That tab's open waits on this one's
+ *    connection and fires `blocked` there until it is closed. With no
+ *    `versionchange` handler here, a tab left open after a deploy that bumps
+ *    this database froze the new one on its first read. drill-files already
+ *    let go when asked; this one did not.
+ *  - **The browser closing the connection** — site data cleared, the disk
+ *    gone, storage evicted mid-session. `close` fires and the handle is dead;
+ *    the next transaction on it throws InvalidStateError.
+ *
+ * In each case the cache is cleared, so the next call opens afresh, and tx()
+ * below retries once on a dead handle rather than reporting a lost write that
+ * a second attempt would have landed.
+ */
 function openDB(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
-  dbPromise = new Promise((resolve, reject) => {
+  const p = new Promise<IDBDatabase>((resolve, reject) => {
+    if (typeof indexedDB === "undefined") {
+      reject(new Error("this browser has no IndexedDB"));
+      return;
+    }
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     /* Guarded by contains() rather than switching on oldVersion, so the same
        block upgrades a v1 database and creates a fresh one. */
@@ -83,24 +109,67 @@ function openDB(): Promise<IDBDatabase> {
         s.createIndex("at", "at");
       }
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      const forget = () => {
+        if (dbPromise === p) dbPromise = null;
+      };
+      /* A later version opened in another tab asks this one to let go. */
+      db.onversionchange = () => {
+        db.close();
+        forget();
+      };
+      db.onclose = forget;
+      resolve(db);
+    };
     req.onerror = () => reject(req.error || new Error("IndexedDB refused to open"));
     req.onblocked = () => reject(new Error("IndexedDB is blocked by another open tab"));
   });
-  return dbPromise;
+  dbPromise = p;
+  p.catch(() => {
+    if (dbPromise === p) dbPromise = null;
+  });
+  return p;
 }
 
-function tx<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
-  return openDB().then(
-    (db) =>
-      new Promise<T>((resolve, reject) => {
-        const t = db.transaction(store, mode);
-        const req = fn(t.objectStore(store));
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-        t.onabort = () => reject(t.error || new Error("transaction aborted"));
-      })
-  );
+/** The handle was closed under us — by versionchange, by the browser, by
+ *  site data being cleared. Worth one fresh connection; anything else is a
+ *  real failure and is passed up to be reported. */
+function isDeadHandle(e: unknown): boolean {
+  return (e as { name?: string } | null)?.name === "InvalidStateError";
+}
+
+function tx<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>, retried = false): Promise<T> {
+  return openDB()
+    .then(
+      (db) =>
+        new Promise<T>((resolve, reject) => {
+          /* transaction() throws synchronously on a closed handle; inside the
+             executor that becomes a rejection, which the catch below reads. */
+          const t = db.transaction(store, mode);
+          const req = fn(t.objectStore(store));
+          /* A write is settled by the transaction, not the request. The
+             request succeeds when the value is queued; running out of room is
+             discovered at commit, and arrives as an abort *after* that — so
+             resolving on the request reported a write that never landed as
+             saved, and persistence.guard, which exists for exactly that
+             failure, never heard about it. Reads have nothing to commit and
+             still answer as soon as they can. */
+          let value: T;
+          req.onsuccess = () => {
+            value = req.result;
+            if (mode === "readonly") resolve(value);
+          };
+          req.onerror = () => reject(req.error);
+          t.oncomplete = () => resolve(value);
+          t.onabort = () => reject(t.error || new Error("transaction aborted"));
+        })
+    )
+    .catch((e) => {
+      if (retried || !isDeadHandle(e)) throw e;
+      dbPromise = null;
+      return tx(store, mode, fn, true);
+    });
 }
 
 export function idbGet<T>(store: string, key: string): Promise<T | undefined> {
@@ -128,19 +197,25 @@ export function idbClear(store: string): Promise<void> {
  * time means one transaction per record; for a few thousand memories that is
  * the difference between instant and visibly slow.
  */
-export function idbBulkPut<T>(store: string, values: T[]): Promise<void> {
+export function idbBulkPut<T>(store: string, values: T[], retried = false): Promise<void> {
   if (!values.length) return Promise.resolve();
-  return openDB().then(
-    (db) =>
-      new Promise<void>((resolve, reject) => {
-        const t = db.transaction(store, "readwrite");
-        const s = t.objectStore(store);
-        for (const v of values) s.put(v);
-        t.oncomplete = () => resolve();
-        t.onerror = () => reject(t.error);
-        t.onabort = () => reject(t.error || new Error("transaction aborted"));
-      })
-  );
+  return openDB()
+    .then(
+      (db) =>
+        new Promise<void>((resolve, reject) => {
+          const t = db.transaction(store, "readwrite");
+          const s = t.objectStore(store);
+          for (const v of values) s.put(v);
+          t.oncomplete = () => resolve();
+          t.onerror = () => reject(t.error);
+          t.onabort = () => reject(t.error || new Error("transaction aborted"));
+        })
+    )
+    .catch((e) => {
+      if (retried || !isDeadHandle(e)) throw e;
+      dbPromise = null;
+      return idbBulkPut(store, values, true);
+    });
 }
 
 /** True when IndexedDB is usable at all. Private windows and some locked-down
