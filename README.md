@@ -503,7 +503,8 @@ Full spec, including the house style the card writer follows:
 ```
 index.html            Vite entry point
 src/
-  main.tsx             mounts <App/>
+  main.tsx             mounts <App/> under RootGuard (components/Rescue.tsx),
+                       the page that stands in for a white one
   App.tsx              boot, then the two views (review is eager, chat is lazy)
   types.ts             shared types for the review half
   types/chat.ts        conversations, turns, variants, context sources
@@ -534,7 +535,11 @@ src/
                              and Show instructions, and 16 kHz WAV
   services/
     storage.ts          review persistence — localStorage today; swap this file
-                         if Drill ever grows a real backend
+                         if Drill ever grows a real backend. Also when the last
+                         backup was made, and the rescue page's raw download
+    autoBackup.ts        the folder Drill backs itself up into (File System
+                         Access API), its own tiny database for the folder
+                         handle, and the rotation that prunes only its own files
     store.ts             the Drill database: decks, cards, scheduling, stats.
                          A module-level singleton, subscribed to via useDrillStore
     idb.ts               a small promise wrapper over IndexedDB
@@ -663,7 +668,23 @@ chatty. Try a stronger one; that one job is worth the better model.
 **Settings → Data → Back up everything** writes decks, scheduling, chats,
 journal, memory and usage to one JSON, and **Restore from a backup…** on the
 same page reads it back, showing you what it replaces first. Progress survives
-restarts but not clearing site data. Back up now and then.
+restarts but not clearing site data. In Chrome and Edge, **Automatic backups →
+Choose a folder…** makes Drill write that file into a folder by itself — one a
+day, the last two weeks kept — and a folder your Drive or Dropbox client
+already syncs takes it off the machine too. Everywhere else, Home says so when
+your last backup is more than a week old.
+
+**"Drill could not start — your saved data is here, but it could not be
+read"** — the stored database is damaged or from a shape this version does not
+know. Nothing has been written over it. **Download the saved data** first (it
+is the bytes exactly as stored, with your API key blanked), then decide; a file
+can be repaired by hand or read by a later version. **Start over without it**
+asks twice.
+
+**"This page failed to draw"** — something on the screen threw while drawing.
+Your saved work is untouched: **Try again**, go to Review or Home, or reload.
+**Copy details** is what to paste into an issue. If it says *Drill has been
+updated* instead, the tab is older than the site — reload.
 
 **A session's work disappeared / my streak reset** — read the banner across the
 top of the app if there is one; it says which of these happened.

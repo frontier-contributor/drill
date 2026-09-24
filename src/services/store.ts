@@ -89,7 +89,9 @@ export const DEFAULT_SETTINGS: Settings = {
   speech: { engine: "", rate: 1, follow: true, cacheMB: 25, voices: {} },
   pdfEngine: "local",
   visualsOff: [],
-  talk: { ears: "", hearModels: {}, sensitivity: "balanced", bargeIn: true, style: "talk", model: "", lang: "" }
+  talk: { ears: "", hearModels: {}, sensitivity: "balanced", bargeIn: true, style: "talk", model: "", lang: "" },
+  backupKeep: 14,
+  backupRemind: 7
 };
 
 let db: DrillDB = null as unknown as DrillDB;
@@ -189,6 +191,8 @@ function normSettings(st: Settings): Settings {
   st.talk = normTalk(st.talk);
   if (!PDF_ENGINES.includes(st.pdfEngine)) st.pdfEngine = "local";
   st.visualsOff = normVisualsOff(st.visualsOff);
+  st.backupKeep = wholeDays(st.backupKeep, DEFAULT_SETTINGS.backupKeep);
+  st.backupRemind = wholeDays(st.backupRemind, DEFAULT_SETTINGS.backupRemind);
 
   const successor = RETIRED_BACKENDS[st.backend];
   if (successor) {
@@ -200,6 +204,13 @@ function normSettings(st: Settings): Settings {
     st.baseUrl = restored?.baseUrl || "";
   }
   return st;
+}
+
+/** A count of days: whole, not negative, and the default when it is not a
+ *  number at all — a hand-edited backup can carry anything here. */
+function wholeDays(v: unknown, fallback: number): number {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n) : fallback;
 }
 
 function normLang(v: unknown): "english" | "hinglish" {

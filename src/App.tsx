@@ -9,6 +9,7 @@ import * as examStore from "@/services/examStore";
 import * as usageLog from "@/services/usageLog";
 import * as figures from "@/services/figures";
 import * as storage from "@/services/storage";
+import * as autoBackup from "@/services/autoBackup";
 import { applyAppearance } from "@/lib/theme";
 import { useDrillStore } from "@/hooks/useDrillStore";
 import { ToastProvider } from "@/context/ToastContext";
@@ -153,6 +154,9 @@ export default function App() {
         // Firefox prompts, Safari decides for itself — a refusal is normal and
         // only means the export in Import/export matters more.
         void storage.requestPersistence();
+        /* Links back up to the folder chosen in an earlier session, if any;
+           the first snapshot waits for the app to settle. */
+        void autoBackup.init();
         setStatus("ready");
       })
       .catch((e: Error) => {

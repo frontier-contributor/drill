@@ -26,6 +26,7 @@ import * as candidates from "./candidates";
 import * as examStore from "./examStore";
 import * as figuresStore from "./figures";
 import * as U from "@/lib/util";
+import { recordBackup } from "./storage";
 import { idbAll, idbBulkPut, idbClear, STORE_CAND, STORE_CONV, STORE_EXAMS, STORE_JOURNAL, STORE_MEM, STORE_ROLLUPS, STORE_USAGE } from "./idb";
 import { CURRENT_DB_VERSION, dbVersionOf } from "@/lib/migrate";
 import type { BackupSummary, DrillDB, FullBackup, LegacyDBv2, LegacyDBv3, Memory, MemoryCandidate } from "@/types";
@@ -130,7 +131,11 @@ export function backupFilename(at = Date.now()): string {
 
 export async function downloadEverything(opts: CollectOptions = {}): Promise<void> {
   const json = await exportEverything(opts);
-  U.download(backupFilename(), json, "application/json");
+  const file = backupFilename();
+  U.download(file, json, "application/json");
+  /* Every download path counts — Settings, the rescue page, the Home
+     reminder — so the reminder is only ever as stale as the last real file. */
+  recordBackup({ at: Date.now(), how: "download", bytes: json.length, file });
 }
 
 /* ----------------------------------------------------------------- import -- */

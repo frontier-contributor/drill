@@ -163,8 +163,9 @@ export default function StorageFacts() {
         </li>
       </ul>
       <p className="sset-note">
-        So: download a backup after any session you would mind losing, and keep the last one somewhere that is not
-        this machine. It is the file below, it takes a second, and it is the only copy that survives all four.
+        So: keep a recent backup somewhere that is not this browser. It is the file below, it takes a second, and it
+        is the only copy that survives all four — and in Chrome or Edge, Automatic backups below will write it into a
+        folder for you every day you use Drill.
       </p>
 
       {report.migrated && (

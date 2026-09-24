@@ -580,3 +580,29 @@
   background: var(--surface-2);
   color: var(--ink);
 }
+
+/* ------------------------------------------------------------- nudge -- */
+/* The backup reminder (BackupNudge.tsx). A ruled line, not a card: it is a
+   footnote to the page's one call to action, not a second one. */
+.home-nudge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+  padding: var(--s-3) 0 var(--s-3) var(--s-4);
+  margin: 0 0 var(--s-7);
+  border-left: 2px solid var(--amber);
+}
+.home-nudge p {
+  font: 400 var(--t-xs) / 1.6 var(--sans);
+  color: var(--ink-2);
+  margin: 0;
+  flex: 1 1 24ch;
+  max-width: var(--measure);
+}
+.home-nudge-acts {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}

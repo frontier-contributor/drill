@@ -176,6 +176,12 @@ export interface Settings {
   /** Talking with voice mode: what hears you, how long a pause has to be, and
    *  how a spoken reply is shaped. Nested for the reason `speech` is. */
   talk: TalkSettings;
+  /** Daily snapshots kept in the automatic-backup folder; 0 keeps all of
+   *  them. Read by services/autoBackup.ts when it prunes. */
+  backupKeep: number;
+  /** Days without a backup before Home says so; 0 never does. Read by
+   *  components/home/BackupNudge.tsx. */
+  backupRemind: number;
 }
 
 /* ----------------------------------------------------------------- talk -- */

@@ -35,7 +35,7 @@
 | 10 | Context inspector and cache tuning | **done** (inspector; cache tuning not started) |
 
 ### v3 — Later
-| 11 | Auto-backup to disk | not started |
+| 11 | Auto-backup to disk | **done** 2026-09-24 — folder picked once, a dated snapshot a day, pruned to `settings.backupKeep`; Home reminds when the last backup of any kind is stale, which is the whole feature in Firefox and Safari |
 | 12 | Agent loop behind high effort | **done** — see §13 |
 | 13 | Period reports, mind maps, richer media | **in progress** — files and attachments (pictures, PDF, Word, Excel, CSV, pinning, capture, knowledge, backup) done 2026-09-15; figures in replies (Mermaid diagrams, Vega-Lite charts, function plots with sliders, SVG) 2026-09-17; the live canvas — interactive pages in a no-network sandbox, versioned by the transcript — 2026-09-17; whiteboard (Excalidraw, self-hosted fonts, mermaid → editable shapes, board → chat as picture and text) and /map 2026-09-17; **the Figures section** — keeping a figure out of the thread that drew it, versioned, searchable, and the first place a whiteboard can be reopened from — 2026-09-20; image generation and the model-aware file picker 2026-09-21 |
 
@@ -195,9 +195,8 @@ what follows is the list as it actually stands on 2026-09-06.*
 - **Drafts reset on navigation.** `draftModel`, `draftEffort`, `draftMode` and
   `draftActions` live in `ChatContext` state; leaving chat and coming back
   loses an unsent choice. Long-standing, minor, one fix for all four.
-- **Phase 9 (capture bridge) and Phase 11 (auto-backup to disk) are not
-  started**, and cache tuning from Phase 10 is not either. Phase 11 is now the
-  most valuable of the three: see below.
+- **Phase 9 (capture bridge) is not started**, and cache tuning from Phase 10
+  is not either. Phase 11 (auto-backup) shipped 2026-09-24.
 - **The review log lives in localStorage, and that is the wrong drawer.**
   Decks, scheduling and the whole review log share one ~5MB origin quota,
   because `store.ts` is synchronous and everything reads `db.log` without

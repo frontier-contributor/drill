@@ -102,6 +102,75 @@ export function storedBytes(): number | null {
   }
 }
 
+/* ------------------------------------------------------------ last backup -- */
+
+const KEY_LAST_BACKUP = "drill:lastBackup:v1";
+const KEY_NUDGE_SNOOZE = "drill:backupSnooze:v1";
+
+export interface BackupRecord {
+  at: number;
+  /** A file you downloaded, or a snapshot written to the linked folder. */
+  how: "download" | "folder";
+  bytes: number;
+  file: string;
+}
+
+/**
+ * When everything was last written out, and how.
+ *
+ * Kept beside the database rather than inside it on purpose: restoring a
+ * backup replaces the database whole, and a record that travelled with it
+ * would claim the restored file's date as this browser's last backup — which
+ * is precisely backwards the one time it matters.
+ */
+export function lastBackup(): BackupRecord | null {
+  try {
+    const raw = localStorage.getItem(KEY_LAST_BACKUP);
+    if (!raw) return null;
+    const r = JSON.parse(raw) as BackupRecord;
+    return r && typeof r.at === "number" ? r : null;
+  } catch {
+    return null;
+  }
+}
+
+const backupListeners = new Set<() => void>();
+
+/** Told whenever a backup is recorded, from any path — so the Home reminder
+ *  and the Settings line change the moment a download finishes rather than
+ *  on whatever render happens to come next. */
+export function onBackupRecorded(fn: () => void): () => void {
+  backupListeners.add(fn);
+  return () => backupListeners.delete(fn);
+}
+
+export function recordBackup(r: BackupRecord): void {
+  try {
+    localStorage.setItem(KEY_LAST_BACKUP, JSON.stringify(r));
+  } catch {
+    /* The drawer is full. The backup itself happened; only the reminder
+       will be early, which is the harmless direction to be wrong in. */
+  }
+  backupListeners.forEach((l) => l());
+}
+
+/** "Not now" on the Home reminder, until this time. */
+export function backupSnoozedUntil(): number {
+  try {
+    return Number(localStorage.getItem(KEY_NUDGE_SNOOZE)) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function snoozeBackupNudge(until: number): void {
+  try {
+    localStorage.setItem(KEY_NUDGE_SNOOZE, String(until));
+  } catch {
+    /* it will simply ask again */
+  }
+}
+
 /* ------------------------------------------------------------------ rescue -- */
 
 /**

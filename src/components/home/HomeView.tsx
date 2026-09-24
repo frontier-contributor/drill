@@ -31,6 +31,7 @@ import Icon from "../ui/Icon";
 import ActivityGrid from "./ActivityGrid";
 import TodayStrip from "./TodayStrip";
 import HomeRail from "../rail/HomeRail";
+import BackupNudge from "./BackupNudge";
 import "@/styles/home.css";
 
 function greeting(): string {
@@ -290,6 +291,8 @@ export default function HomeView() {
               tone={retention === null ? "muted" : undefined}
             />
           </div>
+
+          <BackupNudge />
 
           {/* Every section feeds this, which is the whole point of it being on
               the front page rather than in Review: an evening of journal, chat

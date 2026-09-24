@@ -21,9 +21,9 @@ especially its **Project layout** section. Do not restate it here.
 npm run dev     # vite; usually :5173, falls back to :5174 if taken
 npm run lint    # tsc --noEmit. The only lint there is
 npm test        # tsx --test src/**/*.test.ts
-                # 316 tests: fsrs, cardFormat, memory*, effort, title,
+                # 319 tests: fsrs, cardFormat, memory*, effort, title,
                 # thinking, agent/loop, settings/catalogue, logBudget,
-                # storage, storeBoot, activity, gaps, retry, budget,
+                # storage, storeBoot, autoBackup, activity, gaps, retry, budget,
                 # ai/structured,
                 # weeks, rememberArg, dayBrief, files/parts (the sweep),
                 # visuals/{srcdoc (the walls), keep},
@@ -131,6 +131,22 @@ by `Shell`, outside `.app-scroll`, in every section — renders any of it. **Do
 not add a write that cannot report.** `lib/logBudget.ts` owns what may be shed
 and `logBudget.test.ts` enforces that shedding never touches a field the grid,
 the streak or retention reads.
+
+**Automatic backups are not your work, so they do not raise the alarm.**
+`services/autoBackup.ts` writes the same file Settings → Data downloads into a
+folder picked once (File System Access — Chrome and Edge), as
+`drill-auto-YYYY-MM-DD.json`, at most every ten minutes while anything's
+`getVersion()` moves. A failure there loses nothing — the data is still where
+it was — so it reports on Home and in Settings, never through
+`persistence.guard`. The folder handle lives in its own database,
+`drill-backup`, for the version-bump reason the speech cache gives. Chrome
+usually forgets the *permission* between sessions and asks again only from a
+click: that is the `paused` state, and `BackupNudge` on Home is the click.
+**Pruning may only ever touch `AUTO_NAME` files** — the folder is the
+learner's, and may hold their manual backups — and `autoBackup.test.ts` holds
+that. `storage.lastBackup()` is written by every backup path, downloads
+included, and lives outside `mldrill:v3` so restoring a backup cannot claim
+the restored file's date as this browser's last backup.
 
 **Two tabs overwrite each other completely.** Each holds its own `db` and
 serialises all of it on save, so the last tab to close wins. `store` listens

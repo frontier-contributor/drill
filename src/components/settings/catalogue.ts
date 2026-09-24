@@ -426,6 +426,16 @@ export const SECTIONS = sections({
     sub: "One file with everything in it: decks, scheduling, chats, journal, memory and usage. This is how Drill moves to another browser, another machine, or back from a browser that cleared its storage.",
     finds: ["backup", "back up", "restore", "recover", "recovery", "snapshot", "another browser", "another machine", "json", "everything"]
   },
+  "data.auto": {
+    cat: "data",
+    title: "Automatic backups",
+    sub: "A folder Drill writes the same backup file into by itself, every day you use it — and a reminder on Home for when the last one is getting old.",
+    finds: [
+      "automatic backup", "auto backup", "autobackup", "backup folder", "folder", "schedule", "daily", "every day",
+      "sync", "dropbox", "google drive", "onedrive", "icloud", "remind", "reminder", "nag", "snapshots", "keep",
+      "how many", "prune", "file system", "permission", "paused", "resume"
+    ]
+  },
   "data.export": {
     cat: "data",
     title: "Export a piece",

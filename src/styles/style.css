@@ -3824,3 +3824,6 @@ select.fi.auto {
   white-space: pre-wrap;
   word-break: break-word;
 }
+.sset-s.ok {
+  color: var(--green);
+}

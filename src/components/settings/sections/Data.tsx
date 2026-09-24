@@ -15,6 +15,7 @@
 import StorageFacts from "./data/StorageFacts";
 import FilesSection from "./data/FilesSection";
 import BackupSection from "./data/BackupSection";
+import AutoBackupSection from "./data/AutoBackupSection";
 import TransferSection from "./data/TransferSection";
 import ExamplesSection from "./data/ExamplesSection";
 
@@ -24,6 +25,7 @@ export default function Data() {
       <StorageFacts />
       <FilesSection />
       <BackupSection />
+      <AutoBackupSection />
       <TransferSection />
       <ExamplesSection />
     </>
