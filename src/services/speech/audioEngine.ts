@@ -40,6 +40,12 @@ export interface AudioEngineOptions {
   /** Money actually spent, when it is spent. Replays from the cache never
    *  call this. */
   onSpend(chars: number, cost: number | undefined): void;
+  /** A clip has just been put on the element. Voice mode reads the bytes once
+   *  to draw the orb in time with the voice, and reads `currentTime` off the
+   *  element to stay in step. It never routes the sound through Web Audio:
+   *  Chrome's echo cancellation hears an <audio> element and would not hear
+   *  that, and the microphone would pick the reply up as someone talking. */
+  onAudio?(clip: Clip, blob: Blob, el: HTMLAudioElement): void;
 }
 
 interface Load {
@@ -348,6 +354,7 @@ export function createAudioEngine(o: AudioEngineOptions): PlaybackEngine {
           attached = my;
           seekTo = from;
           audio.src = url;
+          o.onAudio?.(clip, blob, audio);
           /* A new source resets the playback rate to the default rate, so
              both are set, or every clip after the first would play at 1×. */
           audio.defaultPlaybackRate = rate;

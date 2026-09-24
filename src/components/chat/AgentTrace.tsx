@@ -15,6 +15,7 @@
 import { useState } from "react";
 import Icon from "@/components/ui/Icon";
 import ThinkingPanel from "./ThinkingPanel";
+import { TOOL_WORDS } from "@/services/agent/tools";
 import type { AgentPlan, ToolCall, ToolRun } from "@/types/agent";
 
 /** The shape both callers flatten to. Deliberately not `AgentStep`: a live
@@ -30,22 +31,10 @@ export interface TraceStep {
   reasoning?: string;
 }
 
-/** A bare tool name reads like an internal. This is the same act said the way
- *  a person would say it, which is what belongs in front of the learner —
- *  the raw name is still there on the row's title attribute. */
-const VERB: Record<string, string> = {
-  overview: "Checked where this project stands",
-  recall: "Searched your record",
-  open: "Read one in full",
-  reviews: "Read how your reviews went",
-  remember: "Saved to memory",
-  forget: "Retired a memory",
-  draft_card: "Drafted a card",
-  journal_add: "Added to your journal",
-  plan: "Wrote a plan",
-  plan_step: "Closed a step",
-  note: "Noted a conclusion"
-};
+/* A bare tool name reads like an internal. TOOL_WORDS is the same act said
+   the way a person would say it, which is what belongs in front of the
+   learner — the raw name is still there on the row's title attribute. It
+   lives with the catalogue so voice mode says the same words aloud. */
 
 /**
  * What a write tool actually did, which is not always what it set out to do.
@@ -57,7 +46,7 @@ const VERB: Record<string, string> = {
  * to follow the outcome.
  */
 function verbFor(call: ToolCall, run?: ToolRun): string {
-  const base = VERB[call.name] || call.name;
+  const base = TOOL_WORDS[call.name]?.done || call.name;
   if (!run) return base;
   if (run.result.proposed?.length) {
     return call.name === "draft_card" ? "Drafted a card for you to accept" : "Proposed a memory for review";

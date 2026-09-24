@@ -87,6 +87,26 @@ const PLANNING_RULES =
   "- If what you find makes the plan wrong, close the dead steps as dropped and say so in your answer. Changing " +
   "your mind out loud is good; pretending the plan was always this one is not.";
 
+/**
+ * Voice mode's version of planning: allowed, never required.
+ *
+ * In voice there is no Deep to choose — the person talking should not have to
+ * decide how hard their question is before asking it. So the plan tools are
+ * on the table and this says when to reach for them: only for a request that
+ * is really several steps. A plain question gets a plain answer in one
+ * request, which is most of what anyone says out loud.
+ */
+function autoPlanRules(plan: string): string {
+  return (
+    "=== DECIDING HOW MUCH WORK THIS NEEDS ===\n" +
+    "Most things said to you need no plan at all: answer them, looking something up first only if the answer " +
+    "depends on it. Call `" +
+    plan +
+    "` only when the request is genuinely several steps — preparing for an exam, going through a whole deck, " +
+    "comparing weeks, building something in parts. If you do, work it to the end exactly as it says."
+  );
+}
+
 export interface AgentPromptOpts {
   /** The system message the single-call path would have built — persona plus
    *  the deterministic context block. The loop *keeps* it: the tools are for
@@ -97,8 +117,9 @@ export interface AgentPromptOpts {
   tools: Tool[];
   protocol: ToolProtocol;
   allowWrites: boolean;
-  /** Deep mode. Adds the plan discipline and the plan tools. */
-  planning: boolean;
+  /** Deep mode (true) adds the plan discipline; voice ("auto") offers a plan
+   *  without requiring one. */
+  planning: boolean | "auto";
   /** Ceiling on tool rounds, quoted to the model so "you have three steps" is
    *  a fact it can plan against rather than a wall it hits. */
   maxSteps: number;
@@ -106,13 +127,17 @@ export interface AgentPromptOpts {
 
 export function buildAgentSystem(opts: AgentPromptOpts): string {
   const parts = [opts.base.trim(), AGENT_RULES];
-  if (opts.planning) parts.push(PLANNING_RULES);
+  if (opts.planning === true) parts.push(PLANNING_RULES);
+  else if (opts.planning === "auto") {
+    const plan = opts.tools.find((t) => t.opensPlan)?.name;
+    if (plan) parts.push(autoPlanRules(plan));
+  }
   if (!opts.allowWrites) parts.push(READ_ONLY_NOTE.trim());
 
   parts.push(
     `You have at most ${opts.maxSteps} rounds of tool use for this message. Spend them like they cost something, ` +
       "because they do." +
-      (opts.planning ? " Writing and closing the plan costs rounds too — budget for that." : "")
+      (opts.planning === true ? " Writing and closing the plan costs rounds too — budget for that." : "")
   );
 
   /* The text protocol needs the catalogue in the prompt; native gets it in the

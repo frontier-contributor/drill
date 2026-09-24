@@ -12,7 +12,7 @@ import { runAgent, type AgentResult } from "./loop";
 import { protocolFor } from "./protocol";
 import { runTool, toolsFor } from "./tools";
 import type { AgentEvent } from "@/types/agent";
-import type { BackendType, ChatMessage } from "@/types";
+import type { BackendType, ChatMessage, Citation } from "@/types";
 
 export { runAgent } from "./loop";
 export { TOOLS, toolsFor, runTool } from "./tools";
@@ -38,8 +38,14 @@ export interface AgentTurnOpts {
    *  model being asked nicely, because "please do not write" is not a
    *  permission model. */
   allowWrites: boolean;
-  /** Deep mode: plan first, close every step, then answer. */
-  planning?: boolean;
+  /** Deep mode: plan first, close every step, then answer. "auto" is voice:
+   *  a plan is offered, not required. */
+  planning?: boolean | "auto";
+  /** Voice mode may search the web as a tool. Only honoured where the backend
+   *  can search — the caller asks availability() and passes the answer. */
+  web?: boolean;
+  /** Sources a web lookup drew on, for the turn's receipt. */
+  onCitations?: (cs: Citation[]) => void;
   temperature?: number;
   maxTokens?: number;
   signal?: AbortSignal;
@@ -58,7 +64,39 @@ export interface AgentTurnOpts {
  * all keep working for every request the loop makes, not just the first.
  */
 export function runAgentTurn(opts: AgentTurnOpts): Promise<AgentResult> {
-  const tools = toolsFor({ inProject: opts.inProject, allowWrites: opts.allowWrites, planning: !!opts.planning });
+  const planning = opts.planning === "auto" ? "auto" : !!opts.planning;
+  const tools = toolsFor({ inProject: opts.inProject, allowWrites: opts.allowWrites, planning, web: !!opts.web });
+  const found: Citation[] = [];
+  /* One search, answered briefly, through the same model the thread uses —
+     and metered like every other call because it goes through AI.chat. */
+  const web = opts.web
+    ? async (query: string, signal?: AbortSignal) => {
+        let citations: Citation[] = [];
+        const text = await AI.chat(
+          [
+            {
+              role: "system",
+              content: "Answer from the search results in one short paragraph of plain facts. Name the sources you relied on."
+            },
+            { role: "user", content: query }
+          ],
+          {
+            temperature: 0.2,
+            maxTokens: 500,
+            signal,
+            label: "voice web",
+            actions: ["web"],
+            onCitations: (cs) => {
+              citations = cs;
+            }
+          },
+          opts.override
+        );
+        for (const c of citations) if (!found.some((f) => f.url === c.url)) found.push(c);
+        opts.onCitations?.([...found]);
+        return { text, citations };
+      }
+    : undefined;
   return runAgent({
     system: opts.system,
     history: opts.history,
@@ -68,11 +106,12 @@ export function runAgentTurn(opts: AgentTurnOpts): Promise<AgentResult> {
       projectId: opts.projectId,
       conversationId: opts.conversationId,
       turnId: opts.turnId,
-      signal: opts.signal
+      signal: opts.signal,
+      web
     },
     maxSteps: Math.max(1, opts.maxSteps),
     allowWrites: opts.allowWrites,
-    planning: !!opts.planning,
+    planning,
     /* Bound here rather than passed through, so every step of the loop lands
        on the run transcript and the usage ledger the same way a single call
        does. A loop whose steps 2..n were invisible to the meter would

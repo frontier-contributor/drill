@@ -624,10 +624,16 @@ const CODE_NAMES: Record<string, string> = {
  *  brackets nobody can follow; saying there is some, and in what, is the
  *  part a listener can use. */
 export function codeCue(lang: string): string {
+  const name = codeName(lang);
+  return name ? `${name} code, skipped.` : "A code block, skipped.";
+}
+
+/** A fence's language as a person says it — "Python", "C plus plus" — or ""
+ *  when the fence names none worth saying. */
+export function codeName(lang: string): string {
   const l = String(lang || "").trim().toLowerCase();
-  if (!l || l === "text" || l === "plaintext") return "A code block, skipped.";
-  const name = CODE_NAMES[l] || l.charAt(0).toUpperCase() + l.slice(1);
-  return `${name} code, skipped.`;
+  if (!l || l === "text" || l === "plaintext") return "";
+  return CODE_NAMES[l] || l.charAt(0).toUpperCase() + l.slice(1);
 }
 
 /* -------------------------------------------------------------- sentences -- */

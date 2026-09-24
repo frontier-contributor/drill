@@ -666,6 +666,7 @@ const journal_add: Tool = {
 
 const plan_set: Tool = {
   name: "plan",
+  opensPlan: true,
   description:
     "State what you are going to do, before you do it. Restate the question as you understood it, then list the " +
     "specific things you need to find out — one line each, in the order you will do them. Three to six steps is " +
@@ -763,6 +764,39 @@ const note: Tool = {
   }
 };
 
+/* =================================================================== WEB */
+
+/* Voice mode's way onto the web. In text chat the Web switch sends every
+   message through OpenRouter's search; in voice there is no switch to throw,
+   so searching is a decision the model makes per question — and a question
+   that needs no search never pays for one. */
+const web_lookup: Tool = {
+  name: "web_lookup",
+  description:
+    "Search the live web and get back a short answer with its sources. For anything current or outside this " +
+    "learner's record — news, prices, releases, documentation, facts you are unsure of. Never for questions about " +
+    "the learner themselves; their record is in the other tools. One focused question per call.",
+  scope: "global",
+  kind: "read",
+  maxChars: 2400,
+  schema: {
+    properties: { query: { type: "string", description: "What to find out, as a full question." } },
+    required: ["query"]
+  },
+  async run(args, ctx) {
+    const query = str(args, "query");
+    if (query.length < 3) return miss("Say what to search for.");
+    if (!ctx.web) return miss("Web search is not available here.");
+    const found = await ctx.web(query, ctx.signal);
+    if (!found.text.trim()) return miss("The search came back with nothing usable.");
+    const sources = found.citations
+      .slice(0, 5)
+      .map((c, i) => `[${i + 1}] ${c.title || c.url} — ${c.url}`)
+      .join("\n");
+    return ok(found.text.trim() + (sources ? "\n\nSources:\n" + sources : ""));
+  }
+};
+
 /* ============================================================== catalogue */
 
 /** Tools every mode gets. Ordered as a model reads them: orient, look, read
@@ -774,7 +808,32 @@ const CORE: Tool[] = [overview, recall, open, reviews, remember, forget, draft_c
  *  cheap mode cost three requests to answer what one could. */
 const DEEP_ONLY: Tool[] = [plan_set, plan_step, note];
 
-export const TOOLS: Tool[] = [...CORE, ...DEEP_ONLY];
+/** Voice mode only, and only where the backend can search. */
+const VOICE_ONLY: Tool[] = [web_lookup];
+
+export const TOOLS: Tool[] = [...CORE, ...DEEP_ONLY, ...VOICE_ONLY];
+
+/**
+ * Each tool as a person would say it: `done` for the trace under a reply,
+ * `doing` for voice mode's status line and the line it says aloud while a
+ * lookup runs. Keyed by each tool's own `name`, so a rename carries its words
+ * with it — the trace used to keep this list to itself, and the voice would
+ * have needed a second copy.
+ */
+export const TOOL_WORDS: Record<string, { doing: string; done: string }> = {
+  [overview.name]: { doing: "Checking where this project stands", done: "Checked where this project stands" },
+  [recall.name]: { doing: "Searching your record", done: "Searched your record" },
+  [open.name]: { doing: "Reading that in full", done: "Read one in full" },
+  [reviews.name]: { doing: "Checking your reviews", done: "Read how your reviews went" },
+  [remember.name]: { doing: "Saving that", done: "Saved to memory" },
+  [forget.name]: { doing: "Retiring that memory", done: "Retired a memory" },
+  [draft_card.name]: { doing: "Drafting a card", done: "Drafted a card" },
+  [journal_add.name]: { doing: "Adding it to your journal", done: "Added to your journal" },
+  [plan_set.name]: { doing: "Making a plan", done: "Wrote a plan" },
+  [plan_step.name]: { doing: "Working through the plan", done: "Closed a step" },
+  [note.name]: { doing: "Noting that", done: "Noted a conclusion" },
+  [web_lookup.name]: { doing: "Searching the web", done: "Searched the web" }
+};
 export const TOOLS_BY_NAME: Record<string, Tool> = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
 
 export interface ToolsForOpts {
@@ -784,8 +843,11 @@ export interface ToolsForOpts {
    *  change anything. The catalogue is filtered rather than the model being
    *  asked nicely, because "please do not write" is not a permission model. */
   allowWrites: boolean;
-  /** Deep mode gets the plan tools. */
-  planning: boolean;
+  /** Deep mode gets the plan tools; so does voice ("auto"), which may plan
+   *  when a request needs it and is not made to when it does not. */
+  planning: boolean | "auto";
+  /** Voice mode, on a backend that can search: the web is a tool. */
+  web?: boolean;
 }
 
 export function toolsFor(opts: ToolsForOpts): Tool[] {
@@ -793,6 +855,7 @@ export function toolsFor(opts: ToolsForOpts): Tool[] {
     if (!opts.inProject && t.scope === "project") return false;
     if (!opts.allowWrites && t.kind === "write") return false;
     if (!opts.planning && DEEP_ONLY.includes(t)) return false;
+    if (!opts.web && VOICE_ONLY.includes(t)) return false;
     return true;
   });
 }

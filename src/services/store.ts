@@ -42,6 +42,8 @@ import type {
   Settings,
   SpeechEngineId,
   SpeechSettings,
+  HearEngineId,
+  TalkSettings,
   SRSState,
   ValidateResult
 } from "@/types";
@@ -86,7 +88,8 @@ export const DEFAULT_SETTINGS: Settings = {
   sessionSize: 10,
   speech: { engine: "", rate: 1, follow: true, cacheMB: 25, voices: {} },
   pdfEngine: "local",
-  visualsOff: []
+  visualsOff: [],
+  talk: { ears: "", hearModels: {}, sensitivity: "balanced", bargeIn: true, style: "talk", model: "" }
 };
 
 let db: DrillDB = null as unknown as DrillDB;
@@ -183,6 +186,7 @@ function normSettings(st: Settings): Settings {
   st.lang = normLang(st.lang);
   if (!st.creds || typeof st.creds !== "object") st.creds = {};
   st.speech = normSpeech(st.speech);
+  st.talk = normTalk(st.talk);
   if (!PDF_ENGINES.includes(st.pdfEngine)) st.pdfEngine = "local";
   st.visualsOff = normVisualsOff(st.visualsOff);
 
@@ -234,6 +238,31 @@ function normSpeech(v: unknown): SpeechSettings {
     follow: typeof s.follow === "boolean" ? s.follow : d.follow,
     cacheMB: s.cacheMB === 0 || s.cacheMB === 100 ? s.cacheMB : d.cacheMB,
     voices
+  };
+}
+
+const HEAR_ENGINES: HearEngineId[] = ["browser", "openrouter", "groq", "custom"];
+
+/** The talking settings, field by field, for the reason normSpeech exists: a
+ *  shallow merge cannot fill a field added to a nested object after the
+ *  database was saved. */
+function normTalk(v: unknown): TalkSettings {
+  const d = DEFAULT_SETTINGS.talk;
+  const s = (v && typeof v === "object" ? v : {}) as Partial<TalkSettings>;
+  const hearModels: TalkSettings["hearModels"] = {};
+  if (s.hearModels && typeof s.hearModels === "object") {
+    for (const id of ["openrouter", "groq", "custom"] as const) {
+      const m = s.hearModels[id];
+      if (typeof m === "string" && m.trim()) hearModels[id] = m.trim();
+    }
+  }
+  return {
+    ears: HEAR_ENGINES.includes(s.ears as HearEngineId) ? (s.ears as HearEngineId) : "",
+    hearModels,
+    sensitivity: s.sensitivity === "patient" || s.sensitivity === "quick" ? s.sensitivity : d.sensitivity,
+    bargeIn: typeof s.bargeIn === "boolean" ? s.bargeIn : d.bargeIn,
+    style: s.style === "show" ? "show" : d.style,
+    model: typeof s.model === "string" ? s.model.trim() : ""
   };
 }
 

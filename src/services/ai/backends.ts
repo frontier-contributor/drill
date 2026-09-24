@@ -10,7 +10,8 @@
  *
  * A provider that can read text aloud also gets a `speech` entry, whose
  * synthesize(request, ctx) resolves to one whole clip of audio. Ollama has
- * none, and nothing offers it a voice.
+ * none, and nothing offers it a voice. One that can hear gets a `hear` entry,
+ * the same thing the other way round: one recording in, its text out.
  *
  * `messages` is always the OpenAI shape and adapters translate outward from
  * that. `ctx` is the resolved {apiKey, model, baseUrl, headers} for the call.
@@ -31,6 +32,7 @@ import type {
   ChatMessage,
   ChatOpts,
   Citation,
+  HearDef,
   SpeechDef,
   TokenUsage,
   WireToolCall
@@ -799,6 +801,83 @@ function openAISpeech(
   };
 }
 
+/* ---------------------------------------------------------------- hearing */
+
+/** Bytes to base64 without a data-URL round trip through FileReader, in
+ *  slices, because String.fromCharCode(...bytes) on a whole recording blows
+ *  the argument limit. */
+async function toBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(bin);
+}
+
+/**
+ * OpenAI's /audio/transcriptions: one recording in, its text out.
+ *
+ * OpenRouter documents a JSON body with the audio as base64 first, so it gets
+ * that; Groq and anything else OpenAI-compatible get the multipart form every
+ * OpenAI SDK sends. Multipart must not carry the JSON Content-Type the header
+ * functions set — the browser writes the boundary into its own.
+ *
+ * Retried like speech, with `started` always false, for the same reason: a
+ * transcription arrives whole or not at all, and asking again cannot repeat a
+ * word. A voice turn waits on this, so the backoff is the price of not losing
+ * what someone just said to a blip.
+ */
+function openAIHear(label: string, headerFn: (ctx: AIContext) => Record<string, string>, body: "json" | "form", local = false): HearDef["hear"] {
+  return async (req, ctx) => {
+    const url = ctx.baseUrl + "/audio/transcriptions";
+    const headers = headerFn(ctx);
+    let payload: BodyInit;
+    if (body === "json") {
+      payload = JSON.stringify({
+        model: req.model,
+        input_audio: { data: await toBase64(req.audio), format: "wav" },
+        ...(req.language ? { language: req.language } : {}),
+        temperature: 0
+      });
+    } else {
+      delete headers["Content-Type"];
+      const form = new FormData();
+      form.append("file", req.audio, "speech.wav");
+      form.append("model", req.model);
+      form.append("response_format", "json");
+      form.append("temperature", "0");
+      if (req.language) form.append("language", req.language);
+      payload = form;
+    }
+    const res = await postWithRetry(
+      url,
+      { method: "POST", headers, body: payload, signal: req.signal },
+      label,
+      req.signal,
+      () => false,
+      (r, text) => {
+        if (r.status === 404) {
+          return new Error(
+            local
+              ? `${label} has no transcription endpoint at ${url}. Point Base URL at a server that speaks OpenAI's /audio/transcriptions, or let this browser hear you.`
+              : `${label} 404 — usually a transcription model it does not have (${req.model}). ${shortErr(text)}`
+          );
+        }
+        if (r.status === 400 || r.status === 413 || r.status === 422) {
+          return new Error(`${label} refused the recording (${r.status}) — ${shortErr(text)}`);
+        }
+        return null;
+      },
+      local
+    );
+    const j = (await res.json().catch(() => ({}))) as { text?: unknown; usage?: { cost?: unknown } };
+    if (typeof j.text !== "string") throw new Error(`${label} answered without a transcript.`);
+    const cost = typeof j.usage?.cost === "number" ? j.usage.cost : undefined;
+    return { text: j.text.trim(), cost, generationId: res.headers.get("x-generation-id") || undefined };
+  };
+}
+
 /* --------------------------------------------------------------- backends */
 
 
@@ -829,6 +908,21 @@ export const BACKENDS: Record<BackendType, BackendDef> = {
       defaultVoice: "af_heart",
       maxChars: 800,
       synthesize: openAISpeech("OpenRouter", openRouterHeaders, "mp3")
+    },
+    /* Whisper turbo at three ten-thousandths of a cent a second — a whole
+       evening of talking is a fraction of a cent — and the reply reports
+       its own cost, which is what the ledger records. */
+    hear: {
+      defaultModel: "openai/whisper-large-v3-turbo",
+      models: [
+        "openai/whisper-large-v3-turbo",
+        "openai/gpt-4o-mini-transcribe",
+        "openai/whisper-large-v3",
+        "nvidia/parakeet-tdt-0.6b-v3",
+        "mistralai/voxtral-mini-transcribe",
+        "deepgram/nova-3"
+      ],
+      hear: openAIHear("OpenRouter", openRouterHeaders, "json")
     },
     ...openAICompatible("OpenRouter", "openrouter", openRouterHeaders)
   } as BackendDef,
@@ -865,6 +959,14 @@ export const BACKENDS: Record<BackendType, BackendDef> = {
         "canopylabs/orpheus-arabic-saudi": ["abdullah", "fahad", "sultan", "lulwa", "noura", "aisha"]
       },
       synthesize: openAISpeech("Groq", groqHeaders, "wav")
+    },
+    /* The fastest ears anywhere: Whisper turbo on Groq's hardware answers a
+       short utterance in a couple of hundred milliseconds, which is most of
+       why voice mode asks Groq first when its key is saved. */
+    hear: {
+      defaultModel: "whisper-large-v3-turbo",
+      models: ["whisper-large-v3-turbo", "whisper-large-v3"],
+      hear: openAIHear("Groq", groqHeaders, "form")
     },
     ...openAICompatible("Groq", "groq", groqHeaders)
   } as BackendDef,
@@ -1013,6 +1115,11 @@ export const BACKENDS: Record<BackendType, BackendDef> = {
       defaultVoice: "alloy",
       maxChars: 800,
       synthesize: openAISpeech("Backend", customHeaders, "mp3", true)
+    },
+    hear: {
+      defaultModel: "whisper-1",
+      models: ["whisper-1"],
+      hear: openAIHear("Backend", customHeaders, "form", true)
     },
     ...openAICompatible("Backend", "custom", customHeaders, true)
   } as BackendDef

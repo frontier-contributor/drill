@@ -75,8 +75,9 @@ export interface RunAgentOpts {
   allowWrites: boolean;
   /** Deep mode: the assistant writes a plan first and must close every step
    *  before it answers. Off for the reactive mode, where a plan would be pure
-   *  overhead on a two-lookup question. */
-  planning?: boolean;
+   *  overhead on a two-lookup question. "auto" is voice mode: a plan may be
+   *  written and, once written, is held to exactly the same close-out. */
+  planning?: boolean | "auto";
   chat: ChatFn;
   runTool: RunToolFn;
   temperature?: number;
@@ -149,7 +150,7 @@ export async function runAgent(opts: RunAgentOpts): Promise<AgentResult> {
     tools: opts.tools,
     protocol: opts.protocol,
     allowWrites: opts.allowWrites,
-    planning: !!opts.planning,
+    planning: opts.planning === "auto" ? "auto" : !!opts.planning,
     maxSteps: opts.maxSteps
   });
 

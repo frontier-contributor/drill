@@ -7,7 +7,7 @@
  * somewhere else", and the second is served by branching into a new
  * conversation instead of an invisible tree node.
  * ========================================================================== */
-import type { BackendType, Citation, TokenUsage } from "@/types";
+import type { BackendType, Citation, TokenUsage, VoiceStyle } from "@/types";
 import type { ChatActionId } from "@/lib/chatActions";
 import type { AgentTrace } from "@/types/agent";
 import type { Effort, MemoryScope } from "@/types/core";
@@ -166,6 +166,11 @@ export interface Variant {
    *  regenerating gives a new picture and the variant arrows step between
    *  them rather than piling them up under one reply. */
   images?: GeneratedImage[];
+  /** Voice mode was talked over while this was being said. `content` has been
+   *  cut to what was actually heard — the next request replays the history,
+   *  and a model that "remembers" saying things nobody heard answers the wrong
+   *  conversation. `full` keeps what it had written, so nothing is lost. */
+  interrupted?: { full: string };
 }
 
 export interface Turn {
@@ -179,6 +184,9 @@ export interface Turn {
   error?: string;
   /** user marked this worth keeping */
   starred?: boolean;
+  /** Said out loud in voice mode, or answered there. The thread shows it, and
+   *  it is why a reply may be shorter than one typed in. */
+  voice?: boolean;
   createdAt: number;
 }
 
@@ -252,6 +260,9 @@ export interface Conversation {
    *  mode it belongs to: a thread you opened to draw diagrams wants a
    *  different shape from one you opened to draw a wallpaper. */
   image?: ImageSpec;
+  /** How voice mode shapes its replies in this thread. Absent follows
+   *  Settings → Listening → Talking. */
+  voiceStyle?: VoiceStyle;
 
   context: ContextSource[];
   /** Attachments that survive every turn, as opposed to Turn.attachments

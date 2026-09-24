@@ -346,6 +346,95 @@ export async function speak(input: string, target: SpeakTarget, signal?: AbortSi
   }
 }
 
+/* ---------------------------------------------------------------- hearing */
+
+/** A hosted pair of ears: which backend, and which of its transcription models. */
+export interface HearTarget {
+  engine: "openrouter" | "groq" | "custom";
+  model: string;
+}
+
+export interface HeardSpeech {
+  text: string;
+  seconds: number;
+  /** undefined when nobody said what it cost — unknown, not free. */
+  cost?: number;
+}
+
+export function hearReady(id: BackendType): { ok: boolean; why?: string } {
+  const be = BACKENDS[id];
+  if (!be?.hear) return { ok: false, why: `${be?.label || id} cannot transcribe speech.` };
+  if (be.needsKey && !speechCreds(id).apiKey) {
+    return { ok: false, why: `No ${be.label} key yet — add one under Settings → Connection.` };
+  }
+  return { ok: true };
+}
+
+/**
+ * Turn a recording into text: the one place being heard is paid for.
+ *
+ * The hearing counterpart of speak(), and recorded the same way — the run
+ * transcript for "what is it doing", the usage ledger under "voice" with the
+ * seconds, because a transcription bills by the second and reports no tokens.
+ * The cost is the provider's own figure when it gives one (OpenRouter does),
+ * nothing for a backend that costs nothing, and unknown otherwise.
+ */
+export async function transcribe(
+  audio: Blob,
+  seconds: number,
+  target: HearTarget,
+  opts: { language?: string; signal?: AbortSignal } = {}
+): Promise<HeardSpeech> {
+  const def = BACKENDS[target.engine]?.hear;
+  const check = hearReady(target.engine);
+  if (!def || !check.ok) throw new Error(check.why || "This backend cannot transcribe speech.");
+
+  const creds = speechCreds(target.engine);
+  const ctx: AIContext = { apiKey: creds.apiKey, model: target.model, baseUrl: creds.baseUrl, headers: creds.headers };
+  const started = Date.now();
+  const label = "voice";
+  const free = BACKENDS[target.engine].pricing === "free";
+  const secs = Math.round(seconds * 10) / 10;
+
+  try {
+    const heard = await def.hear({ model: target.model, audio, seconds, language: opts.language, signal: opts.signal }, ctx);
+    const cost = heard.cost ?? (free ? 0 : undefined);
+    transcript.record({
+      at: started,
+      label,
+      model: target.model,
+      messages: [{ role: "user", content: `[${secs}s of speech · ${U.fmtBytes(audio.size)} wav]` }],
+      response: heard.text || "(nothing heard)",
+      error: null,
+      elapsedMs: Date.now() - started
+    });
+    try {
+      usageLog.add({ at: started, backend: target.engine, model: target.model, label, seconds, cost });
+    } catch {
+      /* the ledger is a bystander */
+    }
+    return { text: heard.text, seconds, cost };
+  } catch (err) {
+    if (!isAbort(err)) {
+      transcript.record({
+        at: started,
+        label,
+        model: target.model,
+        messages: [{ role: "user", content: `[${secs}s of speech · ${U.fmtBytes(audio.size)} wav]` }],
+        response: null,
+        error: (err as Error)?.message || String(err),
+        elapsedMs: Date.now() - started
+      });
+      try {
+        usageLog.add({ at: started, backend: target.engine, model: target.model, label, seconds: 0, failed: true });
+      } catch {
+        /* the ledger is a bystander */
+      }
+    }
+    throw err;
+  }
+}
+
 /** A connectivity probe, not a real prompt — but it still has to survive a
  *  reasoning model. 16 tokens used to be the whole budget, which is plenty
  *  for a model that just says "ready" and fatal for one that reasons first:

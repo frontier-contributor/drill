@@ -173,6 +173,37 @@ export interface Settings {
    *  is off is never taught to the model and never drawn: its block shows as
    *  code, which is what it is. */
   visualsOff: VisualKind[];
+  /** Talking with voice mode: what hears you, how long a pause has to be, and
+   *  how a spoken reply is shaped. Nested for the reason `speech` is. */
+  talk: TalkSettings;
+}
+
+/* ----------------------------------------------------------------- talk -- */
+
+/** What turns your speech into text in voice mode. The browser's own
+ *  recognition needs no key; the rest are a backend's /audio/transcriptions. */
+export type HearEngineId = "browser" | "openrouter" | "groq" | "custom";
+
+/** How a spoken reply is shaped. `talk` never writes code, tables or lists;
+ *  `show` may put them on screen and says so instead of reading them. */
+export type VoiceStyle = "talk" | "show";
+
+/** How long a pause has to be before it counts as the end of what you said. */
+export type TalkSensitivity = "patient" | "balanced" | "quick";
+
+export interface TalkSettings {
+  /** "" is automatic: a hosted engine whose key is saved — Groq first, it is
+   *  the fastest — otherwise this browser's own recognition. */
+  ears: HearEngineId | "";
+  /** The transcription model each hosted engine uses. Empty is its default. */
+  hearModels: Partial<Record<Exclude<HearEngineId, "browser">, string>>;
+  sensitivity: TalkSensitivity;
+  /** Talking over a reply stops it. Off, only a tap or a key does. */
+  bargeIn: boolean;
+  /** The style a new voice conversation starts in. */
+  style: VoiceStyle;
+  /** The model voice turns are answered by. "" follows the conversation. */
+  model: string;
 }
 
 /* --------------------------------------------------------------- speech -- */
@@ -539,6 +570,33 @@ export interface SpeechClip {
   generationId?: string;
 }
 
+/** One recording to turn into text: 16 kHz mono WAV, small by design. */
+export interface HearRequest {
+  model: string;
+  audio: Blob;
+  /** Length of the audio, for the ledger — a transcription bills by the second. */
+  seconds: number;
+  /** ISO-639-1. Omitted lets the model detect it. */
+  language?: string;
+  signal?: AbortSignal;
+}
+
+/** What a transcription came back as. */
+export interface Heard {
+  text: string;
+  /** What the provider says it charged, when it says. */
+  cost?: number;
+  generationId?: string;
+}
+
+/** What a backend needs to hear speech. Absent means it cannot. */
+export interface HearDef {
+  defaultModel: string;
+  /** Known models, offered in Settings beside a typed id. */
+  models: string[];
+  hear(req: HearRequest, ctx: AIContext): Promise<Heard>;
+}
+
 /** What a backend needs to read aloud. Absent means it cannot. */
 export interface SpeechDef {
   /** Where its speech models and their voices are listed:
@@ -572,6 +630,8 @@ export interface BackendDef {
   supports?: ChatActionId[];
   /** Reading replies aloud, when the provider has a speech endpoint. */
   speech?: SpeechDef;
+  /** Hearing speech, when the provider has a transcription endpoint. */
+  hear?: HearDef;
   chat(messages: ChatMessage[], opts: ChatOpts, ctx: AIContext): Promise<string>;
   listModels(ctx: AIContext): Promise<string[]>;
 }

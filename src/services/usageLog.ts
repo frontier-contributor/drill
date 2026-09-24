@@ -16,7 +16,9 @@
  * Reading replies aloud is counted here too, under the label "listen". A
  * speech call bills by the character and reports no tokens at all, so rows
  * carry `characters` beside the token counts — without it an unpriced voice
- * would be a row of zeros that looked exactly like a free one.
+ * would be a row of zeros that looked exactly like a free one. Being heard is
+ * the same problem the other way round: a transcription bills by the second of
+ * audio, so voice mode's rows carry `seconds`.
  * ========================================================================== */
 import { STORE_USAGE, idbAll, idbClear, idbPut } from "./idb";
 import * as persistence from "./persistence";
@@ -40,6 +42,9 @@ export interface UsageRow {
    *  tokens, so without a count of its own an image call is a row of zeros
    *  that reads as a free one. */
   images: number;
+  /** Seconds of speech transcribed. Zero for everything that is not, for the
+   *  reason `characters` is: speech-to-text bills by the second. */
+  seconds: number;
   /** undefined = no price was known, which is not the same as free. */
   cost?: number;
 }
@@ -62,6 +67,7 @@ export interface UsageTotals {
   reasoningTokens: number;
   characters: number;
   images: number;
+  seconds: number;
   cost?: number;
   /** Models seen with no known price, so the panel can say so rather than
    *  letting a blank column read as free. */
@@ -146,6 +152,7 @@ function repair(d: UsageDay): UsageDay {
     r.reasoningTokens ||= 0;
     r.characters ||= 0;
     r.images ||= 0;
+    r.seconds ||= 0;
   }
   return d;
 }
@@ -186,13 +193,16 @@ export interface UsageEntry {
   characters?: number;
   /** Pictures the reply came back with. */
   images?: number;
+  /** Seconds of audio sent to be transcribed. */
+  seconds?: number;
   /** Already costed by the caller, which knows the price at the time. */
   cost?: number;
   failed?: boolean;
 }
 
-/** Record one AI call. Called from the two seams in services/ai — chat() and
- *  speak() — so every feature is covered without any of them opting in. */
+/** Record one AI call. Called from the seams in services/ai — chat(), speak()
+ *  and transcribe() — so every feature is covered without any of them opting
+ *  in. */
 export function add(e: UsageEntry): void {
   const day = dayOf(e.at);
   let rec = days.get(day);
@@ -215,7 +225,8 @@ export function add(e: UsageEntry): void {
       cachedPromptTokens: 0,
       reasoningTokens: 0,
       characters: 0,
-      images: 0
+      images: 0,
+      seconds: 0
     };
   }
 
@@ -223,6 +234,7 @@ export function add(e: UsageEntry): void {
   if (e.failed) row.errors++;
   row.characters += e.characters || 0;
   row.images += e.images || 0;
+  row.seconds += e.seconds || 0;
   if (e.usage) {
     row.promptTokens += e.usage.promptTokens || 0;
     row.completionTokens += e.usage.completionTokens || 0;
@@ -267,6 +279,7 @@ export function rollup(list: UsageDay[], by: (r: UsageRow) => string): UsageRow[
       cur.reasoningTokens += r.reasoningTokens;
       cur.characters += r.characters;
       cur.images += r.images || 0;
+      cur.seconds += r.seconds || 0;
       if (r.cost != null) cur.cost = (cur.cost || 0) + r.cost;
     }
   }
@@ -283,6 +296,7 @@ export function totals(list: UsageDay[]): UsageTotals {
     reasoningTokens: 0,
     characters: 0,
     images: 0,
+    seconds: 0,
     unpriced: []
   };
   const unpriced = new Set<string>();
@@ -296,12 +310,13 @@ export function totals(list: UsageDay[]): UsageTotals {
       t.reasoningTokens += r.reasoningTokens;
       t.characters += r.characters;
       t.images += r.images || 0;
+      t.seconds += r.seconds || 0;
       if (r.cost != null) t.cost = (t.cost || 0) + r.cost;
       /* A row with tokens but no cost is a model we could not price. One
          with no tokens either just never reported usage. A voice reports
          characters instead of tokens, and an unpriced one is just as much a
          blank that must not read as free. */
-      else if (r.promptTokens || r.completionTokens || r.characters || r.images) unpriced.add(r.model);
+      else if (r.promptTokens || r.completionTokens || r.characters || r.images || r.seconds) unpriced.add(r.model);
     }
   }
   t.unpriced = [...unpriced];

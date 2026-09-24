@@ -68,6 +68,10 @@ export interface Tool {
   /** Rough character ceiling on this tool's own output, enforced by the
    *  executor rather than trusted to the tool. */
   maxChars?: number;
+  /** The tool that opens a plan. Marked rather than looked up by name, so the
+   *  prompt that invites a plan names it from the catalogue and a rename
+   *  cannot leave the prompt pointing at a tool that no longer exists. */
+  opensPlan?: boolean;
   run(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> | ToolResult;
 }
 
@@ -82,6 +86,11 @@ export interface ToolContext {
    *  came from — MemoryOrigin has had no producer outside chat capture. */
   turnId: string;
   signal?: AbortSignal;
+  /** One web search, answered in a paragraph with its sources — present only
+   *  when this run may search. Supplied by the caller, which knows which
+   *  backend and model the conversation resolves to; a tool reaching for the
+   *  global default would search with a model the thread never chose. */
+  web?: (query: string, signal?: AbortSignal) => Promise<{ text: string; citations: import("@/types").Citation[] }>;
   /** Mutable state for this one message. Tools that manage the plan and the
    *  scratchpad write here rather than to a store: none of it outlives the
    *  answer except as the trace recorded alongside it. */

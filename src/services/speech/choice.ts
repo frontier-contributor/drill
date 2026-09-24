@@ -249,6 +249,42 @@ export function createEngine(choice: ListenChoice, source: ListenSource): Playba
   });
 }
 
+/**
+ * A voice for voice mode: the same engines Listen uses, built from the same
+ * choice, so the voice that answers you is the voice Settings → Listening
+ * shows. What differs is who it reports to — the call rather than the
+ * player — and that each hosted clip's bytes are handed over for the orb.
+ * Must be called inside the click that starts the call, like listen().
+ */
+export function createTalkEngine(
+  choice: ListenChoice,
+  o: {
+    title: string;
+    media: { play(): void; pause(): void; stop(): void };
+    onSpend(chars: number, cost: number | undefined): void;
+    onAudio?: (clip: import("./player").Clip, blob: Blob, el: HTMLAudioElement) => void;
+  }
+): PlaybackEngine {
+  const { info } = choice;
+  if (info.id === "device") return createDeviceEngine(info.voice, choice.label);
+  return createAudioEngine({
+    target: { engine: info.id, model: info.model, voice: info.voice },
+    label: choice.label,
+    title: o.title,
+    cacheMB: store.settings().speech.cacheMB,
+    media: { ...o.media, previous: () => undefined, next: () => undefined },
+    onSpend: o.onSpend,
+    onAudio: o.onAudio
+  });
+}
+
+/** This device's voice, for when a hosted one fails mid-call. Null when the
+ *  browser has none. */
+export function deviceChoice(): ListenChoice | null {
+  const info = engineInfo("device");
+  return info.verdict.can ? { info, fellBack: null, label: labelOf(info) } : null;
+}
+
 /** Read a source aloud with whatever voice would read now. Must be called
  *  from inside the click that asked for it — see audioEngine's silence(). */
 export function listen(source: ListenSource, from = 0): boolean {

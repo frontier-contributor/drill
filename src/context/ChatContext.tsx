@@ -36,6 +36,7 @@ import { resolveBackend, resolveEffort, resolveModel } from "@/lib/resolveSettin
 import { useRoute } from "./RouteContext";
 import type { Attachment, ChatMode, Conversation, ContextSource, Turn, Usage, Variant } from "@/types/chat";
 import { runAgentTurn } from "@/services/agent";
+import { TOOL_WORDS } from "@/services/agent/tools";
 import { hydrate, type BinaryNeed } from "@/services/files/wire";
 import { canTake } from "@/lib/modality";
 import { carry, windowFor, type CarryContext } from "@/lib/files/carry";
@@ -45,7 +46,9 @@ import type { ChatActionId } from "@/lib/chatActions";
 import type { BackendType, ChatMessage, Citation, Memory } from "@/types";
 import { capReasoning } from "@/lib/reasoning";
 import { DEFAULT_IMAGE_SPEC, type ImageSpec } from "@/lib/imageSpec";
-import { actionsFor } from "@/lib/chatActions";
+import { actionsFor, availability } from "@/lib/chatActions";
+import { voiceBrief, voiceMaxTokens } from "@/lib/voice/style";
+import type { VoiceStyle } from "@/types";
 
 /** A one-off backend/model for a single regenerate call — applied to that
  *  variant only, never written to conversation.backend/model. */
@@ -119,6 +122,33 @@ export interface ThinkingLive {
   asked: boolean;
 }
 
+/** What voice mode is told while a spoken turn is being answered — which of
+ *  the things it could do, it is doing. Tied to the loop's real events, never
+ *  to a timer, so the voice bar cannot claim work that is not happening. */
+export type VoiceStatus =
+  | { kind: "answering" }
+  /** `label` is the tool as a person says it — "Checking your reviews". */
+  | { kind: "tool"; name: string; label: string }
+  | { kind: "plan"; done: number; total: number };
+
+/**
+ * A turn said out loud, and the hooks voice mode listens on while it is
+ * answered. Passed to send() by services/voice through ChatView; everything
+ * else about the turn — the history, the context, the tools, the receipts —
+ * is the ordinary path, which is the point.
+ */
+export interface VoiceTurn {
+  style: VoiceStyle;
+  /** The assistant turn being answered into, as soon as it exists. */
+  onStart(turnId: string): void;
+  /** The reply so far. Empty again when the loop throws a round away to
+   *  call a tool — lib/voice/chunker.ts reads that as a new run. */
+  onText(acc: string): void;
+  onStatus(s: VoiceStatus): void;
+  /** The reply is complete, stopped, or failed. */
+  onDone(r: { ok: boolean; error?: string }): void;
+}
+
 /** Upsert one step, without mutating the array React is rendering. */
 function patchStep(live: AgentLive, step: number, fn: (s: LiveStep) => LiveStep): AgentLive {
   const steps = [...live.steps];
@@ -162,8 +192,13 @@ interface ChatState {
   error: string | null;
   followups: string[];
 
-  send: (text: string, attachments?: Attachment[]) => Promise<void>;
+  /** `voice` makes it a spoken turn: answered through the voice route, shaped
+   *  for listening, and reported back through the hooks as it streams. */
+  send: (text: string, attachments?: Attachment[], voice?: VoiceTurn) => Promise<void>;
   stop: () => void;
+  /** Voice mode was talked over: cut this reply back to what was heard. Safe
+   *  to call while the reply is still arriving — the cut waits for it. */
+  cutReply: (turnId: string, text: string) => void;
   regenerate: (turnId: string, override?: ModelOverride) => Promise<void>;
   editUserTurn: (turnId: string, text: string) => Promise<void>;
   retry: () => Promise<void>;
@@ -225,6 +260,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const abortRef = useRef<AbortController | null>(null);
   const followupAbort = useRef<AbortController | null>(null);
+  /* `busy` and `conversation` as of this instant, not as of the render a
+     callback was made in. Voice mode sends the next turn the moment the
+     previous one is stopped, from a closure that can be several renders old:
+     reading the state there saw a request still running and dropped the turn,
+     or saw no conversation yet and created a second one. */
+  const busyRef = useRef(false);
+  const convRef = useRef<Conversation | null>(null);
+  convRef.current = conversation;
+  /** Interrupted replies waiting to be cut once their text has landed. */
+  const pendingCuts = useRef(new Map<string, string>());
 
   /* ---- load the routed conversation ---- */
   useEffect(() => {
@@ -325,14 +370,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   /* ---- assemble the wire messages ---- */
   const buildMessages = useCallback(
-    (c: Conversation, upTo: number): { messages: ChatMessage[]; memories: Memory[]; binary: BinaryNeed[] } => {
+    (c: Conversation, upTo: number, voice?: VoiceStyle): { messages: ChatMessage[]; memories: Memory[]; binary: BinaryNeed[] } => {
       const project = store.get().projects[c.projectId];
       const effort = resolveEffort(c, project).value;
       const budget = budgetFor(effort);
       const persona = c.systemPrompt || getPersona(c.personaId).prompt;
       const lastUser = [...c.turns.slice(0, upTo + 1)].reverse().find((t) => t.role === "user");
       const queryText = lastUser ? chatStore.activeContent(lastUser) : "";
-      const { system, memories } = buildContext(persona, c.context, queryText, c.projectId, budget.memoryLimit, c.id);
+      const built = buildContext(persona, c.context, queryText, c.projectId, budget.memoryLimit, c.id);
+      const memories = built.memories;
+      /* Last, so that "only words" outranks the figure protocol above it when
+         the two disagree — see lib/voice/style.ts. */
+      const system = voice ? (built.system ? built.system + "\n\n" : "") + voiceBrief(voice) : built.system;
       const msgs: ChatMessage[] = [];
       if (system) msgs.push({ role: "system", content: system });
 
@@ -341,7 +390,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
          warning the composer showed and the bytes that go out agree. */
       const target = AI.resolve({ backend: resolveBackend(c, project).value, model: resolveModel(c, project).value });
       const modalities = catalogueEntry(target.model)?.inputModalities;
-      const mode = c.mode === "agent" || c.mode === "deep" ? c.mode : "direct";
+      /* A voice turn is answered by the loop whatever the thread's own mode. */
+      const mode = voice ? "agent" : c.mode === "agent" || c.mode === "deep" ? c.mode : "direct";
       const base: Omit<CarryContext, "age"> = {
         window: windowFor(effort),
         image: canTake(modalities, "image"),
@@ -412,14 +462,33 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   );
 
   /* ---- the one place a request is actually made ---- */
+  /** Apply a waiting cut to a reply whose text has landed. The words it had
+   *  written are kept on the variant, so nothing is lost — only what the next
+   *  request replays changes. */
+  const applyCut = useCallback((c: Conversation, turn: Turn) => {
+    const text = pendingCuts.current.get(turn.id);
+    const v = turn.variants[turn.active];
+    if (text == null || !v) return;
+    pendingCuts.current.delete(turn.id);
+    if (v.content.trim() === text.trim()) return;
+    v.interrupted = { full: v.interrupted?.full ?? v.content };
+    v.content = text;
+    chatStore.persist(c, true);
+  }, []);
+
   const run = useCallback(
-    async (c: Conversation, targetTurn: Turn, upToIndex: number, override?: ModelOverride) => {
+    async (c: Conversation, targetTurn: Turn, upToIndex: number, override?: ModelOverride, voice?: VoiceTurn) => {
       // A regenerate can ask for a different model without pinning the
       // conversation to it — c.backend/c.model stay untouched either way.
+      // A voice turn may be answered by a model set for talking, in
+      // Settings → Listening → Talking, without the thread being pinned to it.
       const runBackend = override?.backend ?? c.backend;
-      const runModel = override?.model ?? c.model;
+      const runModel = override?.model ?? ((voice && store.settings().talk.model) || c.model);
       const controller = new AbortController();
       abortRef.current = controller;
+      busyRef.current = true;
+      voice?.onStart(targetTurn.id);
+      let outcome: { ok: boolean; error?: string } = { ok: true };
       followupAbort.current?.abort();
       setFollowups([]);
       setBusy(true);
@@ -463,7 +532,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // Only run() makes the primary reply call. The cheaper maybeFollowups()
       // below reuses buildMessages too, but a suggestion request isn't what
       // "used" should mean here, so it does not record.
-      const built = buildMessages(c, upToIndex);
+      const built = buildMessages(c, upToIndex, voice?.style);
       for (const m of built.memories) memoryStore.recordUsage(m.id);
       const budget = budgetFor(resolveEffort(c, store.get().projects[c.projectId]).value);
       const replyScale = budget.replyScale;
@@ -483,7 +552,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         const engine = store.settings().pdfEngine;
         const pdfEngine = built.binary.some((b) => b.kind === "file") && engine && engine !== "local" ? engine : undefined;
         let full: string;
-        const mode = c.mode === "agent" || c.mode === "deep" ? c.mode : "direct";
+        /* Voice is its own route: always the loop, planning offered rather
+           than required, the web a tool rather than a switch. Whoever is
+           talking never picks a mode — see services/agent/prompt.ts. */
+        const mode = voice ? "voice" : c.mode === "agent" || c.mode === "deep" ? c.mode : "direct";
+        const threadMax = Math.max(256, Math.round(c.maxTokens * replyScale));
         if (mode !== "direct") {
           const resolved = AI.resolve({ backend: runBackend, model: runModel });
           setAgentLive({ steps: [], answering: false, plan: null, notes: [] });
@@ -499,22 +572,30 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             turnId: targetTurn.id,
             backend: resolved.type,
             /* Shared with the mode picker via lib/effort, so the number shown
-               on the chip is the number the loop actually gets. */
-            maxSteps: mode === "deep" ? deepSteps(budget.agentSteps) : budget.agentSteps,
-            planning: mode === "deep",
+               on the chip is the number the loop actually gets. Voice gets
+               Deep's ceiling, and a plain answer uses none of it. */
+            maxSteps: mode === "agent" ? budget.agentSteps : deepSteps(budget.agentSteps),
+            planning: mode === "voice" ? "auto" : mode === "deep",
+            /* Asked of the same call the send path filters Web on, so voice
+               never offers a search the backend would refuse. */
+            web: mode === "voice" && availability("web", resolved.backend.supports, resolved.model).can,
+            onCitations: (cs) => {
+              citations = cs;
+            },
             inProject: !!store.get().projects[c.projectId],
             /* Writes follow the same policy every other surface obeys. A
                project on `manual` gets a read-only assistant rather than one
                that fills a tray nobody asked for. */
             allowWrites: (store.get().projects[c.projectId]?.memoryPolicy?.autonomy || store.settings().autonomy) !== "manual",
             temperature: c.temperature,
-            maxTokens: Math.max(256, Math.round(c.maxTokens * replyScale)),
+            maxTokens: voice ? voiceMaxTokens(voice.style, threadMax) : threadMax,
             signal: controller.signal,
             override: { backend: runBackend, model: runModel },
             onEvent: (e) => {
               if (e.kind === "token") {
                 acc = e.acc;
                 setStreaming(e.acc);
+                voice?.onText(e.acc);
               } else if (e.kind === "reasoning") {
                 reasoned = true;
                 /* The loop's rounds each reason separately, so the durable
@@ -532,6 +613,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                    belongs. */
                 acc = "";
                 setStreaming("");
+                voice?.onText("");
+                voice?.onStatus({ kind: "tool", name: e.call.name, label: TOOL_WORDS[e.call.name]?.doing || "Looking something up" });
                 setAgentLive((s) => (s ? patchStep(s, e.step, (st) => ({ ...st, calls: [...st.calls, e.call] })) : s));
               } else if (e.kind === "called") {
                 setAgentLive((s) => (s ? patchStep(s, e.step, (st) => ({ ...st, runs: [...st.runs, e.run] })) : s));
@@ -540,10 +623,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                    in the run scratch, so storing it by reference would give
                    React the same object every time and nothing would re-render. */
                 setAgentLive((s) => (s ? { ...s, plan: { goal: e.plan.goal, items: e.plan.items.map((i) => ({ ...i })) } } : s));
+                voice?.onStatus({
+                  kind: "plan",
+                  done: e.plan.items.filter((i) => i.status === "done" || i.status === "dropped").length,
+                  total: e.plan.items.length
+                });
               } else if (e.kind === "note") {
                 setAgentLive((s) => (s ? { ...s, notes: [...s.notes, e.text] } : s));
               } else if (e.kind === "answering") {
                 answerStarted();
+                voice?.onStatus({ kind: "answering" });
                 setAgentLive((s) => (s ? { ...s, answering: true } : s));
               }
             }
@@ -560,7 +649,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           messages,
           {
             temperature: c.temperature,
-            maxTokens: Math.max(256, Math.round(c.maxTokens * replyScale)),
+            maxTokens: threadMax,
             signal: controller.signal,
             label: "chat",
             /* Image mode is the Image action plus two dials, and the action
@@ -667,13 +756,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         targetTurn.active = targetTurn.variants.length - 1;
         targetTurn.error = undefined;
         chatStore.addUsageTo(c, usage);
+        applyCut(c, targetTurn);
         chatStore.persist(c, true);
 
         void maybeTitle(c);
         /* The one extra request per message, and the reason a single send
            used to look like two. Gated twice on purpose: turned off wholesale
-           in Settings, and skipped at low effort regardless. */
-        if (budget.followups && store.settings().followups) void maybeFollowups(c);
+           in Settings, and skipped at low effort regardless. Never in voice:
+           nobody taps a suggestion chip mid-conversation. */
+        if (!voice && budget.followups && store.settings().followups) void maybeFollowups(c);
       } catch (e) {
         if (isAbort(e)) {
           // Keep whatever streamed in before the stop — half an explanation is
@@ -694,10 +785,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               trace
             });
             targetTurn.active = targetTurn.variants.length - 1;
+            applyCut(c, targetTurn);
             chatStore.persist(c, true);
           } else {
             chatStore.removeTurn(c, targetTurn.id);
           }
+          outcome = { ok: false };
         } else {
           const msg = (e as Error).message || "Request failed";
           /* Whatever streamed in before it broke is kept, exactly as it is on
@@ -721,13 +814,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               citations
             });
             targetTurn.active = targetTurn.variants.length - 1;
+            applyCut(c, targetTurn);
           }
           targetTurn.error = msg;
           setError(msg);
           chatStore.persist(c, true);
+          outcome = { ok: false, error: msg };
         }
       } finally {
         abortRef.current = null;
+        busyRef.current = false;
+        pendingCuts.current.delete(targetTurn.id);
+        voice?.onDone(outcome);
         setBusy(false);
         setStreaming(null);
         setStreamingTurnId(null);
@@ -736,7 +834,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         rerender();
       }
     },
-    [buildMessages, rerender]
+    [buildMessages, rerender, applyCut]
   );
 
   /* ---- auto-title after the first exchange ----
@@ -802,21 +900,23 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   /* ---------------------------------------------------------------- API -- */
 
   const send = useCallback(
-    async (text: string, attachments?: Attachment[]) => {
+    async (text: string, attachments?: Attachment[], voice?: VoiceTurn) => {
       /* The composer disables its button while a reply streams, but send() is
          also reached from starters, slash commands, follow-up chips and the
          command palette — and a second run() would overwrite abortRef with
          its own controller, leaving the first request live with nothing able
          to stop it, both of them writing variants and both fighting over the
          streaming buffer. The guard belongs here, next to the state it
-         protects, not in each of the six callers. */
-      if (busy) return;
+         protects, not in each of the six callers. Read from refs, because
+         voice mode calls this from a closure several renders old. */
+      if (busyRef.current) return;
 
-      let c = conversation;
+      let c = convRef.current;
       if (!c) {
         // A model picked on the empty screen has to survive the conversation
         // being created here, or choosing one before typing does nothing.
         c = chatStore.create(withDrafts());
+        convRef.current = c;
         setConversation(c);
         openChat(c.id);
       }
@@ -831,20 +931,35 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         const have = new Set(c.pinnedAttachments.map((a) => a.id));
         c.pinnedAttachments = [...c.pinnedAttachments, ...pinned.filter((a) => !have.has(a.id))];
       }
-      chatStore.addTurn(c, chatStore.makeTurn("user", body, attachments));
+      const said = chatStore.makeTurn("user", body, attachments);
       const assistant = blankAssistantTurn();
+      if (voice) said.voice = assistant.voice = true;
+      chatStore.addTurn(c, said);
       c.turns.push(assistant);
       chatStore.persist(c);
       rerender();
 
-      await run(c, assistant, c.turns.length - 2);
+      await run(c, assistant, c.turns.length - 2, undefined, voice);
     },
-    [busy, conversation, openChat, run, rerender, withDrafts]
+    [openChat, run, rerender, withDrafts]
   );
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
   }, []);
+
+  const cutReply = useCallback(
+    (turnId: string, text: string) => {
+      pendingCuts.current.set(turnId, text);
+      const c = convRef.current;
+      const turn = c?.turns.find((t) => t.id === turnId);
+      /* Still arriving: run() applies it the moment the text lands. */
+      if (!c || !turn || !turn.variants.length || (busyRef.current && abortRef.current)) return;
+      applyCut(c, turn);
+      rerender();
+    },
+    [applyCut, rerender]
+  );
 
   const regenerate = useCallback(
     async (turnId: string, override?: ModelOverride) => {
@@ -950,6 +1065,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     followups,
     send,
     stop,
+    cutReply,
     regenerate,
     editUserTurn,
     retry,
