@@ -62,6 +62,23 @@ test("a picture on a variant you are not looking at is in use", () => {
   assert.ok(used.has("drawn-new"));
 });
 
+test("a clip on a reply is in use", () => {
+  const used = referencedFileIds([
+    conversation([
+      turn({
+        variants: [
+          {
+            content: "",
+            createdAt: 1,
+            videos: [{ id: "v-1", fileId: "clip-1", mime: "video/mp4", size: 5_000_000, createdAt: 1 }]
+          }
+        ]
+      })
+    ])
+  ]);
+  assert.ok(used.has("clip-1"), "a generated clip must not read as unused");
+});
+
 test("attachments, pins and scanned pages are all still counted", () => {
   const used = referencedFileIds([
     conversation(

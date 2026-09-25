@@ -539,6 +539,22 @@
   filter: blur(14px) saturate(0.4);
   transform: scale(1.02);
 }
+/* A clip plays in the same frame, letterboxed on the page's own ground
+   rather than on black, and never taller than the reading column. */
+.vis-video {
+  display: block;
+  width: calc(100% - 2 * var(--s-3));
+  max-height: 70vh;
+  margin: var(--s-3);
+  border-radius: var(--r-2);
+  background: var(--page-2);
+}
+.vis:fullscreen .vis-video {
+  width: 100%;
+  max-height: calc(100vh - 4rem);
+  margin: 0;
+  border-radius: 0;
+}
 .vis:fullscreen .vis-photo {
   max-height: calc(100vh - 4rem);
   width: auto;

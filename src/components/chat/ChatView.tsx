@@ -47,6 +47,7 @@ import ReadProgress from "./ReadProgress";
 import ModelChip from "./ModelChip";
 import ToolsMenu from "./ToolsMenu";
 import ImageComposer from "./ImageComposer";
+import VideoComposer from "./VideoComposer";
 import ListenBar from "./ListenBar";
 import VoiceBar from "./voice/VoiceBar";
 import VoiceStage from "./voice/VoiceStage";
@@ -727,6 +728,7 @@ It is built from your memories and what the review loop says you keep getting wr
      exists and the draft before then, the same inheritance every control in
      the composer follows. */
   const drawing = (c ? c.mode : chat.draftMode) === "image";
+  const filming = (c ? c.mode : chat.draftMode) === "video";
 
   return (
     /* The conversation index is passed to the shared sidebar rather than
@@ -783,9 +785,11 @@ It is built from your memories and what the review loop says you keep getting wr
                 {c.title}
               </button>
               <div className="chat-meta">
-                <span className="head-badge mono" title="Active model">
+                {/* The model by name where the catalogue knows it, as every
+                    picker now shows it; the id is in the tooltip. */}
+                <span className={"head-badge" + (catalogueEntry(resolved.model)?.title ? "" : " mono")} title={`Active model · ${resolved.model}`}>
                   <Icon name="sparkle" size={10} />
-                  {resolved.model}
+                  {catalogueEntry(resolved.model)?.title || resolved.model}
                 </span>
                 <span className="head-badge" title="Persona">
                   <Icon name="bubble" size={10} />
@@ -966,6 +970,16 @@ It is built from your memories and what the review loop says you keep getting wr
           <ErrorGuard>
             <VoiceBar expanded={stage} onExpand={() => setStage((v) => !v)} onStyle={voiceStyle} />
           </ErrorGuard>
+        ) : filming ? (
+          <VideoComposer
+            key={(conversationId || "new") + ":vid"}
+            disabled={!readiness.ok}
+            busy={chat.busy}
+            droppedNonce={dropNonce}
+            takeDropped={takeDropped}
+            onSend={(text, attachments) => void chat.send(text, attachments)}
+            onStop={chat.stop}
+          />
         ) : drawing ? (
           <ImageComposer
             key={(conversationId || "new") + ":img"}

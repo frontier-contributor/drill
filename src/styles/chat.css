@@ -3207,6 +3207,39 @@
   color: var(--accent);
 }
 
+/* Build on the last picture. A pressed switch rather than a checkbox: it is
+   one of the dials of the next picture, on the same row as its shape. */
+.imgc-chain {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 var(--s-2);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--ink-3);
+  font-family: var(--sans);
+  font-size: var(--t-3xs);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+.imgc-chain:hover:not(:disabled) {
+  border-color: var(--rule);
+  color: var(--ink-2);
+}
+.imgc-chain.on {
+  border-color: var(--accent);
+  background: var(--accent-10);
+  color: var(--accent);
+}
+.imgc-chain:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .imgc-attach {
   display: grid;
   place-items: center;
@@ -3269,3 +3302,33 @@
   }
 }
 
+
+/* ------------------------------------------------------------- video -- */
+/* VideoComposer borrows Image mode's surface (.imgc) whole; these are the two
+   things only a clip has — the price beside the readout, and a length menu for
+   models that offer thirty of them. */
+.vidc-cost {
+  color: var(--ink-2);
+}
+.vidc-length select {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 26px;
+  padding: 0 22px 0 var(--s-2);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-full);
+  background-color: transparent;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 12px) 55%, calc(100% - 8px) 55%;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: var(--t-3xs);
+  font-weight: 500;
+  cursor: pointer;
+}
+.vidc-length select option {
+  background: var(--surface);
+  color: var(--ink);
+}

@@ -116,6 +116,9 @@ export function effortMeans(effort: Effort, mode: ChatMode): string {
      a picture is how much of the thread the model is reminded of, not how
      much it writes. */
   if (mode === "image") return b.blurb + " The picture's own shape and size are the two dials beside the composer.";
+  /* A clip is one job whatever the effort; the dials that matter — length,
+     resolution, sound — and its price are beside the composer. */
+  if (mode === "video") return "A clip is one request whatever the effort. Its length, resolution, sound and price are beside the composer.";
   if (mode === "direct") return b.blurb + " No lookups — Direct mode answers in one request.";
   const n = mode === "deep" ? deepSteps(b.agentSteps) : b.agentSteps;
   return `${b.blurb} In ${mode === "deep" ? "Deep" : "Agent"} mode it also sets the lookup budget: up to ${n}, each one a request.`;

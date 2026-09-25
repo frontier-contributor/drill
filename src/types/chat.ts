@@ -35,7 +35,7 @@ import type { AspectId, ImageSpec } from "@/lib/imageSpec";
  * property of what the thread is for, and a global switch would make every
  * quick question expensive.
  */
-export type ChatMode = "direct" | "agent" | "deep" | "image";
+export type ChatMode = "direct" | "agent" | "deep" | "image" | "video";
 
 /** Re-exported so chat code has one import for its own vocabulary. */
 export type Usage = TokenUsage;
@@ -123,6 +123,50 @@ export interface GeneratedImage {
   createdAt: number;
 }
 
+/** What a clip was asked to be. Each field is only ever a value the model's
+ *  listing says it takes — lib/videoSpec.ts decides. */
+export interface VideoSpec {
+  seconds?: number;
+  resolution?: string;
+  aspect?: string;
+  /** A soundtrack, on a model that makes one. Absent is the model's default,
+   *  which is sound on. */
+  audio?: boolean;
+}
+
+/** A clip the model made, kept where files go (drill-files). Like a picture,
+ *  the bytes never touch the variant — only this record does. */
+export interface GeneratedVideo {
+  id: string;
+  fileId: string;
+  mime: string;
+  size: number;
+  w?: number;
+  h?: number;
+  seconds?: number;
+  /** A small JPEG of an early frame, drawn in this browser — what a list
+   *  shows before the file is read. Absent when the browser could not decode
+   *  the clip to draw one. */
+  poster?: string;
+  /** What was asked for, so the receipt and a download can name it. */
+  prompt?: string;
+  asked?: VideoSpec;
+  createdAt: number;
+}
+
+/** A clip being made: submitted, not back yet. Written onto the turn the
+ *  moment the job exists, so a reload or a closed tab resumes waiting for it
+ *  instead of asking — and paying — for a second one. */
+export interface VideoJob {
+  id: string;
+  model: string;
+  prompt: string;
+  asked: VideoSpec;
+  /** Started from a picture, which some models price differently. */
+  fromImage?: boolean;
+  startedAt: number;
+}
+
 /** One generation of an assistant turn, or one edit of a user turn. */
 export interface Variant {
   content: string;
@@ -166,6 +210,8 @@ export interface Variant {
    *  regenerating gives a new picture and the variant arrows step between
    *  them rather than piling them up under one reply. */
   images?: GeneratedImage[];
+  /** Clips this generation made, per variant for the reason pictures are. */
+  videos?: GeneratedVideo[];
   /** Voice mode was talked over while this was being said. `content` has been
    *  cut to what was actually heard — the next request replays the history,
    *  and a model that "remembers" saying things nobody heard answers the wrong
@@ -187,6 +233,8 @@ export interface Turn {
   /** Said out loud in voice mode, or answered there. The thread shows it, and
    *  it is why a reply may be shorter than one typed in. */
   voice?: boolean;
+  /** A clip still being made for this reply. See VideoJob. */
+  videoJob?: VideoJob;
   createdAt: number;
 }
 
@@ -260,6 +308,8 @@ export interface Conversation {
    *  mode it belongs to: a thread you opened to draw diagrams wants a
    *  different shape from one you opened to draw a wallpaper. */
   image?: ImageSpec;
+  /** Video mode's dials for this thread — length, resolution, shape, sound. */
+  video?: VideoSpec;
   /** How voice mode shapes its replies in this thread. Absent follows
    *  Settings → Voice. */
   voiceStyle?: VoiceStyle;

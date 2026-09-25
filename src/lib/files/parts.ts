@@ -64,7 +64,12 @@ export function referencedFileIds(conversations: Pick<Conversation, "turns" | "p
       for (const a of t.attachments || []) take(a);
       /* Every variant, not just the active one: the others are one press of
          the variant arrow away and are still the learner's. */
-      for (const v of t.variants || []) for (const img of v.images || []) used.add(img.fileId);
+      for (const v of t.variants || []) {
+        for (const img of v.images || []) used.add(img.fileId);
+        /* A clip is held the same way, and is the costliest file in the app
+           to lose: it cannot be drawn again for the price of a picture. */
+        for (const vid of v.videos || []) used.add(vid.fileId);
+      }
     }
   }
   return used;

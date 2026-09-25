@@ -21,7 +21,18 @@ import { cleanTitle } from "@/lib/title";
 import { forTranscript } from "@/lib/files/parts";
 import { planBudget } from "@/lib/budget";
 import { thinkingSupport } from "@/lib/thinking";
-import { BACKENDS, BACKEND_ORDER, isAbort } from "./backends";
+import {
+  BACKENDS,
+  BACKEND_ORDER,
+  downloadVideo,
+  drawWithImagesApi,
+  isAbort,
+  pollVideo,
+  submitVideo,
+  type Drawn,
+  type VideoPoll,
+  type VideoRequest
+} from "./backends";
 import { makeStructured, type StructuredEnv } from "./structured";
 import type {
   AIContext,
@@ -212,6 +223,134 @@ function firstRoom(answerTokens: number, override?: Override): number {
 export function listModels(override?: Override): Promise<string[]> {
   const r = resolve(override);
   return r.backend.listModels(r);
+}
+
+/* ---------------------------------------------------------------- drawing */
+
+export interface DrawOpts {
+  model: string;
+  prompt: string;
+  aspect?: string;
+  resolution?: string;
+  /** Pictures to work from, as data: URLs. */
+  refs?: string[];
+  signal?: AbortSignal;
+}
+
+/**
+ * Draw through OpenRouter's Images API — the route for models that only
+ * draw. The chat route (chat() with the Image action) stays for the ones that
+ * also write, which keep the conversation.
+ *
+ * Always OpenRouter, with OpenRouter's own saved key: this is the only
+ * backend that reaches these models, and chat being pointed at Groq should
+ * not stop a picture that OpenRouter can draw. Recorded like every other call
+ * — the run transcript, and the usage ledger under "image" with the count
+ * and the cost OpenRouter reports.
+ */
+export async function draw(opts: DrawOpts): Promise<Drawn> {
+  const creds = speechCreds("openrouter");
+  if (!creds.apiKey) throw new Error("Drawing with this model needs an OpenRouter key. Add one under Settings → Connection.");
+  const ctx: AIContext = { apiKey: creds.apiKey, model: opts.model, baseUrl: creds.baseUrl, headers: creds.headers };
+  const started = Date.now();
+  const label = "image";
+  const asked = [
+    opts.prompt,
+    opts.aspect || opts.resolution ? `[${[opts.aspect, opts.resolution].filter(Boolean).join(" · ")}]` : "",
+    opts.refs?.length ? `[${opts.refs.length} reference picture${opts.refs.length === 1 ? "" : "s"}]` : ""
+  ]
+    .filter(Boolean)
+    .join("\n");
+  try {
+    const out = await drawWithImagesApi(
+      { model: opts.model, prompt: opts.prompt, aspect: opts.aspect, resolution: opts.resolution, refs: opts.refs, signal: opts.signal },
+      ctx
+    );
+    transcript.record({
+      at: started,
+      label,
+      model: opts.model,
+      messages: [{ role: "user", content: asked }],
+      response: `[${out.images.length} picture${out.images.length === 1 ? "" : "s"}${out.cost != null ? " · $" + out.cost.toFixed(4) : ""}${out.generationId ? " · " + out.generationId : ""}]`,
+      error: null,
+      elapsedMs: Date.now() - started
+    });
+    try {
+      usageLog.add({ at: started, backend: "openrouter", model: opts.model, label, images: out.images.length, cost: out.cost });
+    } catch {
+      /* the ledger is a bystander */
+    }
+    return out;
+  } catch (err) {
+    if (!isAbort(err)) {
+      transcript.record({
+        at: started,
+        label,
+        model: opts.model,
+        messages: [{ role: "user", content: asked }],
+        response: null,
+        error: (err as Error)?.message || String(err),
+        elapsedMs: Date.now() - started
+      });
+      try {
+        usageLog.add({ at: started, backend: "openrouter", model: opts.model, label, failed: true });
+      } catch {
+        /* ignore */
+      }
+    }
+    throw err;
+  }
+}
+
+/* ----------------------------------------------------------------- video */
+
+function openRouterCtx(model: string, what: string): AIContext {
+  const creds = speechCreds("openrouter");
+  if (!creds.apiKey) throw new Error(`${what} needs an OpenRouter key. Add one under Settings → Connection.`);
+  return { apiKey: creds.apiKey, model, baseUrl: creds.baseUrl, headers: creds.headers };
+}
+
+/** Ask for a clip. Returns the job to wait on; nothing is charged until it
+ *  finishes. On the transcript, so "what did it send" has an answer. */
+export async function startVideo(req: VideoRequest): Promise<{ id: string }> {
+  const ctx = openRouterCtx(req.model, "Making a video");
+  const started = Date.now();
+  const asked = [
+    req.prompt,
+    `[${[req.seconds ? req.seconds + "s" : "", req.resolution, req.aspect, req.audio === false ? "no sound" : req.audio ? "sound" : ""].filter(Boolean).join(" · ")}]`,
+    req.firstFrame ? "[starting from a picture]" : ""
+  ]
+    .filter((x) => x && x !== "[]")
+    .join("\n");
+  try {
+    const job = await submitVideo(req, ctx);
+    transcript.record({ at: started, label: "video", model: req.model, messages: [{ role: "user", content: asked }], response: `[job ${job.id} — waiting]`, error: null, elapsedMs: Date.now() - started });
+    return job;
+  } catch (err) {
+    if (!isAbort(err)) {
+      transcript.record({ at: started, label: "video", model: req.model, messages: [{ role: "user", content: asked }], response: null, error: (err as Error)?.message || String(err), elapsedMs: Date.now() - started });
+    }
+    throw err;
+  }
+}
+
+export function checkVideo(id: string, model: string, signal?: AbortSignal): Promise<VideoPoll> {
+  return pollVideo(id, openRouterCtx(model, "Making a video"), signal);
+}
+
+export function fetchVideo(url: string, model: string, signal?: AbortSignal): Promise<Blob> {
+  return downloadVideo(url, openRouterCtx(model, "Making a video"), signal);
+}
+
+/** The ledger row for a clip, once it is finished or has failed. Written
+ *  then rather than at submit, because that is when OpenRouter says what it
+ *  cost — and a failed job is not billed. */
+export function meterVideo(model: string, cost: number | undefined, seconds: number | undefined, failed: boolean): void {
+  try {
+    usageLog.add({ at: Date.now(), backend: "openrouter", model, label: "video", seconds: failed ? 0 : seconds, cost: failed ? undefined : cost, failed });
+  } catch {
+    /* the ledger is a bystander */
+  }
 }
 
 /* -------------------------------------------------------------- listening */

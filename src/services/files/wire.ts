@@ -51,3 +51,16 @@ export async function hydrate(messages: ChatMessage[], needs: BinaryNeed[]): Pro
   }
   return out;
 }
+
+/** Stored files as data: URLs, for an endpoint that takes pictures by value —
+ *  the Images API's references. A file that is no longer here is skipped: the
+ *  picture is drawn without it rather than not at all. */
+export async function dataUrlsOf(ids: string[]): Promise<string[]> {
+  const out: string[] = [];
+  for (const id of ids) {
+    const rec = await files.get(id);
+    if (!rec) continue;
+    out.push(`data:${rec.mime};base64,${await blobToBase64(rec.blob)}`);
+  }
+  return out;
+}

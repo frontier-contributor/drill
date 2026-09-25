@@ -408,6 +408,13 @@ export interface ImageRate {
 }
 
 const imageRates = new Map<string, Promise<ImageRate[] | null>>();
+const imageRatesDone = new Map<string, ImageRate[]>();
+
+/** A picture's price if it has already been fetched — for a list row, which
+ *  cannot fetch fifty-five of them to draw itself. */
+export function imageRatesNow(id: string): ImageRate[] | undefined {
+  return imageRatesDone.get(id);
+}
 
 export function loadImageRates(id: string): Promise<ImageRate[] | null> {
   const hit = imageRates.get(id);
@@ -422,6 +429,10 @@ export function loadImageRates(id: string): Promise<ImageRate[] | null> {
           out.push({ usd: pr.cost_usd, unit: pr.unit || "image", variant: pr.variant || undefined });
         }
         if (out.length) break; // the first endpoint is the one a request lands on
+      }
+      if (out.length) {
+        imageRatesDone.set(id, out);
+        notify();
       }
       return out;
     })

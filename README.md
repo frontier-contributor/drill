@@ -237,6 +237,23 @@ anything.
   spent writing rather than drilling, and reads the same on Home, in the review
   rail and on the finish screen.
 
+### Pictures and video
+
+- **Image mode draws with any of OpenRouter's image models** — the ones that
+  also write, like Gemini's, keep the conversation; the ones that only draw,
+  like FLUX, Seedream, GPT-Image and Recraft, go through OpenRouter's image
+  API. The shape and size dials show only what the chosen model takes, with
+  its price per picture beside them.
+- **Edit the last picture** — "now make the sky purple" sends the previous
+  picture back to be worked on, not described from scratch. One switch turns
+  it off to start fresh.
+- **Video mode makes short clips** — Veo, Sora, Kling, Seedance, Wan, Hailuo
+  and more. Length, resolution, shape and sound are the model's own options,
+  the price is quoted before you spend anything ("about $0.40"), and a clip
+  can start from a picture you attach. Clips take minutes; the thread waits
+  for them even if you close the tab, and picks the wait back up when you
+  return — a clip is never paid for twice.
+
 ### Choosing a model
 
 Every model picker in the app is the same browser — the model chip in chat,

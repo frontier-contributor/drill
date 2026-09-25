@@ -888,6 +888,185 @@ function openAIHear(label: string, headerFn: (ctx: AIContext) => Record<string, 
 /* --------------------------------------------------------------- backends */
 
 
+/* ------------------------------------------------------------ images API */
+
+export interface DrawRequest {
+  model: string;
+  prompt: string;
+  /** Only values the model's listing says it takes — the caller filters. */
+  aspect?: string;
+  resolution?: string;
+  /** Pictures to work from, as data: URLs. */
+  refs?: string[];
+  signal?: AbortSignal;
+}
+
+export interface Drawn {
+  /** data: URLs, never remote ones — see readImages. */
+  images: string[];
+  cost?: number;
+  generationId?: string;
+}
+
+/**
+ * OpenRouter's Images API: one prompt in, pictures out, synchronously.
+ *
+ * Image mode used chat/completions for everything, asking for
+ * `modalities: ["image", "text"]`. That suits the models that also write —
+ * Gemini's keep the conversation — and not the forty-odd that only draw
+ * (FLUX, Seedream, GPT-Image, Recraft), which is most of them. This is their
+ * endpoint, and the one whose listing says which dials each model takes.
+ *
+ * Stateless: no history goes with it. What carries a thread forward is the
+ * reference list — the picture you attached, and the last one drawn when
+ * "build on the last picture" is on.
+ */
+export async function drawWithImagesApi(req: DrawRequest, ctx: AIContext): Promise<Drawn> {
+  const url = ctx.baseUrl + "/images";
+  const body: Record<string, unknown> = { model: req.model, prompt: req.prompt };
+  if (req.aspect) body.aspect_ratio = req.aspect;
+  if (req.resolution) body.resolution = req.resolution;
+  if (req.refs?.length) body.input_references = req.refs.map((u) => ({ type: "image_url", image_url: { url: u } }));
+  const res = await postWithRetry(
+    url,
+    { method: "POST", headers: openRouterHeaders(ctx), body: JSON.stringify(body), signal: req.signal },
+    "OpenRouter",
+    req.signal,
+    () => false,
+    (r, text) =>
+      r.status === 400 || r.status === 422
+        ? new Error(`OpenRouter would not draw that (${r.status}) — ${shortErr(text)}`)
+        : r.status === 404
+          ? new Error(`OpenRouter has no image model called ${req.model}. ${shortErr(text)}`)
+          : null
+  );
+  const j = (await res.json()) as {
+    data?: { b64_json?: string; url?: string; media_type?: string }[];
+    usage?: { cost?: number };
+  };
+  const images: string[] = [];
+  for (const d of j.data || []) {
+    if (typeof d.b64_json === "string" && d.b64_json) {
+      const mime = typeof d.media_type === "string" && d.media_type.startsWith("image/") ? d.media_type : "image/png";
+      images.push(`data:${mime};base64,${d.b64_json}`);
+    } else if (typeof d.url === "string" && d.url.startsWith("data:image/")) {
+      /* Only a data: URL. A remote one would be a reply telling this browser
+         to go and fetch something, which is the line readImages holds too. */
+      images.push(d.url);
+    }
+  }
+  if (!images.length) throw new Error(`${req.model} returned no picture. Try again, or another model.`);
+  return {
+    images,
+    cost: typeof j.usage?.cost === "number" ? j.usage.cost : undefined,
+    generationId: res.headers.get("x-generation-id") || undefined
+  };
+}
+
+/* ------------------------------------------------------------ videos API */
+
+export interface VideoRequest {
+  model: string;
+  prompt: string;
+  seconds?: number;
+  resolution?: string;
+  aspect?: string;
+  audio?: boolean;
+  /** A picture to start from, as a data: URL. */
+  firstFrame?: string;
+  signal?: AbortSignal;
+}
+
+export interface VideoPoll {
+  status: string;
+  /** The content URLs once it is done — OpenRouter's own, which need the key. */
+  urls: string[];
+  error?: string;
+  cost?: number;
+}
+
+/**
+ * OpenRouter's video API is a job, not a request: submit, poll until it is
+ * done, then download the MP4 with the same key. These three are the wire;
+ * ChatContext owns the waiting, because a job outlives the tab that started
+ * it and the waiting has to be resumable.
+ */
+export async function submitVideo(req: VideoRequest, ctx: AIContext): Promise<{ id: string }> {
+  const body: Record<string, unknown> = { model: req.model, prompt: req.prompt };
+  if (req.seconds) body.duration = req.seconds;
+  if (req.resolution) body.resolution = req.resolution;
+  if (req.aspect) body.aspect_ratio = req.aspect;
+  if (req.audio != null) body.generate_audio = req.audio;
+  if (req.firstFrame) body.frame_images = [{ type: "image_url", image_url: { url: req.firstFrame }, frame_type: "first_frame" }];
+  const res = await postWithRetry(
+    ctx.baseUrl + "/videos",
+    { method: "POST", headers: openRouterHeaders(ctx), body: JSON.stringify(body), signal: req.signal },
+    "OpenRouter",
+    req.signal,
+    () => false,
+    (r, text) =>
+      r.status === 400 || r.status === 422
+        ? new Error(`OpenRouter would not make that clip (${r.status}) — ${shortErr(text)}`)
+        : r.status === 404
+          ? new Error(`OpenRouter has no video model called ${req.model}. ${shortErr(text)}`)
+          : null
+  );
+  const j = (await res.json()) as { id?: string };
+  if (!j.id) throw new Error("OpenRouter accepted the clip but gave no job id to wait on.");
+  return { id: j.id };
+}
+
+export async function pollVideo(id: string, ctx: AIContext, signal?: AbortSignal): Promise<VideoPoll> {
+  let res: Response;
+  try {
+    res = await fetch(`${ctx.baseUrl}/videos/${encodeURIComponent(id)}`, { headers: openRouterHeaders(ctx), signal });
+  } catch (e) {
+    if (isAbort(e)) throw e;
+    throw reachError("OpenRouter", ctx.baseUrl, e, false);
+  }
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw httpError("OpenRouter", res, t);
+  }
+  const j = (await res.json()) as {
+    status?: string;
+    unsigned_urls?: unknown;
+    error?: unknown;
+    usage?: { cost?: number };
+  };
+  const urls = Array.isArray(j.unsigned_urls) ? j.unsigned_urls.filter((u): u is string => typeof u === "string") : [];
+  const err = typeof j.error === "string" ? j.error : j.error && typeof j.error === "object" ? String((j.error as { message?: unknown }).message || "") : "";
+  return { status: j.status || "pending", urls, error: err || undefined, cost: typeof j.usage?.cost === "number" ? j.usage.cost : undefined };
+}
+
+/** The finished clip. Only OpenRouter's own URL is fetched with the key on it
+ *  — a content URL pointing anywhere else is refused rather than handed the
+ *  learner's credentials. */
+export async function downloadVideo(url: string, ctx: AIContext, signal?: AbortSignal): Promise<Blob> {
+  const own = (() => {
+    try {
+      return new URL(url).origin === new URL(ctx.baseUrl).origin;
+    } catch {
+      return false;
+    }
+  })();
+  if (!own) throw new Error("The finished clip is somewhere other than OpenRouter, and the key is not sent there.");
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: openRouterHeaders(ctx), signal });
+  } catch (e) {
+    if (isAbort(e)) throw e;
+    throw reachError("OpenRouter", url, e, false);
+  }
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw httpError("OpenRouter", res, t);
+  }
+  const blob = await res.blob();
+  if (!blob.size) throw new Error("OpenRouter returned an empty clip.");
+  return blob;
+}
+
 export const BACKENDS: Record<BackendType, BackendDef> = {
   openrouter: {
     id: "openrouter",

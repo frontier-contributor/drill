@@ -15,7 +15,9 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
-  type ReactNode
+  type ReactNode,
+  type Dispatch,
+  type SetStateAction
 } from "react";
 import * as U from "@/lib/util";
 import * as store from "@/services/store";
@@ -25,7 +27,9 @@ import * as memoryCapture from "@/services/memoryCapture";
 import { keepGenerated } from "@/services/files/generated";
 import * as AI from "@/services/ai";
 import { isAbort } from "@/services/ai/backends";
-import { catalogueEntry, loadPricing, priceForModel } from "@/services/pricing";
+import { catalogueEntry, imageCaps, loadPricing, loadVideoCaps, priceForModel, videoCaps } from "@/services/pricing";
+import { keepVideo } from "@/services/files/generatedVideo";
+import { clock, effectiveVideo } from "@/lib/videoSpec";
 import { buildContext } from "@/lib/chatContext";
 import { getPersona } from "@/lib/personas";
 import { budgetFor, deepSteps } from "@/lib/effort";
@@ -34,10 +38,11 @@ import type { Effort } from "@/types/core";
 import { costOf } from "@/lib/tokens";
 import { resolveBackend, resolveEffort, resolveModel } from "@/lib/resolveSetting";
 import { useRoute } from "./RouteContext";
-import type { Attachment, ChatMode, Conversation, ContextSource, Turn, Usage, Variant } from "@/types/chat";
+import type { Attachment, ChatMode, Conversation, ContextSource, GeneratedVideo, Turn, Usage, Variant, VideoJob, VideoSpec } from "@/types/chat";
 import { runAgentTurn } from "@/services/agent";
 import { TOOL_WORDS } from "@/services/agent/tools";
-import { hydrate, type BinaryNeed } from "@/services/files/wire";
+import { dataUrlsOf, hydrate, type BinaryNeed } from "@/services/files/wire";
+import * as drawing from "@/services/drawing";
 import { canTake } from "@/lib/modality";
 import { carry, windowFor, type CarryContext } from "@/lib/files/carry";
 import { collapseCanvases } from "@/lib/visuals/artifacts";
@@ -235,9 +240,75 @@ interface ChatState {
    *  message would silently draw a square. */
   draftImage: ImageSpec;
   setDraftImage: (s: ImageSpec) => void;
+  /** Video mode's dials before the thread exists, for the reason every draft
+   *  here exists: update() returns early with no conversation. */
+  draftVideo: VideoSpec;
+  setDraftVideo: Dispatch<SetStateAction<VideoSpec>>;
 }
 
 const Ctx = createContext<ChatState | null>(null);
+
+/** A clip the model could not make — as opposed to one this tab lost touch
+ *  with. The difference decides whether Retry asks again or waits again. */
+class ClipFailed extends Error {}
+
+function pause(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return reject(new DOMException("Aborted", "AbortError"));
+    const t = setTimeout(() => {
+      signal.removeEventListener("abort", stop);
+      resolve();
+    }, ms);
+    const stop = () => {
+      clearTimeout(t);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    signal.addEventListener("abort", stop, { once: true });
+  });
+}
+
+/**
+ * Wait for a clip, then fetch it. Polls often at first and then less —
+ * a clip takes minutes, and a request every four seconds for five minutes is
+ * seventy-five requests saying "not yet". A dropped connection is tried again
+ * a few times before it is reported, because a phone changing networks
+ * mid-wait is the ordinary case. Gives up after forty-five minutes, with the
+ * job kept so the wait can be resumed.
+ */
+async function waitForClip(
+  job: VideoJob,
+  signal: AbortSignal,
+  tick: (elapsedMs: number) => void
+): Promise<{ blob: Blob; cost?: number }> {
+  let delay = 4000;
+  let misses = 0;
+  for (;;) {
+    tick(Date.now() - job.startedAt);
+    let poll;
+    try {
+      poll = await AI.checkVideo(job.id, job.model, signal);
+      misses = 0;
+    } catch (e) {
+      if (isAbort(e)) throw e;
+      if (++misses >= 4) throw e;
+      await pause(delay, signal);
+      continue;
+    }
+    if (poll.status === "completed") {
+      const url = poll.urls[0];
+      if (!url) throw new ClipFailed("The clip finished but OpenRouter gave no file to fetch.");
+      return { blob: await AI.fetchVideo(url, job.model, signal), cost: poll.cost };
+    }
+    if (poll.status === "failed" || poll.status === "cancelled" || poll.status === "expired") {
+      throw new ClipFailed(poll.error ? `The clip could not be made — ${poll.error}` : "The clip could not be made.");
+    }
+    if (Date.now() - job.startedAt > 45 * 60 * 1000) {
+      throw new Error("The clip is still not finished after forty-five minutes.");
+    }
+    await pause(delay, signal);
+    delay = Math.min(15000, Math.round(delay * 1.35));
+  }
+}
 
 export function ChatProvider({ children }: { children: ReactNode }) {
   const { conversationId, openChat } = useRoute();
@@ -257,6 +328,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [draftMode, setDraftMode] = useState<ChatMode>("direct");
   const [draftActions, setDraftActions] = useState<ChatActionId[]>([]);
   const [draftImage, setDraftImage] = useState<ImageSpec>(DEFAULT_IMAGE_SPEC);
+  const [draftVideo, setDraftVideo] = useState<VideoSpec>({});
 
   const abortRef = useRef<AbortController | null>(null);
   const followupAbort = useRef<AbortController | null>(null);
@@ -322,10 +394,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
    * always empty — and a new chat started with Web on silently started with
    * Web off. A ref has no vintage.
    */
-  const draftsRef = useRef({ draftModel, draftEffort, draftMode, draftActions, draftImage });
+  const draftsRef = useRef({ draftModel, draftEffort, draftMode, draftActions, draftImage, draftVideo });
   useEffect(() => {
-    draftsRef.current = { draftModel, draftEffort, draftMode, draftActions, draftImage };
-  }, [draftModel, draftEffort, draftMode, draftActions, draftImage]);
+    draftsRef.current = { draftModel, draftEffort, draftMode, draftActions, draftImage, draftVideo };
+  }, [draftModel, draftEffort, draftMode, draftActions, draftImage, draftVideo]);
 
   /**
    * What the composer was set to before there was a conversation to set it on.
@@ -350,7 +422,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       /* Only when it says something. A spec of two Autos is the absence of a
          spec, and writing it would put a field on every conversation ever
          created from this screen. */
-      ...(d.draftImage.aspect !== "auto" || d.draftImage.size !== "auto" ? { image: d.draftImage } : {})
+      ...(d.draftImage.aspect !== "auto" || d.draftImage.size !== "auto" || d.draftImage.chain === false ? { image: d.draftImage } : {}),
+      ...(Object.keys(d.draftVideo).length ? { video: d.draftVideo } : {})
     };
   }, []);
 
@@ -521,6 +594,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       /* Data URLs, briefly. They are in the file store before the variant is
          written — see keepGenerated. */
       let drawn: string[] = [];
+      /* A clip, once it is in the file store. */
+      let videos: GeneratedVideo[] = [];
       let acc = "";
 
       // Build the prompt once and record usage against exactly what went into
@@ -545,6 +620,20 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       let agentProposed: NonNullable<Variant["agentProposed"]> | undefined;
 
       try {
+        /* Image mode draws on one of two routes, decided by the model — see
+           services/drawing.ts. Decided before the request is built, because
+           the chat route is also told about the last picture. */
+        const drawModel = c.mode === "image" ? AI.resolve({ backend: runBackend, model: runModel }).model : "";
+        const drawRoute = c.mode === "image" && !voice ? await drawing.routeFor(drawModel) : "chat";
+        const spec = c.mode === "image" ? c.image || DEFAULT_IMAGE_SPEC : undefined;
+        if (c.mode === "image" && drawRoute === "chat" && drawing.chaining(spec) && canTake(catalogueEntry(drawModel)?.inputModalities, "image")) {
+          /* The thread's last picture rides on the newest message, so an edit
+             is an edit: the chat route replays the words of a thread, never
+             its pictures, and "now make it bluer" was drawn from nothing. */
+          const last = drawing.lastPicture(c, upToIndex);
+          const at = built.messages.map((m) => m.role).lastIndexOf("user");
+          if (last && at >= 0) built.binary.push({ message: at, kind: "image", fileIds: [last], name: "the last picture" });
+        }
         /* Pictures and files are read out of the file store here, at send
            time, rather than inside buildMessages — that also runs for
            follow-up suggestions, which never carry bytes. */
@@ -557,7 +646,64 @@ export function ChatProvider({ children }: { children: ReactNode }) {
            talking never picks a mode — see services/agent/prompt.ts. */
         const mode = voice ? "voice" : c.mode === "agent" || c.mode === "deep" ? c.mode : "direct";
         const threadMax = Math.max(256, Math.round(c.maxTokens * replyScale));
-        if (mode !== "direct") {
+        if (c.mode === "video" && !voice) {
+          /* A clip is a job, not a request: submitted, then waited on. The job
+             is written onto the turn before any waiting starts, so a closed tab
+             or a reload picks the same clip back up (see the resume effect
+             below) — it is running on OpenRouter either way, and asking again
+             would pay for it twice. */
+          const model = AI.resolve({ backend: runBackend, model: runModel }).model;
+          await loadVideoCaps();
+          let job = targetTurn.videoJob;
+          if (!job) {
+            const caps = videoCaps(model);
+            const asked = effectiveVideo(c.video, caps);
+            const pics = drawing.attachedPictures(c, upToIndex).slice(0, 1);
+            const canStart = !caps || !!caps.frames?.includes("first_frame");
+            const firstFrame = canStart && pics.length ? (await dataUrlsOf(pics))[0] : undefined;
+            const prompt = drawing.promptFor(c, upToIndex);
+            const made = await AI.startVideo({ model, prompt, ...asked, firstFrame, signal: controller.signal });
+            job = { id: made.id, model, prompt, asked, fromImage: !!firstFrame, startedAt: Date.now() };
+            targetTurn.videoJob = job;
+            chatStore.persist(c, true);
+          }
+          const title = catalogueEntry(job.model)?.title || job.model;
+          const clip = await waitForClip(job, controller.signal, (elapsed) =>
+            setStreaming(
+              `*Making a${job!.asked.seconds ? ` ${job!.asked.seconds}-second` : ""} clip with ${title} — ${clock(elapsed)}.* ` +
+                "Clips usually take one to five minutes. You can leave this thread or close the tab — it keeps going, and picks up here when you come back."
+            )
+          );
+          answerStarted();
+          const kept = await keepVideo(clip.blob, job.prompt, job.asked);
+          if (!kept) throw new Error("The clip was made, but this browser would not store it — see the warning at the top of the page.");
+          videos = [kept];
+          full = "";
+          usage = { promptTokens: 0, completionTokens: 0, reportedCost: clip.cost, cost: clip.cost };
+          AI.meterVideo(job.model, clip.cost, kept.seconds, false);
+          targetTurn.videoJob = undefined;
+        } else if (drawRoute === "images") {
+          /* A model that only draws: the Images API, one prompt and its
+             references in, pictures out. Only dials the model's listing says
+             it takes are sent — the composer shows only those, and a value it
+             does not take is a 400, not a picture. */
+          const caps = imageCaps(drawModel);
+          const refs = await dataUrlsOf(drawing.referencesFor(c, upToIndex, spec, caps));
+          const aspect = spec && spec.aspect !== "auto" && (!caps?.aspects || caps.aspects.includes(spec.aspect)) ? spec.aspect : undefined;
+          const resolution = spec && spec.size !== "auto" && (!caps || caps.resolutions?.includes(spec.size)) ? spec.size : undefined;
+          const out = await AI.draw({
+            model: drawModel,
+            prompt: drawing.promptFor(c, upToIndex),
+            aspect,
+            resolution,
+            refs,
+            signal: controller.signal
+          });
+          answerStarted();
+          drawn = out.images;
+          full = "";
+          usage = { promptTokens: 0, completionTokens: 0, reportedCost: out.cost, cost: out.cost };
+        } else if (mode !== "direct") {
           const resolved = AI.resolve({ backend: runBackend, model: runModel });
           setAgentLive({ steps: [], answering: false, plan: null, notes: [] });
           const result = await runAgentTurn({
@@ -702,7 +848,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         /* A picture is a reply. An image model asked for one often returns it
            with no sentence around it at all, and this guard would have thrown
            away the most expensive thing in the app. */
-        if (!raw.trim() && !drawn.length) throw new Error("The model returned an empty reply.");
+        if (!raw.trim() && !drawn.length && !videos.length) throw new Error("The model returned an empty reply.");
 
         /* Out of the reply and into the file store before the variant is
            written, so the variant never holds base64 and never points at bytes
@@ -751,7 +897,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           citations,
           trace,
           agentProposed,
-          images: images?.length ? images : undefined
+          images: images?.length ? images : undefined,
+          videos: videos.length ? videos : undefined
         });
         targetTurn.active = targetTurn.variants.length - 1;
         targetTurn.error = undefined;
@@ -764,7 +911,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
            used to look like two. Gated twice on purpose: turned off wholesale
            in Settings, and skipped at low effort regardless. Never in voice:
            nobody taps a suggestion chip mid-conversation. */
-        if (!voice && budget.followups && store.settings().followups) void maybeFollowups(c);
+        /* Nor after a picture or a clip: a follow-up question is a thing to
+           say to a model that talks, and the next prompt here is a picture. */
+        if (!voice && c.mode !== "image" && c.mode !== "video" && budget.followups && store.settings().followups) void maybeFollowups(c);
       } catch (e) {
         if (isAbort(e)) {
           // Keep whatever streamed in before the stop — half an explanation is
@@ -786,6 +935,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             });
             targetTurn.active = targetTurn.variants.length - 1;
             applyCut(c, targetTurn);
+            chatStore.persist(c, true);
+          } else if (targetTurn.videoJob) {
+            /* Stopping the wait does not stop the clip — OpenRouter has no way
+               to cancel one — so the turn stays, with the job, and says so.
+               Retry waits for the same clip; it is not paid for twice. */
+            targetTurn.error = "Stopped waiting. OpenRouter may still finish this clip and bill it — Retry picks the wait back up.";
             chatStore.persist(c, true);
           } else {
             chatStore.removeTurn(c, targetTurn.id);
@@ -816,7 +971,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             targetTurn.active = targetTurn.variants.length - 1;
             applyCut(c, targetTurn);
           }
-          targetTurn.error = msg;
+          /* A clip that failed is over: the next Retry asks for a new one. A
+             clip that was still going when the connection went is not: the
+             job stays, and Retry goes back to waiting for it. */
+          if (targetTurn.videoJob && e instanceof ClipFailed) {
+            AI.meterVideo(targetTurn.videoJob.model, undefined, undefined, true);
+            targetTurn.videoJob = undefined;
+          }
+          targetTurn.error = targetTurn.videoJob ? msg + " Retry keeps waiting for the same clip." : msg;
           setError(msg);
           chatStore.persist(c, true);
           outcome = { ok: false, error: msg };
@@ -864,9 +1026,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       let title = "";
       if (store.settings().autoTitle) {
         try {
+          /* A thread pinned to a model that only draws or films cannot be
+             asked for a title — the request fails, and fails again on every
+             such thread. Those are titled by the default chat model. */
+          const kinds = catalogueEntry(AI.resolve({ backend: c.backend, model: c.model }).model)?.kinds;
+          const writes = !kinds?.length || kinds.includes("chat");
           title = await AI.generateTitle(chatStore.activeContent(firstUser), chatStore.activeContent(firstAsst), {
             backend: c.backend,
-            model: c.model
+            model: writes ? c.model : undefined
           });
         } catch {
           /* an unnamed conversation is a cosmetic problem, not a failure */
@@ -1004,6 +1171,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     await run(c, last, c.turns.length - 2);
   }, [conversation, busy, run]);
 
+  /* A clip still being made when this thread was last open — the tab was
+     closed, the app reloaded, you went to another thread. The job is on the
+     turn and running on OpenRouter regardless, so opening the thread goes
+     back to waiting for it rather than leaving a reply that will never land.
+     busyRef, not state: StrictMode runs this twice, and run() sets the ref
+     synchronously, so the second pass sees the first and stands down. */
+  useEffect(() => {
+    const c = conversation;
+    if (!c || busyRef.current) return;
+    const idx = c.turns.findIndex((t) => t.role === "assistant" && t.videoJob && !t.variants.length && !t.error);
+    if (idx < 1) return;
+    void run(c, c.turns[idx], idx - 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversation?.id]);
+
   const branchFrom = useCallback(
     (turnIndex: number) => {
       const c = conversation;
@@ -1083,6 +1265,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     draftActions,
     draftImage,
     setDraftImage,
+    draftVideo,
+    setDraftVideo,
     setDraftActions
   };
 

@@ -205,6 +205,19 @@ function subLine(kind: ModelKind, id: string, e: ModelPrice | undefined, backend
     const rate = videoRate(caps);
     if (rate != null) bits.push("from " + M.money(rate) + "/s");
     if (caps?.needsVideo) bits.push("edits a video you give it");
+  } else if (kind === "image") {
+    /* What it can do, then what a picture costs once that is known. The
+       catalogue prices drawing per million output tokens, which is true and
+       tells nobody anything; the per-picture price comes from the model's
+       endpoints, fetched when its card is looked at. */
+    const caps = pricing.imageCaps(id);
+    if (caps?.resolutions?.length) bits.push(caps.resolutions.length > 1 ? `${caps.resolutions[0]}–${caps.resolutions[caps.resolutions.length - 1]}` : caps.resolutions[0]);
+    const shapes = caps?.aspects?.filter((a) => a !== "auto").length || 0;
+    if (shapes) bits.push(`${shapes} shape${shapes === 1 ? "" : "s"}`);
+    if (caps?.refs) bits.push("edits");
+    const rate = pricing.imageRatesNow(id)?.[0];
+    if (rate) bits.push(`${M.money(rate.usd)}/${rate.unit}`);
+    else if (M.isFree(e)) bits.push("free");
   } else if (kind === "speech") {
     const n = e?.voices?.length || 0;
     bits.push(n ? `${n} voice${n === 1 ? "" : "s"}` : "voice by id");

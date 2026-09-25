@@ -40,6 +40,11 @@ export type SizeId = "auto" | "1K" | "2K" | "4K";
 export interface ImageSpec {
   aspect: AspectId;
   size: SizeId;
+  /** Build on the last picture: send the thread's most recent drawing back as
+   *  a reference, so "now make the sky purple" edits it rather than drawing
+   *  something new. Absent means on — it is what a thread of pictures is for,
+   *  and a model that takes no reference simply is not sent one. */
+  chain?: boolean;
 }
 
 export const DEFAULT_IMAGE_SPEC: ImageSpec = { aspect: "auto", size: "auto" };

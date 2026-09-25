@@ -99,6 +99,17 @@ const MODES: ModeDef[] = [
     icon: "image",
     blurb: "Every message draws. Shape and size sit beside the composer.",
     steps: () => 0
+  },
+  /* A clip is a job that takes minutes and is billed by the second, which is
+     why it is its own mode rather than a switch: the composer shows the price
+     before anything is asked for, and the thread waits for the clip even if
+     you close the tab. */
+  {
+    id: "video",
+    label: "Video",
+    icon: "film",
+    blurb: "Every message makes a short clip. Length, resolution and the price sit beside the composer.",
+    steps: () => 0
   }
 ];
 
@@ -164,7 +175,7 @@ export default function ToolsMenu() {
      is silently shown as Direct while the send path runs it for real, which
      is the worst of both — the picker would disagree with what the app is
      actually doing. */
-  const mode: ChatMode = rawMode === "agent" || rawMode === "deep" || rawMode === "image" ? rawMode : "direct";
+  const mode: ChatMode = rawMode === "agent" || rawMode === "deep" || rawMode === "image" || rawMode === "video" ? rawMode : "direct";
   const actions = conversation ? conversation.actions : draftActions;
   const pinnedEffort = conversation ? conversation.effort : draftEffort;
 
@@ -209,7 +220,9 @@ export default function ToolsMenu() {
      It just shows as off, and the send path will not send it. Image mode
      draws every message by itself (actionsFor), so its switch would be a
      control that can only ever read "on"; it is left off the bar there. */
-  const switches = ACTION_ORDER.filter((id) => !(id === "image" && mode === "image"));
+  /* Video mode has no switches at all: a clip is not searched for, thought
+     about or drawn — the model makes it, and the dials are on the composer. */
+  const switches = mode === "video" ? [] : ACTION_ORDER.filter((id) => !(id === "image" && mode === "image"));
 
   return (
     <>

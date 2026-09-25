@@ -25,6 +25,10 @@
  * one you already have is half of what image generation is for.
  * ========================================================================== */
 import { useEffect, useRef, useState } from "react";
+import * as pricing from "@/services/pricing";
+import * as drawing from "@/services/drawing";
+import { useStoreSync } from "@/hooks/useStoreSync";
+import { money } from "@/lib/models";
 import * as AI from "@/services/ai";
 import * as U from "@/lib/util";
 import Icon from "@/components/ui/Icon";
@@ -98,13 +102,50 @@ export default function ImageComposer({
   }, [droppedNonce]);
 
   const spec: ImageSpec = (conversation ? conversation.image : draftImage) || DEFAULT_IMAGE_SPEC;
-  const chosen = ASPECTS.find((a) => a.id === spec.aspect) || ASPECTS[0];
 
   /* Asked through the same call the send path filters on, never
      `backend.supports` directly — the two must not disagree, or this surface
      promises a picture the request will never ask for. */
   const resolved = AI.resolve({ backend: conversation?.backend, model: conversation?.model || draftModel });
   const can = availability("image", resolved.backend.supports, resolved.model);
+
+  /* What this model takes, from OpenRouter's image listing. Only those dials
+     are offered: a size switch on a model with no sizes is a dead dial, and a
+     shape it does not take is a refused request. A model the listing does
+     not know keeps every dial, and the receipt under the picture checks. */
+  useStoreSync(pricing);
+  useEffect(() => {
+    void pricing.loadImageCaps();
+  }, []);
+  const caps = pricing.imageCaps(resolved.model);
+  const shapes = ASPECTS.filter((a) => a.id === "auto" || !caps?.aspects || caps.aspects.includes(a.id));
+  const sizes = caps && !caps.resolutions ? [] : SIZES.filter((z) => z.id === "auto" || !caps?.resolutions || caps.resolutions.includes(z.id));
+  /* The setting in force for this model: one it does not take is not sent,
+     so the plate and the readout do not claim it either. */
+  const aspect = shapes.some((a) => a.id === spec.aspect) ? spec.aspect : "auto";
+  const size = sizes.some((z) => z.id === spec.size) ? spec.size : "auto";
+  const chosen = ASPECTS.find((a) => a.id === aspect) || ASPECTS[0];
+
+  /* Build on the last picture — offered once there is one. */
+  const last = conversation ? drawing.lastPicture(conversation, conversation.turns.length) : undefined;
+  const takesRefs = !caps || !!caps.refs;
+  const chain = drawing.chaining(spec);
+
+  /* What a picture costs, from the model's endpoints, when OpenRouter says. */
+  const [rate, setRate] = useState<string>("");
+  useEffect(() => {
+    let live = true;
+    setRate("");
+    if (!resolved.model) return;
+    void pricing.loadImageRates(resolved.model).then((r) => {
+      if (!live || !r?.length) return;
+      const first = r[0];
+      setRate(`${money(first.usd)} per ${first.unit}`);
+    });
+    return () => {
+      live = false;
+    };
+  }, [resolved.model]);
 
   function set(next: Partial<ImageSpec>) {
     const merged = { ...spec, ...next };
@@ -210,7 +251,8 @@ export default function ImageComposer({
                 and this names it — a frame alone cannot tell 3:2 from 4:3. */}
             <p className="imgc-readout">
               {chosen.ratio == null ? "Any shape the model prefers" : `${chosen.label} · ${chosen.id}`}
-              {spec.size !== "auto" && ` · ${spec.size}`}
+              {size !== "auto" && ` · ${size}`}
+              {rate && ` · ${rate}`}
             </p>
           </div>
         </div>
@@ -232,13 +274,13 @@ export default function ImageComposer({
 
         <div className="imgc-deck">
           <div className="imgc-group" role="radiogroup" aria-label="Shape">
-            {ASPECTS.map((a) => (
+            {shapes.map((a) => (
               <button
                 key={a.id}
                 type="button"
-                className={"imgc-shape" + (a.id === spec.aspect ? " on" : "")}
+                className={"imgc-shape" + (a.id === aspect ? " on" : "")}
                 role="radio"
-                aria-checked={a.id === spec.aspect}
+                aria-checked={a.id === aspect}
                 aria-label={a.ratio ? `${a.label}, ${a.id}` : "Auto"}
                 title={a.ratio ? `${a.label} · ${a.id}` : "Auto — let the model choose"}
                 onClick={() => set({ aspect: a.id as AspectId })}
@@ -252,21 +294,43 @@ export default function ImageComposer({
             ))}
           </div>
 
-          <div className="imgc-seg" role="radiogroup" aria-label="Size">
-            {SIZES.map((z) => (
-              <button
-                key={z.id}
-                type="button"
-                className={"imgc-segbtn" + (z.id === spec.size ? " on" : "")}
-                role="radio"
-                aria-checked={z.id === spec.size}
-                title={z.hint}
-                onClick={() => set({ size: z.id as SizeId })}
-              >
-                {z.label}
-              </button>
-            ))}
-          </div>
+          {sizes.length > 1 && (
+            <div className="imgc-seg" role="radiogroup" aria-label="Size">
+              {sizes.map((z) => (
+                <button
+                  key={z.id}
+                  type="button"
+                  className={"imgc-segbtn" + (z.id === size ? " on" : "")}
+                  role="radio"
+                  aria-checked={z.id === size}
+                  title={z.hint}
+                  onClick={() => set({ size: z.id as SizeId })}
+                >
+                  {z.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {last && (
+            <button
+              type="button"
+              className={"imgc-chain" + (chain && takesRefs ? " on" : "")}
+              aria-pressed={chain && takesRefs}
+              disabled={!takesRefs}
+              title={
+                !takesRefs
+                  ? "This model draws from words alone — it takes no picture to work from"
+                  : chain
+                    ? "The last picture is sent with your prompt, so this edits it. Turn off to start fresh."
+                    : "Each prompt starts a new picture. Turn on to edit the last one instead."
+              }
+              onClick={() => set({ chain: !chain })}
+            >
+              <Icon name="refresh" size={12} />
+              <span>{chain && takesRefs ? "Editing the last picture" : "New picture"}</span>
+            </button>
+          )}
 
           <div className="imgc-spacer" />
 

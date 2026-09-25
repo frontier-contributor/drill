@@ -16,7 +16,7 @@ import { idbAll, idbBulkPut, idbClear, idbDelete, idbGet, idbPut, STORE_CONV, ST
 import * as persistence from "./persistence";
 import { DEFAULT_PERSONA_ID, getPersona } from "@/lib/personas";
 import { markdownToText } from "@/lib/plaintext";
-import type { ChatMode, Conversation, ConversationMeta, ContextSource, Turn, Usage, Variant } from "@/types/chat";
+import type { ChatMode, Conversation, ConversationMeta, ContextSource, Turn, Usage, Variant, VideoSpec } from "@/types/chat";
 import type { ChatActionId } from "@/lib/chatActions";
 import type { BackendType, Effort } from "@/types";
 import type { ImageSpec } from "@/lib/imageSpec";
@@ -174,9 +174,14 @@ function repair(c: Conversation): Conversation {
        rendered with nothing in it, no explanation, and no Retry, because the
        "failed" state is *no variants at all*. Naming it is what puts the
        Retry button back. */
-    if (!has && t.role === "assistant" && !t.error) {
+    /* Except a clip still being made. Its job id is on the turn and the job
+       runs on OpenRouter whether or not this tab is open, so it is not
+       interrupted — ChatContext picks the waiting back up when the thread
+       opens, rather than offering a Retry that would pay for a second clip. */
+    if (!has && t.role === "assistant" && !t.error && !t.videoJob) {
       return { ...t, variants: [], active: 0, error: "Interrupted — the app closed while this reply was arriving." };
     }
+    if (!has && t.videoJob) return { ...t, variants: [], active: 0 };
     return {
       ...t,
       variants: has ? t.variants : [{ content: "", createdAt: t.createdAt || Date.now() }],
@@ -201,7 +206,10 @@ function repair(c: Conversation): Conversation {
      lands on `direct`. A thread that silently became multi-request because the
      app updated would be a bill the learner never agreed to. */
   if ((c.mode as string) === "chat") c.mode = "direct";
-  if (c.mode !== "agent" && c.mode !== "deep" && c.mode !== "direct") c.mode = "direct";
+  /* Image and Video are modes too. Image was missing from this list when it
+     shipped, so every drawing thread came back from a reload as a chat
+     thread — the composer, the dials and the model restriction all gone. */
+  if (c.mode !== "agent" && c.mode !== "deep" && c.mode !== "direct" && c.mode !== "image" && c.mode !== "video") c.mode = "direct";
   return c;
 }
 
@@ -231,6 +239,8 @@ export interface CreateOpts {
   /** Carried from the empty screen's picture dials. Absent means both on
    *  Auto, which sends nothing. */
   image?: ImageSpec;
+  /** Carried from the empty screen's video dials. */
+  video?: VideoSpec;
 }
 
 /**
@@ -290,7 +300,8 @@ export function create(opts: CreateOpts = {}): Conversation {
     /* Copied rather than referenced: the draft object in ChatContext outlives
        this call and is mutated by the composer's dials, so sharing it would
        let a later turn of the dial silently rewrite a thread already created. */
-    ...(opts.image ? { image: { ...opts.image } } : {})
+    ...(opts.image ? { image: { ...opts.image } } : {}),
+    ...(opts.video ? { video: { ...opts.video } } : {})
   };
   cache.set(c.id, c);
   persist(c, true);

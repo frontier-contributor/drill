@@ -19,6 +19,7 @@ import { kindsOn } from "@/lib/visuals/catalogue";
 import { canvasId, canvasVersions } from "@/lib/visuals/artifacts";
 import Visual from "../visuals/Visual";
 import Picture from "../visuals/Picture";
+import Clip from "../visuals/Clip";
 import ErrorGuard from "../ui/ErrorGuard";
 import MemorySaved from "./MemorySaved";
 import AgentTrace, { stepsFromTrace } from "./AgentTrace";
@@ -420,6 +421,14 @@ export default function MessageTurn({
           {streaming && actionsFor(conversation.mode, conversation.actions || []).includes("image") && (
             <div className="photo-pending">Drawing…</div>
           )}
+          {/* A clip, like a picture, lands whole at the end; the waiting line
+              is the streamed text above it. */}
+          {!streaming &&
+            variant?.videos?.map((vid) => (
+              <ErrorGuard key={vid.id} fallback={<div className="vis-error">This clip could not be shown.</div>}>
+                <Clip video={vid} />
+              </ErrorGuard>
+            ))}
           {/* Under the words, because the words are usually about the picture.
               Never while streaming: the reply arrives before the pictures are
               in the file store, and a frame that pointed at bytes not yet

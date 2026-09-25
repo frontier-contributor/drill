@@ -21,7 +21,7 @@ especially its **Project layout** section. Do not restate it here.
 npm run dev     # vite; usually :5173, falls back to :5174 if taken
 npm run lint    # tsc --noEmit. The only lint there is
 npm test        # tsx --test src/**/*.test.ts
-                # 347 tests: fsrs, cardFormat, memory*, effort, title,
+                # 348 tests: fsrs, cardFormat, memory*, effort, title,
                 # thinking, agent/loop, settings/catalogue, logBudget,
                 # storage, storeBoot, autoBackup, activity, gaps, retry, budget,
                 # ai/structured,
@@ -323,6 +323,39 @@ panes are a container query on the picker, not a media query. Openers use
 `useModelList` (one list per backend per session). An id the catalogue does
 not know is a chat model unless the caller passes `trustList`. Favourites
 are `lib/favoriteModels.ts`, beside `recentModels.ts`.
+
+**Image mode has two routes, and the model decides.** `services/drawing.ts`:
+a model that also writes (Gemini's) draws through chat/completions with the
+Image action and keeps the conversation; a model that only draws (FLUX,
+Seedream, GPT-Image, Recraft — most of them) goes through OpenRouter's Images
+API (`AI.draw`, `drawWithImagesApi`), which is stateless. Continuity is the
+references: with "build on the last picture" on (`ImageSpec.chain`, absent =
+on) the thread's last picture rides along — as `input_references` on the
+Images route, as an image part on the newest message on the chat route, which
+before this sent the words of an edit and never the picture. Only dials the
+model's listing takes are shown and sent; a model with no sizes shows no size
+dial. Drawing and video always use OpenRouter's *saved* key
+(`speechCreds("openrouter")`), so they work while chat points elsewhere.
+
+**Video is a job, and the job lives on the turn.** `Turn.videoJob` is written
+the moment OpenRouter accepts the request; `waitForClip` in ChatContext polls
+with backoff, downloads the MP4 (with the key, and only from OpenRouter's own
+origin — `downloadVideo` refuses anywhere else), and `keepVideo` puts it in
+drill-files with a poster frame. A thread opened with a pending job resumes
+the wait (the effect after `retry`), and `chatStore.repair()` leaves such a
+turn alone instead of marking it Interrupted — asking again would pay twice.
+Stopping keeps the job (OpenRouter cannot cancel one; Retry resumes it); a
+clip that *failed* (`ClipFailed`) clears it so Retry asks anew. The price is
+quoted before anything is asked for, from the listing's SKUs
+(`lib/mediaCaps.ts`'s `videoEstimate`, tested against every SKU spelling), and
+what is sent is `lib/videoSpec.ts`'s `effectiveVideo` — never a value the
+model does not take. `referencedFileIds` walks `Variant.videos`: a clip is
+the costliest file to lose to "Remove unused".
+
+**`repair()` whitelists modes.** A mode missing from its list is reset to
+`direct` on every load — Image was, from the day it shipped until
+2026-09-25, so every drawing thread came back from a reload as chat. Add a
+mode, add it there.
 
 **Backends and credentials.** `services/ai/backends.ts` holds one entry per
 provider — OpenRouter, Groq, Ollama, and a generic OpenAI-compatible one — and
