@@ -1781,11 +1781,8 @@
   text-transform: none;
   letter-spacing: 0;
 }
-/* The rest of what a picker's popover shows — the category chips, the
-   grouped/plain list, each row — lives in style.css as `.modelpop-*`, not
-   here: ModelPickerPanel is shared with Settings' model picker, which mounts
-   in every section, and style.css is the eager sheet. Only this chip's own
-   trigger and its floating container are chat-only. */
+/* The model browser itself opens in a dialog (ui/ModelDialog.tsx, styled in
+   style.css). `.modelpop` is still the Listen button's popover. */
 
 /* --------------------------------------------------------- empty state -- */
 .chat-empty {
@@ -3272,13 +3269,3 @@
   }
 }
 
-/* Said above a restricted model list that came back empty, so a picker with
-   nothing in it explains itself instead of looking broken. */
-.modelpop-note {
-  padding: var(--s-2) var(--s-3);
-  border-bottom: 1px solid var(--rule-soft);
-  color: var(--ink-3);
-  font-family: var(--sans);
-  font-size: var(--t-3xs);
-  line-height: var(--lh-snug);
-}

@@ -541,7 +541,11 @@ function openAICompatible(
   headerFn: (ctx: AIContext) => Record<string, string>,
   /** True for a backend that normally runs on the caller's own machine —
    *  only "custom" today. Decides the wording of a network-level failure. */
-  local = false
+  local = false,
+  /** Appended to /models. OpenRouter's unfiltered /models is text models
+   *  only, which kept every image, video, voice and transcription model out
+   *  of every picker; the pickers filter by kind themselves. */
+  listQuery = ""
 ): Pick<BackendDef, "chat" | "listModels"> {
   return {
     async chat(messages: ChatMessage[], opts: ChatOpts, ctx: AIContext): Promise<string> {
@@ -692,7 +696,7 @@ function openAICompatible(
     },
 
     async listModels(ctx: AIContext): Promise<string[]> {
-      const url = ctx.baseUrl + "/models";
+      const url = ctx.baseUrl + "/models" + listQuery;
       let res: Response;
       try {
         res = await fetch(url, { headers: headerFn(ctx) });
@@ -760,7 +764,10 @@ function openAISpeech(
 ): SpeechDef["synthesize"] {
   return async (req, ctx) => {
     const url = ctx.baseUrl + "/audio/speech";
-    const body = { model: req.model, input: req.input, voice: req.voice, response_format: format };
+    /* No voice is sent when none was chosen: a model that publishes no voice
+       list speaks in its own default, and sending another model's default in
+       its place ("af_heart" to Fish Audio) is a refusal. */
+    const body = { model: req.model, input: req.input, ...(req.voice ? { voice: req.voice } : {}), response_format: format };
     const res = await postWithRetry(
       url,
       { method: "POST", headers: headerFn(ctx), body: JSON.stringify(body), signal: req.signal },
@@ -924,7 +931,7 @@ export const BACKENDS: Record<BackendType, BackendDef> = {
       ],
       hear: openAIHear("OpenRouter", openRouterHeaders, "json")
     },
-    ...openAICompatible("OpenRouter", "openrouter", openRouterHeaders)
+    ...openAICompatible("OpenRouter", "openrouter", openRouterHeaders, false, "?output_modalities=all")
   } as BackendDef,
 
   groq: {

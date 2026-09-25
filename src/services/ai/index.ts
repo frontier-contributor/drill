@@ -127,11 +127,13 @@ export function chat(messages: ChatMessage[], opts: ChatOpts = {}, override?: Ov
       /* The provider's own figure first. It is what was actually charged, and
          it is the only one that includes non-token fees — a web search costs
          about $0.007 that no tokens-times-price sum can account for. */
-      const reported = usage?.reportedCost ?? costOf(usage, price);
-      /* Pictures are added only when we are reconstructing the bill: a figure
-         the provider reported already has them in it, and adding them again
-         would double-charge the most expensive thing in the app. */
-      const perImage = usage?.reportedCost == null ? (price?.imagePrice || 0) * images : 0;
+      /* A picture the provider did not put a figure on is not priced by
+         reconstruction. It is billed per output image token at a rate the
+         token counts here do not separate from text, and the rate this used
+         to multiply by — `pricing.image` — is what an image costs to *send*.
+         Unknown is the honest answer; OpenRouter reports the real figure on
+         every call, so this is the rare path. */
+      const reported = usage?.reportedCost ?? (images ? undefined : costOf(usage, price));
       usageLog.add({
         at: started,
         backend: r.type,
@@ -140,7 +142,7 @@ export function chat(messages: ChatMessage[], opts: ChatOpts = {}, override?: Ov
         usage,
         images: failed ? 0 : images,
         /* `undefined` is "no price known" and must never collapse to zero. */
-        cost: failed ? undefined : reported == null ? (perImage > 0 ? perImage : undefined) : reported + perImage,
+        cost: failed ? undefined : reported,
         failed
       });
     } catch {

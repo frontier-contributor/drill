@@ -39,6 +39,7 @@ import { fmtBytes } from "@/lib/util";
 import { useDrillStore } from "@/hooks/useDrillStore";
 import { useStoreSync } from "@/hooks/useStoreSync";
 import { useSettings } from "@/context/SettingsContext";
+import ModelPicker from "../../ui/ModelPicker";
 import SelectRow from "../../ui/SelectRow";
 import SwitchRow from "../../ui/SwitchRow";
 import TextRow from "../../ui/TextRow";
@@ -94,18 +95,31 @@ function Pickers({ info }: { info: EngineInfo }) {
 
   return (
     <>
-      <SelectRow
-        title="Speech model"
-        sub={
-          info.source === "catalogue"
-            ? "Only models that publish their voices and price by the character are listed, cheapest first."
-            : "The speech models this provider documents."
-        }
-        value={info.model}
-        options={info.models.map((m) => ({ value: m.id, label: m.label }))}
-        onChange={(m) => pick({ model: m })}
-      />
-      {info.voices.length > 0 && (
+      {info.source === "catalogue" ? (
+        /* Every voice model OpenRouter lists, in the same browser as every
+           other model — its voices, its price per thousand characters or
+           "billed by audio length", what is new. It used to be a dropdown of
+           the thirteen that both published voices and billed by the
+           character. */
+        <ModelPicker
+          title="Speech model"
+          sub="Cheapest first. Some bill by the length of the audio instead of the text — the list says which."
+          kind="speech"
+          backend={info.id}
+          value={info.model}
+          allowTyped={false}
+          onChange={(m) => pick({ model: m })}
+        />
+      ) : (
+        <SelectRow
+          title="Speech model"
+          sub="The speech models this provider documents."
+          value={info.model}
+          options={info.models.map((m) => ({ value: m.id, label: m.label }))}
+          onChange={(m) => pick({ model: m })}
+        />
+      )}
+      {info.voices.length > 0 ? (
         <SelectRow
           title="Voice"
           sub="The voices this model has. Switching model picks its default voice."
@@ -113,6 +127,19 @@ function Pickers({ info }: { info: EngineInfo }) {
           options={info.voices.map((v) => ({ value: v.id, label: v.label }))}
           onChange={(v) => pick({ voice: v })}
         />
+      ) : (
+        info.source === "catalogue" && (
+          /* A model with no voice list — Fish Audio's — takes a voice id from
+             its own library, and speaks in its default when given none. */
+          <TextRow
+            title="Voice"
+            sub="This model publishes no list. Leave it empty for its default voice, or paste a voice id from the provider's library."
+            value={info.voice}
+            placeholder="default voice"
+            mono
+            onCommit={(v) => pick({ voice: v.trim() })}
+          />
+        )
       )}
     </>
   );

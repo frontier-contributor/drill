@@ -56,6 +56,9 @@ export type IconName =
   | "skip-back"
   | "skip-forward"
   | "pin"
+  | "eye"
+  | "film"
+  | "info"
   | "github";
 
 /* Every path is drawn on a 24-grid, stroked, never filled — except the two
@@ -171,6 +174,19 @@ const PATHS: Record<IconName, { d: string; fill?: boolean }[]> = {
   /* A pushpin: what an attachment pinned to a conversation is, and the one
      thing a paperclip beside it could not also mean. */
   pin: [{ d: "M9.5 3.5h5l-.8 6 3.3 3.2v1.3H7v-1.3l3.3-3.2Z" }, { d: "M12 14v6.5" }],
+  /* Sees images: the model takes a picture as input. An eye rather than the
+     image glyph, which already means "returns a picture" in the picker. */
+  eye: [
+    { d: "M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12Z" },
+    { d: "M12 14.6a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2Z" }
+  ],
+  /* Video: a strip of film, which reads as "moving picture" at 13px where a
+     camera reads as "take a photo". */
+  film: [
+    { d: "M4 4.5h16v15H4z" },
+    { d: "M8 4.5v15M16 4.5v15M4 9h4M4 15h4M16 9h4M16 15h4" }
+  ],
+  info: [{ d: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" }, { d: "M12 11v5.5M12 7.8h.01" }],
   /* The one glyph in this set that is a fixed logo rather than a drawn
      concept — the Octocat silhouette, filled rather than stroked like
      star-filled, because approximating it in strokes on a 24-grid reads as

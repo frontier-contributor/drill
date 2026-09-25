@@ -72,8 +72,14 @@ test("a loaded catalogue that no longer lists the model says no, by name", () =>
   assert.doesNotMatch(v.why, /vendor\//);
 });
 
-test("a model with no voices to pick cannot be offered", () => {
-  assert.equal(hostedVerdict(hosted({ voices: [] })).can, false);
+test("a model that publishes no voice list is a hedge, not a refusal", () => {
+  /* Fish Audio's voices are ids from its own library, not a list in the
+     catalogue. Refusing them hid four working models; the request says
+     plainly if a voice is wrong. */
+  const v = hostedVerdict(hosted({ voices: [] }));
+  assert.equal(v.can, true);
+  assert.equal(v.certain, false);
+  assert.match(v.why, /default voice/);
 });
 
 test("a server that cannot be asked in advance is a hedge, not a refusal", () => {

@@ -313,12 +313,35 @@ export interface Persona {
  *  the capabilities the same response happens to publish. Named for what it
  *  was first used for; see services/pricing.ts for why one fetch answers both
  *  questions. */
+/** What a model produces, read off its output modalities — never off its
+ *  name. One model can be several: Gemini's image models are chat and image. */
+export type ModelKind = "chat" | "image" | "video" | "speech" | "transcription" | "embedding" | "other";
+
+/**
+ * One model, as the catalogue describes it. The name is historical — it began
+ * as a price record — and it is still the record every price and capability
+ * lookup returns. lib/models.ts builds it from OpenRouter's raw record.
+ */
 export interface ModelPrice {
   id: string;
+  /** USD per million prompt tokens. 0 with `variable` set means "varies". */
   prompt: number;
   completion: number;
   contextLength?: number;
+  /** The catalogue's display name, "Anthropic: Claude Sonnet 4.5". */
   name?: string;
+  /** Split out of `name`: "Anthropic" and "Claude Sonnet 4.5". */
+  vendor?: string;
+  title?: string;
+  /** The first sentences of the catalogue's description, for a detail card. */
+  about?: string;
+  /** When the model was added to the catalogue, epoch ms. */
+  created?: number;
+  /** What it produces. Absent on a record from before kinds existed. */
+  kinds?: ModelKind[];
+  /** The price depends on what the request is routed to — the router models
+   *  publish -1, which is this, not a negative price. */
+  variable?: boolean;
   /** Whether the model accepts a reasoning parameter — the machine-readable
    *  answer to "can this one think?". Absent on a record written before the
    *  field existed, which reads as "not known", never as "no". */
@@ -329,18 +352,34 @@ export interface ModelPrice {
    *  lib/modality.ts, which is what decides whether a picture is sent as
    *  itself and whether the attach menu offers one at all. */
   inputModalities?: string[];
-  /** What it can produce, from `architecture.output_modalities`. A model that
-   *  lists "image" can be asked for pictures; every other model in the
-   *  catalogue lists "text" alone. Same absent-means-unknown convention. */
+  /** What it can produce, from `architecture.output_modalities` — "text",
+   *  "image", "video", "speech", "transcription", "embeddings". Same
+   *  absent-means-unknown convention. */
   outputModalities?: string[];
-  /** USD per generated image, from the catalogue's `pricing.image`. Images are
-   *  billed per picture rather than per token, so without this an image reply
-   *  costs a row of zeros that looks exactly like a free one — the same hole
-   *  `characters` fills for a voice. Absent means no published price. */
-  imagePrice?: number;
+  /** USD per image sent *in* — `pricing.image`. Not the price of a drawn
+   *  one; the catalogue read it that way until 2026-09-25. */
+  imageInput?: number;
+  /** USD per million output image tokens — `pricing.image_output`, which is
+   *  how a generated picture is actually billed. */
+  imageOutput?: number;
+  /** USD per web search, when the model's route can search. */
+  webSearch?: number;
+  /** A higher rate above a prompt size — Claude and Gemini both double past
+   *  200k tokens. Per million, like `prompt`. */
+  tiered?: { above: number; prompt: number; completion: number };
   /** The most the model will write in one reply, from the catalogue's
    *  `top_provider.max_completion_tokens`. Absent means not known — which is
    *  also how a price cached before the field existed reads. lib/budget.ts
    *  clamps to it, because a max_tokens above it is refused by some providers. */
   maxOutput?: number;
+  /** Speech models: the voices it publishes (empty when it publishes none),
+   *  and USD per character when it bills that way. */
+  voices?: string[];
+  perChar?: number;
+  /** Transcription models: USD per second of audio. */
+  perSecond?: number;
+  /** What the model knows up to, when the catalogue says. */
+  cutoff?: string;
+  /** When the model is going away, when the catalogue says. */
+  expires?: string;
 }

@@ -21,11 +21,12 @@ especially its **Project layout** section. Do not restate it here.
 npm run dev     # vite; usually :5173, falls back to :5174 if taken
 npm run lint    # tsc --noEmit. The only lint there is
 npm test        # tsx --test src/**/*.test.ts
-                # 330 tests: fsrs, cardFormat, memory*, effort, title,
+                # 347 tests: fsrs, cardFormat, memory*, effort, title,
                 # thinking, agent/loop, settings/catalogue, logBudget,
                 # storage, storeBoot, autoBackup, activity, gaps, retry, budget,
                 # ai/structured,
-                # weeks, rememberArg, dayBrief, capture, files/parts (the sweep),
+                # weeks, rememberArg, dayBrief, capture, models, mediaCaps,
+                # files/parts (the sweep),
                 # visuals/{srcdoc (the walls), keep},
                 # speech/{words, availability, player},
                 # voice/{turns, chunker, heard (+ wav), session}
@@ -297,6 +298,31 @@ clipboard repairs tried only after a clean parse fails, since curly quotes are
 legal inside a JSON string) and says what it dropped. The paste is untrusted:
 cards go through `store.normCard` like every other card, and nothing commits
 without a press. `capture.test.ts` holds the damage cases.
+
+**The catalogue is every model, and a model's kind is its output.**
+`services/pricing.ts` fetches `/models?output_modalities=all` — unfiltered,
+OpenRouter's `/models` means *text only*, which for a year kept every
+image-only generator, video model, voice and transcriber out of every picker.
+`lib/models.ts` turns each raw record into a `ModelPrice` with `kinds` read
+off `output_modalities` (chat, image, video, speech, transcription —
+**never from the id**), a vendor/title split, a trimmed description, and
+prices that mean what they say: `-1` is `variable` ("varies"), not minus a
+dollar; `pricing.image` is `imageInput` (sending one), `image_output` is
+`imageOutput` (drawing one). It is cached in its own IndexedDB,
+`drill-catalogue` (`catalogueCache.ts`), served stale while it revalidates,
+and retried a minute after a failure — it used to live in localStorage, the
+review log's drawer, and a failed fetch left the session empty. Bump `SHAPE`
+when the stored record changes. `/images/models` and `/videos/models` are
+fetched only when Image or Video mode asks (`lib/mediaCaps.ts`).
+
+**Every model picker is one component.** `ui/ModelBrowser.tsx`, opened in
+`ui/ModelDialog.tsx` (a dialog, not a popover: anchored popovers ran off the
+window from the composer's right edge and were clipped by Settings' scrolling
+column). It takes a `kind` and shows that kind's filters and facts; the two
+panes are a container query on the picker, not a media query. Openers use
+`useModelList` (one list per backend per session). An id the catalogue does
+not know is a chat model unless the caller passes `trustList`. Favourites
+are `lib/favoriteModels.ts`, beside `recentModels.ts`.
 
 **Backends and credentials.** `services/ai/backends.ts` holds one entry per
 provider — OpenRouter, Groq, Ollama, and a generic OpenAI-compatible one — and

@@ -40,6 +40,7 @@ import { useMaybeChat } from "@/context/ChatContext";
 import { useSettings } from "@/context/SettingsContext";
 import VoiceOrb, { type OrbPhase, type OrbSource } from "@/components/chat/voice/VoiceOrb";
 import ModelPicker from "../../ui/ModelPicker";
+import { transcriptionModels } from "@/services/pricing";
 import SelectRow from "../../ui/SelectRow";
 import SwitchRow from "../../ui/SwitchRow";
 import TextRow from "../../ui/TextRow";
@@ -626,11 +627,17 @@ function Hearing() {
             onCommit={(v) => update({ hearModels: { ...t.hearModels, custom: v.trim() } })}
           />
         ) : (
-          <SelectRow
+          <ModelPicker
             title="Transcription model"
             sub="Turbo models answer fastest; the rest trade a little speed for accuracy on hard words."
+            kind="transcription"
+            backend={hosted}
             value={t.hearModels[hosted] || hear.defaultModel}
-            options={hear.models.map((m) => ({ value: m, label: short(m) }))}
+            /* OpenRouter's transcribers come from the catalogue — two dozen,
+               where this used to offer the six written into the backend. Any
+               other backend's are its own list, which the catalogue names
+               differently, and a list that has not loaded falls back to it. */
+            models={hosted === "openrouter" && transcriptionModels().length ? undefined : [...hear.models]}
             onChange={(v) => update({ hearModels: { ...t.hearModels, [hosted]: v } })}
           />
         ))}

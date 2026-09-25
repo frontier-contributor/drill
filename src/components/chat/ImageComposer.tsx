@@ -30,7 +30,6 @@ import * as U from "@/lib/util";
 import Icon from "@/components/ui/Icon";
 import ModelChip from "./ModelChip";
 import ToolsMenu from "./ToolsMenu";
-import { canDraw } from "@/components/ui/ModelPickerPanel";
 import AttachmentCard, { type PendingFile } from "./AttachmentCard";
 import { ingest } from "@/services/files/ingest";
 import * as filesDb from "@/services/files/db";
@@ -173,9 +172,8 @@ export default function ImageComposer({
             conversation={conversation}
             draftModel={draftModel}
             onDraftModel={setDraftModel}
-            restrict={canDraw}
+            kind="image"
             heading="Model for drawing"
-            restrictNote="Nothing this key reaches is listed as returning images, so the whole list is shown. Type an id if you know one."
           />
         </div>
 

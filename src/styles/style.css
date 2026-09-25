@@ -2903,192 +2903,43 @@ a {
 }
 
 /* ------------------------------------------------------- model picker -- */
-/* ModelPickerPanel's own content — search results, category chips, grouped
-   rows — shared between the chat composer's chip (chat.css wraps it in a
-   floating popover there) and this settings row (wrapped in .mdlpick-pop
-   below). Lives here, in the eager sheet, because Settings mounts in every
-   section: put this in the lazy chat.css chunk and the picker renders
-   unstyled everywhere but the chat view. */
-.modelpop-cats {
+/* The settings row's button (ui/ModelPicker.tsx): the chosen model by name
+   and vendor. It opens the model browser in a dialog (ModelDialog), whose
+   styles are with the browser's at the end of this sheet. */
+.mdlpick-btn {
   display: flex;
-  gap: var(--s-2);
-  margin-bottom: var(--s-2);
-}
-.modelpop-cat {
-  padding: 2px var(--s-3);
-  border: 1px solid var(--rule-soft);
-  border-radius: var(--r-full);
-  background: none;
-  color: var(--ink-3);
-  font-family: var(--sans);
-  font-size: var(--t-2xs);
-  cursor: pointer;
-  transition: border-color var(--fast), color var(--fast), background var(--fast);
-}
-.modelpop-cat:hover {
-  border-color: var(--rule);
-  color: var(--ink);
-}
-.modelpop-cat.on {
-  border-color: var(--accent);
-  background: var(--accent-10);
-  color: var(--accent);
-}
-.modelpop-list {
-  max-height: 320px;
-  overflow-y: auto;
-  margin-top: var(--s-2);
-}
-/* A provider section within "All". Recent stays flat — recency order is the
-   point of it, so grouping alphabetically would fight the reason it exists. */
-.modelpop-group + .modelpop-group {
-  margin-top: var(--s-2);
-}
-.modelpop-group-h {
-  font-family: var(--mono);
-  font-size: var(--t-3xs);
-  letter-spacing: var(--track-caps);
-  text-transform: uppercase;
-  color: var(--ink-3);
-  padding: var(--s-1) var(--s-2);
-}
-.modelpop-row {
-  display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--s-2);
   width: 100%;
   text-align: left;
-  background: none;
-  border: 0;
-  color: var(--ink-2);
-  padding: var(--s-2);
-  border-radius: var(--r-1);
   cursor: pointer;
+  min-width: 0;
 }
-.modelpop-row:hover {
-  background: var(--accent-10);
-  color: var(--ink);
-}
-.modelpop-row.on {
-  color: var(--accent);
-}
-.modelpop-row.on .modelpop-row-name {
-  color: var(--accent);
-}
-/* A monogram, not a fetched logo: OpenRouter's catalogue carries no icon
-   field, and the app draws its own icon set rather than hotlinking bitmaps
-   from a provider's site. The hue is deterministic per provider (hashed in
-   ModelPickerPanel, picked from this fixed 5-colour palette) so the same
-   provider always lands on the same colour without a hand-kept table. */
-.modelpop-avatar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--r-1);
-  font-family: var(--mono);
-  font-size: var(--t-3xs);
-  font-weight: 600;
-}
-.modelpop-avatar[data-hue="0"] {
-  background: var(--accent-10);
-  color: var(--accent);
-}
-.modelpop-avatar[data-hue="1"] {
-  background: var(--violet-tint);
-  color: var(--violet);
-}
-.modelpop-avatar[data-hue="2"] {
-  background: var(--green-tint);
-  color: var(--green);
-}
-.modelpop-avatar[data-hue="3"] {
-  background: var(--amber-tint);
-  color: var(--amber);
-}
-.modelpop-avatar[data-hue="4"] {
-  background: var(--red-tint);
-  color: var(--red);
-}
-.modelpop-row-name {
-  flex: 1 1 auto;
+.mdlpick-val {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--mono);
-  font-size: var(--t-2xs);
-  color: inherit;
-}
-.modelpop-row-meta {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  font-family: var(--mono);
-  font-size: var(--t-3xs);
-  color: var(--ink-3);
-}
-.modelpop-badge {
-  padding: 1px 5px;
-  border-radius: var(--r-full);
-  letter-spacing: var(--track-caps);
-  text-transform: uppercase;
-}
-.modelpop-badge.think {
-  background: var(--violet-tint);
-  color: var(--violet);
-}
-.modelpop-badge.cap {
-  background: var(--amber-tint);
-  color: var(--amber);
-}
-.modelpop-empty {
-  font-family: var(--sans);
-  font-size: var(--t-2xs);
-  color: var(--ink-3);
-  padding: var(--s-3) var(--s-2);
-}
-
-/* The settings row's own trigger + floating panel — visually the same idea
-   as the chat chip's .modelpop, under its own names because both sheets can
-   be on screen together (Settings can be open while chat is behind it) and
-   sharing one class name would let one section's positioning fight the
-   other's. */
-.mdlpick {
-  position: relative;
-}
-.mdlpick-btn {
-  display: block;
-  width: 100%;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: pointer;
 }
 .mdlpick-val.placeholder {
   color: var(--ink-3);
 }
-.mdlpick-pop {
-  position: absolute;
-  top: calc(100% + var(--s-2));
-  left: 0;
-  right: 0;
-  width: min(460px, 100%);
-  background: var(--surface-glass, var(--surface));
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid var(--border-subtle, var(--rule));
-  border-radius: var(--r-2);
-  box-shadow: var(--lift-3);
-  z-index: 50;
-  padding: var(--s-3);
+.mdlpick-vendor {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--sans);
+  font-size: var(--t-2xs);
+  color: var(--ink-3);
 }
-.mdlpick-pop .fi {
-  margin-bottom: var(--s-2);
+.mdlpick-chev {
+  flex: 0 0 auto;
+  margin-left: auto;
+  align-self: center;
+  color: var(--ink-3);
 }
 
 /* The list of things a space owns — knowledge, decks. Rows are records, not
@@ -3826,4 +3677,663 @@ select.fi.auto {
 }
 .sset-s.ok {
   color: var(--green);
+}
+
+/* ------------------------------------------------------ model browser -- */
+/* ModelBrowser.tsx — every model picker in the app: the chat chip, Settings'
+   model rows, regenerate-with, Image and Video modes, voices and
+   transcription. In the eager sheet for the reason the old picker was:
+   Settings mounts in every section. Its two-pane layout is decided by a
+   container query on the picker itself, not the window, because the same
+   picker lives in a 760px popover and in a 520px settings column. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.mb {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.mb-top {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding-bottom: var(--s-2);
+  border-bottom: 1px solid var(--rule-soft);
+}
+.mb-search {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  height: 38px;
+  padding: 0 var(--s-2) 0 var(--s-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--page);
+  color: var(--ink-3);
+  transition: border-color var(--fast), box-shadow var(--fast);
+}
+.mb-search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-16);
+}
+.mb-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: none;
+  font-family: var(--sans);
+  font-size: var(--t-sm);
+  color: var(--ink);
+}
+.mb-search input::placeholder {
+  color: var(--ink-3);
+}
+.mb-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--r-full);
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.mb-x:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.mb-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+.mb-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.mb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px var(--s-3);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-full);
+  background: none;
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: var(--t-2xs);
+  line-height: 1.5;
+  cursor: pointer;
+  transition: border-color var(--fast), color var(--fast), background var(--fast);
+}
+.mb-chip:hover {
+  border-color: var(--rule);
+  color: var(--ink);
+}
+.mb-chip.on {
+  border-color: var(--accent);
+  background: var(--accent-10);
+  color: var(--accent);
+}
+.mb-selects {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.mb-select select {
+  appearance: none;
+  -webkit-appearance: none;
+  max-width: 180px;
+  padding: 3px 22px 3px var(--s-3);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-full);
+  background-color: transparent;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 12px) 55%, calc(100% - 8px) 55%;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: var(--t-2xs);
+  line-height: 1.5;
+  cursor: pointer;
+}
+.mb-select select:hover,
+.mb-select select:focus {
+  border-color: var(--rule);
+  color: var(--ink);
+  outline: 0;
+}
+.mb-select select option {
+  background: var(--surface);
+  color: var(--ink);
+}
+.mb-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+}
+.mb-list {
+  max-height: min(56vh, 460px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--s-1) 2px var(--s-1) 0;
+}
+.mb-side {
+  display: none;
+}
+.mb-group + .mb-group {
+  margin-top: var(--s-2);
+}
+.mb-group-h {
+  position: sticky;
+  top: calc(var(--s-1) * -1);
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-2) var(--s-1);
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.mb-count {
+  letter-spacing: 0;
+}
+.mb-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 7px var(--s-2);
+  border-radius: var(--r-2);
+  color: var(--ink-2);
+  cursor: pointer;
+  user-select: none;
+}
+.mb-row.active {
+  background: var(--surface-2);
+}
+.mb-row.on .mb-title {
+  color: var(--accent);
+}
+.mb-av {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-2);
+  font-family: var(--mono);
+  font-size: var(--t-2xs);
+  font-weight: 600;
+}
+.mb-av.lg {
+  width: 38px;
+  height: 38px;
+  font-size: var(--t-sm);
+}
+.mb-av[data-hue="0"] {
+  background: var(--accent-10);
+  color: var(--accent);
+}
+.mb-av[data-hue="1"] {
+  background: var(--violet-tint);
+  color: var(--violet);
+}
+.mb-av[data-hue="2"] {
+  background: var(--green-tint);
+  color: var(--green);
+}
+.mb-av[data-hue="3"] {
+  background: var(--amber-tint);
+  color: var(--amber);
+}
+.mb-av[data-hue="4"] {
+  background: var(--red-tint);
+  color: var(--red);
+}
+.mb-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.mb-name {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.mb-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--sans);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink);
+}
+.mb-new {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--green);
+}
+.mb-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  color: var(--ink-3);
+}
+.mb-caps {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 5px;
+  color: var(--ink-3);
+}
+.mb-caps span {
+  display: inline-flex;
+}
+.mb-star,
+.mb-more {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--r-full);
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.mb-star {
+  opacity: 0;
+  transition: opacity var(--fast), color var(--fast);
+}
+.mb-row:hover .mb-star,
+.mb-row.active .mb-star,
+.mb-star.on {
+  opacity: 1;
+}
+.mb-star.on {
+  color: var(--amber);
+}
+.mb-star:hover,
+.mb-more:hover,
+.mb-more.on {
+  color: var(--ink);
+  background: var(--surface);
+}
+.mb-check {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.mb-inline {
+  margin: 2px var(--s-2) var(--s-3) calc(26px + var(--s-4));
+  padding: var(--s-3);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-2);
+  background: var(--page);
+}
+.mb-empty {
+  padding: var(--s-5) var(--s-3);
+  text-align: center;
+  font-family: var(--sans);
+  font-size: var(--t-xs);
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+.mb-empty p {
+  margin: 0 0 var(--s-2);
+}
+.mb-hint {
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+}
+.mb-skel i {
+  display: block;
+  height: 38px;
+  margin: 6px var(--s-2);
+  border-radius: var(--r-2);
+  background: linear-gradient(90deg, var(--surface-2), var(--page-2), var(--surface-2));
+  background-size: 200% 100%;
+  animation: mb-shimmer 1.2s linear infinite;
+}
+@keyframes mb-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+.mb-side-empty {
+  font-family: var(--sans);
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+}
+/* The detail card: the facts a choice is made on, in the order they are
+   asked — what is it, what can it do, what does it cost, how much will it
+   take. */
+.mb-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+}
+.mb-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-width: 0;
+}
+.mb-card-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.mb-card-name strong {
+  font-family: var(--serif);
+  font-size: var(--t-md);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.mb-card-name span {
+  font-family: var(--sans);
+  font-size: var(--t-2xs);
+  color: var(--ink-3);
+}
+.mb-id {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px var(--s-2);
+  border: 1px dashed var(--rule-soft);
+  border-radius: var(--r-1);
+  background: none;
+  color: var(--ink-3);
+  text-align: left;
+  cursor: pointer;
+}
+.mb-id code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+}
+.mb-id:hover {
+  border-color: var(--rule);
+  color: var(--ink);
+}
+.mb-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.mb-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--s-2);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  font-family: var(--sans);
+  font-size: var(--t-3xs);
+  color: var(--ink-2);
+}
+.mb-tag.new {
+  background: var(--green-tint);
+  color: var(--green);
+}
+.mb-tag.free {
+  background: var(--accent-10);
+  color: var(--accent);
+}
+.mb-about {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: var(--t-xs);
+  line-height: var(--lh-body);
+  color: var(--ink-2);
+}
+.mb-about.muted {
+  color: var(--ink-3);
+}
+.mb-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px var(--s-3);
+  margin: 0;
+}
+.mb-fact {
+  display: contents;
+}
+.mb-fact dt {
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding-top: 2px;
+}
+.mb-fact dd {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: var(--t-2xs);
+  line-height: 1.5;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.mb-fact small {
+  color: var(--ink-3);
+  font-size: var(--t-3xs);
+}
+.mb-card-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.mb-card-acts .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.mb-card-acts .btn.on {
+  color: var(--amber);
+}
+.mb-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding-top: var(--s-2);
+  border-top: 1px solid var(--rule-soft);
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  color: var(--ink-3);
+}
+.mb-keys {
+  margin-left: auto;
+}
+.mb-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: var(--r-full);
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.mb-refresh:hover {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+.mb-refresh:disabled {
+  opacity: 0.5;
+}
+@media (hover: none) {
+  .mb-keys {
+    display: none;
+  }
+  .mb-star {
+    opacity: 1;
+  }
+}
+/* A narrow picker gives the name and the price the room: the capability
+   marks are repeated in the card anyway. */
+@container (max-width: 480px) {
+  .mb-caps {
+    display: none;
+  }
+}
+/* Room for the card beside the list: the picker, not the window, decides. */
+@container (min-width: 620px) {
+  .mb-body {
+    grid-template-columns: minmax(0, 1fr) 268px;
+  }
+  .mb-side {
+    display: block;
+    max-height: min(56vh, 460px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--s-3) var(--s-1) var(--s-2) var(--s-4);
+    border-left: 1px solid var(--rule-soft);
+  }
+  .mb-more,
+  .mb-inline {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------- model dialog -- */
+/* ModelDialog.tsx: the browser over everything, above the settings overlay
+   (60) and below toasts (95). Top-aligned rather than centred, so the search
+   box does not jump when filtering changes the list's height. */
+.mdlg-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8vh var(--s-4) var(--s-4);
+  background: var(--scrim);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: fade var(--fast) var(--ease);
+}
+.mdlg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  width: min(840px, 100%);
+  max-height: 86vh;
+  padding: var(--s-4);
+  background: var(--surface);
+  border: 1px solid var(--border-subtle, var(--rule));
+  border-radius: var(--r-3);
+  box-shadow: var(--lift-3);
+  animation: modal-pop var(--med) var(--ease-spring);
+}
+.mdlg-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-width: 0;
+}
+.mdlg-head strong {
+  font-family: var(--serif);
+  font-size: var(--t-md);
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mdlg-close {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.mdlg-extra {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 2px var(--s-2);
+  border: 0;
+  border-radius: var(--r-full);
+  background: none;
+  color: var(--accent);
+  font-family: var(--sans);
+  font-size: var(--t-2xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.mdlg-extra:hover {
+  background: var(--accent-10);
+}
+.mdlg-note {
+  font-family: var(--sans);
+  font-size: var(--t-2xs);
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* A phone: a sheet from the bottom edge, where the thumb already is. */
+@media (max-width: 640px) {
+  .mdlg-wrap {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .mdlg {
+    width: 100%;
+    max-height: 92vh;
+    padding: var(--s-3) var(--s-3) var(--s-4);
+    border-bottom: 0;
+    border-radius: var(--r-3) var(--r-3) 0 0;
+  }
+  .mdlg .mb-list {
+    max-height: 56vh;
+  }
 }

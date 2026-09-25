@@ -15,7 +15,7 @@
 import * as AI from "@/services/ai";
 import * as store from "@/services/store";
 import * as chatStore from "@/services/chatStore";
-import { speechCatalogue, speechPriceFor, type SpeechModel } from "@/services/pricing";
+import { catalogueEntry, speechCatalogue, speechPriceFor, type SpeechModel } from "@/services/pricing";
 import { formatCost } from "@/lib/tokens";
 import {
   chooseEngine,
@@ -69,6 +69,15 @@ function shortModel(model: string): string {
 /** "Kokoro 82M" out of the catalogue's "hexgrad: Kokoro 82M". */
 function modelName(m: SpeechModel): string {
   return (m.name || m.id).replace(/^[^:]+:\s*/, "");
+}
+
+/** A speech model's price in words, saying *how* it bills when it is not by
+ *  the character — "price unknown" read as a warning for a model whose price
+ *  is simply counted in audio rather than text. */
+export function speechPriceLabel(m: SpeechModel): string {
+  if (m.perChar != null) return priceLabel(m.perChar);
+  const entry = catalogueEntry(m.id);
+  return entry && entry.completion > 0 ? "billed by audio length" : "price unknown";
 }
 
 export function priceLabel(perChar: number | undefined): string {
@@ -125,11 +134,17 @@ function hostedInfo(id: Exclude<SpeechEngineId, "device">): EngineInfo {
     available = cat ? cat[model]?.voices : null;
     models = cat
       ? Object.values(cat)
-          /* Only what can really be offered: a model that publishes voices to
-             choose from, and that a character count can price. */
-          .filter((m) => m.voices.length > 0 && m.perChar != null)
-          .sort((a, b) => (a.perChar ?? 0) - (b.perChar ?? 0) || modelName(a).localeCompare(modelName(b)))
-          .map((m) => ({ id: m.id, label: `${modelName(m)} · ${priceLabel(m.perChar)}` }))
+          /* Every speech model the catalogue lists. This used to keep only
+             those that publish a voice list *and* bill by the character, which
+             hid seven of twenty: Gemini's voices bill by audio length, and
+             Fish Audio's take a voice id from its own library. Both work; the
+             list says how each is priced, and unknown sorts last rather than
+             pretending to be cheapest. */
+          .sort(
+            (a, b) =>
+              (a.perChar ?? Infinity) - (b.perChar ?? Infinity) || modelName(a).localeCompare(modelName(b))
+          )
+          .map((m) => ({ id: m.id, label: `${modelName(m)} · ${speechPriceLabel(m)}` }))
       : [];
   } else if (def.source === "fixed") {
     available = def.models?.[model];
@@ -139,8 +154,14 @@ function hostedInfo(id: Exclude<SpeechEngineId, "device">): EngineInfo {
     models.unshift({ id: model, label: shortModel(model) + (available === undefined ? " · not available" : "") });
   }
 
+  /* A model that publishes no voice list gets the voice you typed for it, or
+     none — never the backend's default, which is another model's voice. */
   const voice =
-    available && available.length ? pickVoice(available, saved?.voice || "", def.defaultVoice) : saved?.voice || def.defaultVoice;
+    available && available.length
+      ? pickVoice(available, saved?.voice || "", def.defaultVoice)
+      : available && available.length === 0
+        ? saved?.voice || ""
+        : saved?.voice || def.defaultVoice;
 
   const verdict: SpeechVerdict =
     id === "custom" && !creds.configured

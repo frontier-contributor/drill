@@ -95,7 +95,15 @@ export function hostedVerdict(f: HostedFacts): SpeechVerdict {
     };
   }
   if (!f.voices.length) {
-    return { can: false, certain: true, why: `${shortName(f.model)} publishes no voices to choose from.` };
+    /* Not a refusal. Some models take a voice id from their own library
+       rather than publishing a list — Fish Audio's four do — and speak in a
+       default voice when given none. Offered as a hedge, like a typed server:
+       the request says so if the voice is wrong. */
+    return {
+      can: true,
+      certain: false,
+      why: `${shortName(f.model)} publishes no voice list — it uses its default voice unless you name one.`
+    };
   }
   return { can: true, certain: true, why: `${shortName(f.model)} via ${f.label}.` };
 }

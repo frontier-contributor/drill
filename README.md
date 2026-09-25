@@ -237,6 +237,28 @@ anything.
   spent writing rather than drilling, and reads the same on Home, in the review
   rail and on the finish screen.
 
+### Choosing a model
+
+Every model picker in the app is the same browser — the model chip in chat,
+Settings' model rows, regenerate-with, Image mode, the voices under
+Listening and the transcribers under Voice.
+
+- **Every model there is** — chat, image, video, voice and transcription
+  models, straight from OpenRouter's catalogue (over six hundred of them),
+  each shown in the picker it belongs to.
+- **Names, and a card for each** — "Claude Sonnet 4.5 · Anthropic", with its
+  price in and out (and the higher rate past 200k tokens), context window,
+  longest reply, what it can see and make, when it came out and what it knows
+  up to. Beside the list on a wide screen; under the row on a phone.
+- **Filters that are questions** — Thinks, Sees images, Reads PDFs, Draws,
+  Long context, Free, New; a provider menu; sort by newest, cheapest or
+  largest context.
+- **Your own shortlist first** — star a model to pin it to the top of every
+  picker; the ones you used last come next.
+- **Search the way you remember it** — "sonnet45", "sonnet 4.5" and
+  "claude-sonnet-4.5" find the same model. Arrow keys move, Enter chooses,
+  and any id the list does not have can still be typed.
+
 ### Settings
 
 One panel, the same one from every section (`ctrl + ,`), and everything is

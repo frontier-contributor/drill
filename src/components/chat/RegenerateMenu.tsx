@@ -1,19 +1,25 @@
 /* ============================================================================
  * RegenerateMenu — a split button on every reply: the left half redoes the
- * answer with whatever model is already in force, the right half opens a
- * one-shot picker for trying a different one.
+ * answer with whatever model is already in force, the right half opens the
+ * model browser for trying a different one.
  *
  * The composer's ModelChip pins a choice to the whole thread going forward,
  * which is the wrong tool for "try that again with a bigger model" — you end
  * up pinning, regenerating, then remembering to unpin. This keeps that
  * comparison to a single click: the override applies to this one variant
  * only and never touches conversation.model.
+ *
+ * Its own picker was the last of the naive ones — forty raw ids and a search
+ * box. It opens the same browser everything else does now, where "which one
+ * is bigger" can actually be read off the card.
  * ========================================================================== */
-import { useEffect, useRef, useState } from "react";
-import * as AI from "@/services/ai";
+import { useEffect, useState } from "react";
 import { useToast } from "@/context/ToastContext";
 import type { BackendType } from "@/types";
 import Icon from "../ui/Icon";
+import ModelDialog from "../ui/ModelDialog";
+import { useModelList } from "../ui/useModelList";
+import * as AI from "@/services/ai";
 
 export default function RegenerateMenu({
   backend,
@@ -29,49 +35,19 @@ export default function RegenerateMenu({
 }) {
   const toast = useToast();
   const [open, setOpen] = useState(false);
-  const [models, setModels] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [query, setQuery] = useState("");
-  const boxRef = useRef<HTMLDivElement | null>(null);
+  const { models, loading, error } = useModelList(backend, open);
 
   useEffect(() => {
-    if (!open) return;
-    function onDown(e: MouseEvent) {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  /* Fetched lazily on first open, same reasoning as ModelChip: most replies
-     are never regenerated, so most turns should never make this call. */
-  useEffect(() => {
-    if (!open || models.length || loading) return;
-    setLoading(true);
-    AI.listModels(backend ? { backend } : undefined)
-      .then(setModels)
-      .catch((e: Error) => toast(e.message, 5000))
-      .finally(() => setLoading(false));
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (error) toast(error, 5000);
+  }, [error]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function pick(model: string) {
     setOpen(false);
-    setQuery("");
     onRegenerate({ backend, model });
   }
 
-  const q = query.trim().toLowerCase();
-  const shown = (q ? models.filter((m) => m.toLowerCase().includes(q)) : models).slice(0, 40);
-
   return (
-    <div className="regenmenu" ref={boxRef}>
+    <div className="regenmenu">
       <button
         className="tact regenmenu-main"
         onClick={() => onRegenerate()}
@@ -83,45 +59,27 @@ export default function RegenerateMenu({
       </button>
       <button
         className="tact regenmenu-caret"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen(true)}
         disabled={busy}
         title="Regenerate with a different model"
         aria-label="Regenerate with a different model"
+        aria-haspopup="dialog"
       >
         <Icon name="chevron" size={10} />
       </button>
 
       {open && (
-        <div className="modelpop">
-          <div className="modelpop-head">
-            <span>Regenerate with…</span>
-          </div>
-
-          <input
-            className="fi mono"
-            autoFocus
-            placeholder={loading ? "loading the list…" : "search, or type any model id"}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && query.trim()) pick(query.trim());
-            }}
-          />
-
-          <div className="modelpop-list">
-            {loading && <div className="modelpop-empty">fetching what your key can reach…</div>}
-            {!loading && shown.length === 0 && (
-              <div className="modelpop-empty">
-                {models.length ? "Nothing matches." : "No list available — type an id and press enter."}
-              </div>
-            )}
-            {shown.map((m) => (
-              <button key={m} className={"modelpop-row" + (m === currentModel ? " on" : "")} onClick={() => pick(m)}>
-                {m}
-              </button>
-            ))}
-          </div>
-        </div>
+        <ModelDialog
+          title="Regenerate with…"
+          extra={<span className="mdlg-note">this reply only — the thread keeps its model</span>}
+          kind="chat"
+          models={models}
+          loading={loading}
+          backend={(backend || AI.resolve({ backend }).type) as BackendType}
+          value={currentModel}
+          onChoose={pick}
+          onClose={() => setOpen(false)}
+        />
       )}
     </div>
   );
