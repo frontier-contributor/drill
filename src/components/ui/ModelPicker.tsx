@@ -19,6 +19,18 @@ import Icon from "./Icon";
 import type { BackendType } from "@/types";
 import type { ModelKind } from "@/types/chat";
 
+/** A placeholder that names a model — a bare default id, or "Inherit (id)" —
+ *  says the model's name instead of its id, like everything else that shows
+ *  one now. Anything else is left as written. */
+function humanize(text: string): string {
+  const own = catalogueEntry(text)?.title;
+  if (own) return `${own} · default`;
+  return text.replace(/\(([^)]+)\)/, (whole, id: string) => {
+    const t = catalogueEntry(id.trim())?.title;
+    return t ? `(${t})` : whole;
+  });
+}
+
 export default function ModelPicker({
   title = "Model",
   sub,
@@ -67,7 +79,7 @@ export default function ModelPicker({
     <SettingRow title={title} sub={sub} origin={origin}>
       <button type="button" className="fi mdlpick-btn" onClick={() => setOpen(true)} aria-haspopup="dialog">
         <span className={"mdlpick-val" + (value ? "" : " placeholder")}>
-          {value ? e?.title || value : placeholder || "choose a model…"}
+          {value ? e?.title || value : placeholder ? humanize(placeholder) : "choose a model…"}
         </span>
         {value && e?.vendor && <span className="mdlpick-vendor">{e.vendor}</span>}
         <Icon name="chevron" size={11} className="mdlpick-chev" />
