@@ -88,6 +88,38 @@ function base(over: Partial<Parameters<typeof runAgent>[0]> = {}) {
   };
 }
 
+function marked(name: string, flags: Partial<Tool> = {}): Tool {
+  return {
+    name,
+    description: name,
+    scope: "global",
+    kind: "read",
+    schema: {
+      properties: {
+        query: { type: "string", description: "q" },
+        goal: { type: "string", description: "g" },
+        steps: { type: "string", description: "s" },
+        id: { type: "string", description: "i" },
+        note: { type: "string", description: "n" },
+        text: { type: "string", description: "t" },
+        status: { type: "string", description: "st" },
+        limit: { type: "number", description: "l" }
+      },
+      required: []
+    },
+    run: () => ({ ok: true, text: "" }),
+    ...flags
+  };
+}
+
+/** Plan tools the Deep tests actually call. The loop refuses any name that
+ *  was not offered, so a plan the prompt mentions and the catalogue omits
+ *  never runs — which is the point of the gate, and why these tests pass
+ *  the tools in. */
+function withPlan(tools: Tool[] = TOOLS): Tool[] {
+  return [...tools, marked("plan", { opensPlan: true }), marked("plan_step", { closesPlan: true }), marked("note", { keepsNote: true })];
+}
+
 /* --------------------------------------------------------------- stopping */
 
 test("a reply with no tool calls is the answer, and costs one request", async () => {
@@ -134,11 +166,13 @@ test("tool results are fed back and the second reply is the answer", async () =>
 
 test("the step ceiling is enforced and the last round asks for prose only", async () => {
   /* A model that would loop forever. maxSteps 2 means: two tool rounds, then
-     a third request with no tools at all. */
+     a third request with no tools at all. The queries differ on purpose: an
+     identical read is refused by the harness, and this test is about the
+     ceiling, not about that refusal. */
   const model = scripted([
-    { text: "step one", calls: [{ name: "memory_search" }] },
-    { text: "step two", calls: [{ name: "memory_search" }] },
-    { text: "step three", calls: [{ name: "memory_search" }] },
+    { text: "step one", calls: [{ name: "memory_search", args: { query: "one" } }] },
+    { text: "step two", calls: [{ name: "memory_search", args: { query: "two" } }] },
+    { text: "step three", calls: [{ name: "memory_search", args: { query: "three" } }] },
     "forced answer"
   ]);
   const tools = runner();
@@ -410,7 +444,7 @@ test("the plan reaches the trace, with each step's status and note", async () =>
     "Here is what is wrong."
   ]);
   const tools = planRunner();
-  const r = await runAgent(base({ chat: model.chat, runTool: tools.fn, planning: true, maxSteps: 8 }));
+  const r = await runAgent(base({ chat: model.chat, runTool: tools.fn, planning: true, tools: withPlan(), maxSteps: 8 }));
 
   assert.equal(r.answer, "Here is what is wrong.");
   assert.equal(r.trace.plan?.goal, "Find the weak spot");
@@ -430,7 +464,7 @@ test("answering with plan steps open is handed back once, not accepted", async (
     "Now the real answer."
   ]);
   const tools = planRunner();
-  const r = await runAgent(base({ chat: model.chat, runTool: tools.fn, planning: true, maxSteps: 8 }));
+  const r = await runAgent(base({ chat: model.chat, runTool: tools.fn, planning: true, tools: withPlan(), maxSteps: 8 }));
 
   assert.equal(r.answer, "Now the real answer.", "the premature answer was rejected");
   assert.deepEqual(r.trace.plan?.items.map((i) => i.status), ["done", "done"]);
@@ -453,7 +487,7 @@ test("the nudge fires at most once, and what stays open is recorded", async () =
     "Still ignoring the plan."
   ]);
   const tools = planRunner();
-  const r = await runAgent(base({ chat: model.chat, runTool: tools.fn, planning: true, maxSteps: 8 }));
+  const r = await runAgent(base({ chat: model.chat, runTool: tools.fn, planning: true, tools: withPlan(), maxSteps: 8 }));
 
   assert.equal(r.answer, "Still ignoring the plan.", "the second answer is accepted");
   assert.deepEqual(r.trace.unfinished, ["step one", "step two"], "and the omission is on the record");
@@ -474,7 +508,7 @@ test("a dropped step counts as closed — deciding it does not matter is a real 
     "answer"
   ]);
   const tools = planRunner();
-  const r = await runAgent(base({ chat: model.chat, runTool: tools.fn, planning: true, maxSteps: 8 }));
+  const r = await runAgent(base({ chat: model.chat, runTool: tools.fn, planning: true, tools: withPlan(), maxSteps: 8 }));
 
   assert.equal(r.answer, "answer", "not nudged — every step is closed");
   assert.equal(r.trace.unfinished, undefined);
@@ -487,7 +521,7 @@ test("notes are collected onto the trace", async () => {
     "answer"
   ]);
   const tools = planRunner();
-  const r = await runAgent(base({ chat: model.chat, runTool: tools.fn, planning: true }));
+  const r = await runAgent(base({ chat: model.chat, runTool: tools.fn, planning: true, tools: withPlan() }));
   assert.deepEqual(r.trace.notes, ["They confuse softmax with sigmoid."]);
 });
 
@@ -499,7 +533,7 @@ test("plan and note events reach the UI as they happen", async () => {
   ]);
   const tools = planRunner();
   const seen: string[] = [];
-  await runAgent(base({ chat: model.chat, runTool: tools.fn, planning: true, maxSteps: 8, onEvent: (e) => seen.push(e.kind) }));
+  await runAgent(base({ chat: model.chat, runTool: tools.fn, planning: true, tools: withPlan(), maxSteps: 8, onEvent: (e) => seen.push(e.kind) }));
   assert.ok(seen.includes("plan"), "the plan panel can render as it is written");
   assert.ok(seen.includes("note"));
 });
@@ -513,7 +547,7 @@ test("without planning there is no plan, no nudge, and no plan tools in the prom
   assert.doesNotMatch(model.sent[0][0].content, /WORKING TO A PLAN/);
 
   const deep = scripted(["straight answer"]);
-  await runAgent(base({ chat: deep.chat, protocol: "text", planning: true }));
+  await runAgent(base({ chat: deep.chat, protocol: "text", planning: true, tools: withPlan() }));
   assert.match(deep.sent[0][0].content, /WORKING TO A PLAN/);
 });
 
@@ -561,4 +595,143 @@ test("a catalogue where nothing takes arguments still produces a valid example",
   const rules = textProtocolRules(noArgs);
   assert.match(rules, /"name":"overview","args":\{\}/);
   assert.doesNotMatch(rules, /undefined/);
+});
+
+/* --------------------------------------------------------------- harness */
+
+test("an identical read is not executed twice, whatever order the arguments arrive in", async () => {
+  const model = scripted([
+    { text: "looking", calls: [{ name: "memory_search", args: { query: "adam", limit: 2 } }] },
+    { text: "looking again", calls: [{ name: "memory_search", args: { limit: 2, query: "adam" } }] },
+    "They settled on Adam."
+  ]);
+  const tools = runner(() => ({ ok: true, text: "they chose Adam" }));
+  const r = await runAgent(base({ chat: model.chat, runTool: tools.fn }));
+
+  assert.deepEqual(tools.seen, ["memory_search"], "the second call was not a second lookup");
+  assert.equal(r.answer, "They settled on Adam.");
+  const told = model.sent[2].filter((m) => m.role === "tool").map((m) => m.content).join("\n");
+  assert.match(told, /Already ran/);
+  assert.ok(model.sent[2].some((m) => m.content.includes("NO NEW INFORMATION")), "the round was handed back once");
+});
+
+test("identical reads asked together run once", async () => {
+  const model = scripted([
+    {
+      text: "both",
+      calls: [
+        { name: "memory_search", args: { query: "a" } },
+        { name: "memory_search", args: { query: "a" } }
+      ]
+    },
+    "answer"
+  ]);
+  const tools = runner(() => ({ ok: true, text: "once" }));
+  const r = await runAgent(base({ chat: model.chat, runTool: tools.fn }));
+
+  assert.deepEqual(tools.seen, ["memory_search"]);
+  assert.equal(r.trace.steps[0].runs.length, 2, "both calls are still on the trace");
+  assert.match(r.trace.steps[0].runs[0].result.text, /once/);
+  assert.match(r.trace.steps[0].runs[1].result.text, /once/);
+});
+
+test("a second round that learns nothing ends the loop", async () => {
+  const same = { name: "memory_search", args: { query: "adam" } };
+  const model = scripted([
+    { text: "one", calls: [same] },
+    { text: "two", calls: [same] },
+    { text: "three", calls: [same] },
+    "four would have been a call"
+  ]);
+  const tools = runner();
+  const r = await runAgent(base({ chat: model.chat, runTool: tools.fn, maxSteps: 8 }));
+
+  assert.deepEqual(tools.seen, ["memory_search"]);
+  /* Round one runs, round two is handed back, round three sets the stop, and
+     the fourth request is prose only — its text is the answer, calls or not. */
+  assert.equal(r.answer, "four would have been a call");
+  assert.equal(model.calls(), 4);
+  assert.equal(model.opts[3].tools, undefined, "the stalled loop is not offered tools again");
+  /* The warning is one message carried forward, so later requests still contain
+     it. A second push would put two of them on the final request. */
+  const last = model.sent[model.sent.length - 1];
+  assert.equal(last.filter((m) => m.content.includes("NO NEW INFORMATION")).length, 1, "warned once, then stopped");
+});
+
+test("a tool this conversation was not offered is not executed", async () => {
+  const model = scripted([{ text: "deleting", calls: [{ name: "memory_write" }] }, "I cannot do that."]);
+  const tools = runner();
+  const reads = TOOLS.filter((t) => t.kind === "read");
+  const r = await runAgent(base({ chat: model.chat, runTool: tools.fn, tools: reads, allowWrites: false }));
+
+  assert.deepEqual(tools.seen, [], "the write never ran");
+  assert.equal(r.answer, "I cannot do that.");
+  const toolMsg = model.sent[1].find((m) => m.role === "tool");
+  assert.ok(toolMsg);
+  assert.match(toolMsg!.content, /memory_write/);
+  assert.match(toolMsg!.content, /memory_search/, "the refusal names what is actually available");
+  assert.doesNotMatch(toolMsg!.content, /plan/, "and does not advertise a tool this conversation cannot call");
+});
+
+test("deep mode answering with no plan is handed back once", async () => {
+  const model = scripted([
+    "Here is the answer, no plan.",
+    { text: "planning", calls: [{ name: "plan", args: { goal: "g", steps: "look" } }] },
+    { text: "done", calls: [{ name: "plan_step", args: { id: "1", note: "found it" } }] },
+    "Now the real answer."
+  ]);
+  const tools = planRunner();
+  const r = await runAgent(base({ chat: model.chat, runTool: tools.fn, planning: true, tools: withPlan(), maxSteps: 8 }));
+
+  assert.equal(r.answer, "Now the real answer.");
+  const final = model.sent[model.sent.length - 1];
+  assert.equal(final.filter((m) => m.content.includes("PLAN REQUIRED")).length, 1, "asked for a plan once");
+});
+
+test("deep mode's prompt names the tools it was given and no others", async () => {
+  const model = scripted(["x"]);
+  const tools: Tool[] = [
+    marked("outline", { opensPlan: true }),
+    marked("close_step", { closesPlan: true }),
+    marked("jot", { keepsNote: true }),
+    marked("standing", { reportsStanding: true }),
+    marked("web_lookup", { searchesWeb: true })
+  ];
+  await runAgent(base({ chat: model.chat, protocol: "text", planning: true, tools }));
+  const sys = model.sent[0][0].content;
+  assert.match(sys, /WORKING TO A PLAN/);
+  assert.match(sys, /`outline`/);
+  assert.match(sys, /`close_step`/);
+  assert.match(sys, /`jot`/);
+  assert.match(sys, /`standing`/);
+  assert.match(sys, /`web_lookup`/);
+  assert.doesNotMatch(sys, /`plan_step`/);
+  assert.doesNotMatch(sys, /call `plan`/);
+});
+
+test("the prompt does not name a standing or web tool it was not given", async () => {
+  const model = scripted(["hi"]);
+  await runAgent(base({ chat: model.chat, protocol: "text" }));
+  const sys = model.sent[0][0].content;
+  assert.doesNotMatch(sys, /recurring confusions/);
+  assert.doesNotMatch(sys, /web_lookup/);
+});
+
+test("older tool results are shortened once the window fills, and the latest stays whole", async () => {
+  const big = "y".repeat(5000);
+  const model = scripted([
+    { text: "first", calls: [{ name: "memory_search", args: { query: "a" } }] },
+    { text: "second", calls: [{ name: "memory_search", args: { query: "b" } }] },
+    "answer"
+  ]);
+  let n = 0;
+  const tools = runner(() => ({ ok: true, text: big + n++ }));
+  const r = await runAgent(base({ chat: model.chat, runTool: tools.fn, maxSteps: 6 }));
+
+  assert.equal(r.answer, "answer");
+  const toolMsgs = model.sent[2].filter((m) => m.role === "tool");
+  assert.equal(toolMsgs.length, 2);
+  assert.match(toolMsgs[0].content, /earlier result shortened/);
+  assert.ok(toolMsgs[0].content.length < 1000, "the older result was cut");
+  assert.ok(toolMsgs[1].content.length > 5000, "the latest result is kept whole");
 });

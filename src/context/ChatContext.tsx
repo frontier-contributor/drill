@@ -722,9 +722,17 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                Deep's ceiling, and a plain answer uses none of it. */
             maxSteps: mode === "agent" ? budget.agentSteps : deepSteps(budget.agentSteps),
             planning: mode === "voice" ? "auto" : mode === "deep",
-            /* Asked of the same call the send path filters Web on, so voice
-               never offers a search the backend would refuse. */
-            web: mode === "voice" && availability("web", resolved.backend.supports, resolved.model).can,
+            /* Same verdict the send path uses for the Web switch, so the loop
+               never offers a search the backend would refuse. Voice always
+               may; Agent and Deep may when the switch is on. */
+            web:
+              (mode === "voice" || (c.actions || []).includes("web")) &&
+              availability("web", resolved.backend.supports, resolved.model).can,
+            /* Think reaches every round. Web does not ride along as a plugin —
+               runAgentTurn turns it into the lookup tool, which is the only
+               way a round that is reading the learner's own record does not
+               also pay for a search. */
+            actions: c.actions,
             onCitations: (cs) => {
               citations = cs;
             },

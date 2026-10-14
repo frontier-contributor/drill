@@ -72,6 +72,17 @@ export interface Tool {
    *  prompt that invites a plan names it from the catalogue and a rename
    *  cannot leave the prompt pointing at a tool that no longer exists. */
   opensPlan?: boolean;
+  /** Closes one step of that plan. Same reason as `opensPlan`: the close-out
+   *  nudge has to name a tool that exists. */
+  closesPlan?: boolean;
+  /** The scratchpad. Named from the catalogue wherever the prompt mentions it. */
+  keepsNote?: boolean;
+  /** The computed picture of how the learner is doing. Keyword search cannot
+   *  see it, so the prompt has to say so — and only when this tool was offered. */
+  reportsStanding?: boolean;
+  /** Live web search. Offered only where the backend can search, so the prompt
+   *  must not mention it on a thread that has no such tool. */
+  searchesWeb?: boolean;
   run(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> | ToolResult;
 }
 

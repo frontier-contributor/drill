@@ -41,6 +41,12 @@
  *   services/candidates and the project's own autonomy policy, the same gate
  *   distill passes through. Under `manual` the tray fills and nothing lands;
  *   under `auto` it lands. The tool does not decide.
+ *
+ * `standing` is the one tool that is not a search. Recurring confusions, the
+ * cards being failed and recent exams are computed from the log (§2.6) — they
+ * are not written down anywhere `recall` can find them. Folding that picture
+ * into keyword search would hide a different question inside a box that
+ * answers "what text mentions these words".
  * ========================================================================== */
 import * as store from "@/services/store";
 import * as memoryStore from "@/services/memoryStore";
@@ -50,7 +56,10 @@ import * as U from "@/lib/util";
 import { extractKeywords, retrieve } from "@/lib/memoryRetrieval";
 import { classify } from "@/lib/memoryDedup";
 import { poolFor } from "@/lib/memoryBrief";
+import { gapsFrom, renderGaps } from "@/lib/gaps";
+import { examMisses } from "@/lib/examScope";
 import { normMemType } from "@/services/ai";
+import * as examStore from "@/services/examStore";
 import { MEMORY_TYPES_ENUM, type PlanItem, type Tool, type ToolContext, type ToolResult } from "@/types/agent";
 import type { Card, Deck, Memory, MemoryScope, SRSState } from "@/types";
 
@@ -203,6 +212,72 @@ const overview: Tool = {
         `Insight log: ${store.notesOf(ctx.projectId).length} notes.`
       ].join("\n")
     );
+  }
+};
+
+/* =============================================================== STANDING */
+
+const standing: Tool = {
+  name: "standing",
+  reportsStanding: true,
+  description:
+    "How this learner is actually doing, computed from the review log and from exams — recurring confusions, " +
+    "the cards they are failing, and recent exam results. Recall cannot see this: it is derived, not written " +
+    "down, and it changes as they review. Call it before diagnosing a weakness or deciding what they should " +
+    "work on next. It takes no arguments.",
+  scope: "project",
+  kind: "read",
+  schema: { properties: {}, required: [] },
+  maxChars: 3200,
+  run(_args, ctx) {
+    if (!store.projects()[ctx.projectId]) return miss("That project no longer exists.");
+    const decks = store.decksOf(ctx.projectId);
+    const gaps = gapsFrom([...store.logOf(decks), ...examMisses(ctx.projectId)], { limit: 6 });
+    const failing = decks.flatMap((d) =>
+      store
+        .weakCardsOf(d, 40)
+        .filter((c) => {
+          const st = d.srs[c.id];
+          return !!st && (store.isLeech(st) || st.lapses > 0);
+        })
+        .slice(0, 4)
+        .map((c) => cardLine(c, d.srs[c.id], decks.length > 1 ? d.name : undefined))
+    );
+    const exams = examStore.isLoaded() ? examStore.listForProject(ctx.projectId).slice(0, 4) : [];
+    const parts: string[] = [];
+    if (!examStore.isLoaded()) {
+      parts.push("Exams have not finished loading. An empty exam list right now is not 'they have never sat one'.");
+    }
+    parts.push(
+      gaps.length
+        ? "Recurring confusions (computed from the log, most frequent first):\n" + renderGaps(gaps)
+        : "No recurring confusion in the recent log. Do not invent one."
+    );
+    parts.push(
+      failing.length
+        ? "Cards they are failing:\n" + failing.slice(0, 8).join("\n")
+        : "No card is currently being failed. Do not describe one as if it were."
+    );
+    if (exams.length) {
+      parts.push(
+        "Recent exams:\n" +
+          exams
+            .map((e) => {
+              const graded = e.questions.filter((q) => q.result);
+              const got = graded.filter((q) => q.result!.verdict === "got").length;
+              const missed = graded
+                .filter((q) => q.result!.verdict !== "got")
+                .slice(0, 3)
+                .map((q) => q.result!.missing[0] || q.prompt.slice(0, 80));
+              const head = graded.length ? `${got}/${graded.length} got` : "not sat";
+              return `- ${e.title} (${U.ago(e.created)}): ${head}${missed.length ? `. Missed: ${missed.join("; ")}` : ""}`;
+            })
+            .join("\n")
+      );
+    } else if (examStore.isLoaded()) {
+      parts.push("No exams in this project.");
+    }
+    return ok(parts.join("\n\n"));
   }
 };
 
@@ -706,6 +781,7 @@ const plan_set: Tool = {
 
 const plan_step: Tool = {
   name: "plan_step",
+  closesPlan: true,
   description:
     "Close out one step of your plan and say what it found, in one line. Mark it \"dropped\" (with why) if it " +
     "turned out not to matter — that is a legitimate outcome and better than pretending to do it. You must " +
@@ -746,6 +822,7 @@ const plan_step: Tool = {
 
 const note: Tool = {
   name: "note",
+  keepsNote: true,
   description:
     "Jot down something you have worked out, so it survives even if the details behind it scroll away. Use it " +
     "for a conclusion, not a copy of a tool result. The learner sees these.",
@@ -766,12 +843,14 @@ const note: Tool = {
 
 /* =================================================================== WEB */
 
-/* Voice mode's way onto the web. In text chat the Web switch sends every
-   message through OpenRouter's search; in voice there is no switch to throw,
-   so searching is a decision the model makes per question — and a question
-   that needs no search never pays for one. */
+/* Voice mode's way onto the web, and — when the Web switch is on — Agent and
+   Deep's too. A plugin on every round would search while the model was reading
+   the learner's own cards. A tool searches only when the question needs it.
+   In voice there is no switch to throw, so the tool is always offered where
+   the backend can search. */
 const web_lookup: Tool = {
   name: "web_lookup",
+  searchesWeb: true,
   description:
     "Search the live web and get back a short answer with its sources. For anything current or outside this " +
     "learner's record — news, prices, releases, documentation, facts you are unsure of. Never for questions about " +
@@ -801,17 +880,17 @@ const web_lookup: Tool = {
 
 /** Tools every mode gets. Ordered as a model reads them: orient, look, read
  *  closely, then act. */
-const CORE: Tool[] = [overview, recall, open, reviews, remember, forget, draft_card, journal_add];
+const CORE: Tool[] = [overview, standing, recall, open, reviews, remember, forget, draft_card, journal_add];
 
 /** Deep mode only. In the reactive mode they would be pure overhead — a
  *  two-lookup question does not need a plan, and forcing one would make the
  *  cheap mode cost three requests to answer what one could. */
 const DEEP_ONLY: Tool[] = [plan_set, plan_step, note];
 
-/** Voice mode only, and only where the backend can search. */
-const VOICE_ONLY: Tool[] = [web_lookup];
+/** Offered wherever this run may search. Voice always may; Agent and Deep may when the Web switch is on. */
+const WEB_ONLY: Tool[] = [web_lookup];
 
-export const TOOLS: Tool[] = [...CORE, ...DEEP_ONLY, ...VOICE_ONLY];
+export const TOOLS: Tool[] = [...CORE, ...DEEP_ONLY, ...WEB_ONLY];
 
 /**
  * Each tool as a person would say it: `done` for the trace under a reply,
@@ -822,6 +901,7 @@ export const TOOLS: Tool[] = [...CORE, ...DEEP_ONLY, ...VOICE_ONLY];
  */
 export const TOOL_WORDS: Record<string, { doing: string; done: string }> = {
   [overview.name]: { doing: "Checking where this project stands", done: "Checked where this project stands" },
+  [standing.name]: { doing: "Checking how you are doing", done: "Checked how you are doing" },
   [recall.name]: { doing: "Searching your record", done: "Searched your record" },
   [open.name]: { doing: "Reading that in full", done: "Read one in full" },
   [reviews.name]: { doing: "Checking your reviews", done: "Read how your reviews went" },
@@ -846,7 +926,9 @@ export interface ToolsForOpts {
   /** Deep mode gets the plan tools; so does voice ("auto"), which may plan
    *  when a request needs it and is not made to when it does not. */
   planning: boolean | "auto";
-  /** Voice mode, on a backend that can search: the web is a tool. */
+  /** This run may search. Voice always may, where the backend can; Agent and
+   *  Deep may when the Web switch is on. The catalogue is filtered rather than
+   *  the model being asked not to search. */
   web?: boolean;
 }
 
@@ -855,7 +937,7 @@ export function toolsFor(opts: ToolsForOpts): Tool[] {
     if (!opts.inProject && t.scope === "project") return false;
     if (!opts.allowWrites && t.kind === "write") return false;
     if (!opts.planning && DEEP_ONLY.includes(t)) return false;
-    if (!opts.web && VOICE_ONLY.includes(t)) return false;
+    if (!opts.web && WEB_ONLY.includes(t)) return false;
     return true;
   });
 }

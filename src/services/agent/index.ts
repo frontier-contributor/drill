@@ -13,6 +13,7 @@ import { protocolFor } from "./protocol";
 import { runTool, toolsFor } from "./tools";
 import type { AgentEvent } from "@/types/agent";
 import type { BackendType, ChatMessage, Citation } from "@/types";
+import type { ChatActionId } from "@/lib/chatActions";
 
 export { runAgent } from "./loop";
 export { TOOLS, toolsFor, runTool } from "./tools";
@@ -46,6 +47,11 @@ export interface AgentTurnOpts {
   web?: boolean;
   /** Sources a web lookup drew on, for the turn's receipt. */
   onCitations?: (cs: Citation[]) => void;
+  /** The thread's switches. Think is applied to every round — a reasoning
+   *  model that only thinks on the final answer has already spent the lookups
+   *  without it. Web is not applied here: in the loop it is a tool, so a
+   *  round that is reading the learner's cards does not also pay for a search. */
+  actions?: ChatActionId[];
   temperature?: number;
   maxTokens?: number;
   signal?: AbortSignal;
@@ -116,7 +122,19 @@ export function runAgentTurn(opts: AgentTurnOpts): Promise<AgentResult> {
        on the run transcript and the usage ledger the same way a single call
        does. A loop whose steps 2..n were invisible to the meter would
        under-report its own cost by most of it. */
-    chat: (messages, chatOpts) => AI.chat(messages, chatOpts, opts.override),
+    chat: (messages, chatOpts) =>
+      AI.chat(
+        messages,
+        {
+          ...chatOpts,
+          /* Think only. Web stays a tool (see AgentTurnOpts.actions) — folding
+             the plugin into every round would search the web while the model
+             was reading a card, and a tools-plus-plugin request is a second
+             search the model did not ask for. */
+          actions: (opts.actions || []).filter((a) => a === "think")
+        },
+        opts.override
+      ),
     runTool,
     temperature: opts.temperature,
     maxTokens: opts.maxTokens,

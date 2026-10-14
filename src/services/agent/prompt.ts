@@ -36,18 +36,29 @@ const AGENT_RULES =
   "- Before diagnosing a misunderstanding: read what they actually wrote when tested. The grade says they got it " +
   "wrong; their sentence says how they were thinking, and that is the thing worth responding to.\n" +
   "- A general knowledge question with no personal angle needs no tools at all. Just answer it.\n\n" +
+  "HOW TO SPEND A ROUND:\n" +
+  "- Independent lookups go in one round, together. Waiting on one result when the next two do not depend on it " +
+  "is a round wasted, and every round is a whole request.\n" +
+  "- Open a record only when its one-line summary cannot answer. Detail you did not need is room you cannot spend " +
+  "on the answer.\n" +
+  "- An identical read is not run twice. If you are told you already made that call, the earlier result still " +
+  "stands — change the question or write the answer.\n" +
+  "- A tool that is not in your list does not exist. Do not invent one, and do not retry a name you were refused.\n\n" +
   "WHEN TO STOP:\n" +
   "- Stop as soon as you can answer. You are not being scored on how many tools you used.\n" +
   "- Two or three lookups is a normal investigation. If you are on your fourth, you are almost certainly " +
   "circling — write the answer you have and say what you could not find.\n" +
-  "- Never call the same tool twice with near-identical arguments. If a search came back empty, it is empty; " +
-  "widen it once or move on.\n" +
+  "- If a search came back empty, it is empty; widen it once or move on. Searching again with the same words " +
+  "will be refused, and the refusal costs the round.\n" +
   "- Nothing found is a real answer. Say so plainly rather than searching again in the hope it changes.\n\n" +
   "BEING HONEST ABOUT WHAT YOU DID:\n" +
   "- A tool result is the only thing you know. If you did not call it, you did not look — never describe a card, " +
   "a memory or a journal entry you have not seen.\n" +
+  "- The answer says what you found and what you could not find. Where a conclusion rests on one record, name " +
+  "that record. An explanation with no gap in it is usually one that did not look.\n" +
   "- Writing tools may only PROPOSE. When a result says something was queued for review, tell the learner it is " +
-  'waiting for them — never "I have saved that". When it says saved, you may say saved.\n' +
+  'waiting for them — never "I have saved that". When it says saved, you may say saved. Quote the result, do not ' +
+  "upgrade it.\n" +
   "- Do not narrate your tool use as it happens; the learner can see it. Write the answer, not a report of your " +
   "own process.\n" +
   "- Do not recite their context back at them or mention that you were given it, unless they ask what you can see.";
@@ -72,20 +83,36 @@ const READ_ONLY_NOTE =
  * question is the most expensive failure available here — it wastes the whole
  * budget answering the wrong thing — and restating it puts the misreading in
  * line one where the learner can stop it.
+ *
+ * Names come from the catalogue. A literal tool name here is how the last
+ * prompt survived a rename and taught every model to call a tool that no
+ * longer existed — see textProtocolRules for the same bug.
  */
-const PLANNING_RULES =
-  "=== WORKING TO A PLAN ===\n" +
-  "Before anything else, call `plan`. Restate the question as you understood it, then list the specific things " +
-  "you need to find out, one per line, in the order you will do them.\n\n" +
-  "- Three to six steps. More than six means you are over-thinking a question you could just answer.\n" +
-  "- Each step names something concrete you will find out — not \"research the topic\".\n" +
-  "- Then work them in order, closing each with `plan_step` and one line on what it found.\n" +
-  '- A step that turns out not to matter gets closed as "dropped" with the reason. That is a real outcome and ' +
-  "far better than quietly skipping it.\n" +
-  "- Use `note` when you work something out, so the conclusion survives even if the detail behind it scrolls away.\n" +
-  "- You may NOT write your final answer while any step is still open. You will be handed the list back if you try.\n" +
-  "- If what you find makes the plan wrong, close the dead steps as dropped and say so in your answer. Changing " +
-  "your mind out loud is good; pretending the plan was always this one is not.";
+function planningRules(plan: string, step: string, jot?: string): string {
+  return (
+    "=== WORKING TO A PLAN ===\n" +
+    "Before anything else, call `" +
+    plan +
+    "`. Restate the question as you understood it, then list the specific things " +
+    "you need to find out, one per line, in the order you will do them.\n\n" +
+    "- Three to six steps. More than six means you are over-thinking a question you could just answer.\n" +
+    "- Each step names something concrete you will find out — not \"research the topic\".\n" +
+    "- Then work them in order, closing each with `" +
+    step +
+    "` and one line on what it found.\n" +
+    '- A step that turns out not to matter gets closed as "dropped" with the reason. That is a real outcome and ' +
+    "far better than quietly skipping it.\n" +
+    (jot
+      ? "- Use `" +
+        jot +
+        "` when you work something out, so the conclusion survives even if the detail behind it scrolls away.\n"
+      : "") +
+    "- You may NOT write your final answer while any step is still open. You will be handed the list back if you try. " +
+    "Answering without a plan at all is handed back too.\n" +
+    "- If what you find makes the plan wrong, close the dead steps as dropped and say so in your answer. Changing " +
+    "your mind out loud is good; pretending the plan was always this one is not."
+  );
+}
 
 /**
  * Voice mode's version of planning: allowed, never required.
@@ -127,8 +154,37 @@ export interface AgentPromptOpts {
 
 export function buildAgentSystem(opts: AgentPromptOpts): string {
   const parts = [opts.base.trim(), AGENT_RULES];
-  if (opts.planning === true) parts.push(PLANNING_RULES);
-  else if (opts.planning === "auto") {
+  /* Each of these is appended only when that tool was actually offered.
+     A scratch thread has no project, and a thread with the web switched off
+     has no search — naming either tool there is the worked-example bug, a
+     prompt teaching a call that will be refused. */
+  const standing = opts.tools.find((t) => t.reportsStanding)?.name;
+  if (standing) {
+    parts.push(
+      "How they are doing — recurring confusions, the cards they are failing, recent exams — is computed from " +
+        "the review log, not written down. Call `" +
+        standing +
+        "` before diagnosing a weakness or deciding what they should work on next. Searching memory for it will not find it."
+    );
+  }
+  const web = opts.tools.find((t) => t.searchesWeb)?.name;
+  if (web) {
+    parts.push(
+      "Anything current or outside this learner's record — a release, a price, a paper, documentation you are " +
+        "unsure of — is looked up with `" +
+        web +
+        "`, one focused question per call, and the answer names the sources it returned. Never for questions about " +
+        "the learner themselves."
+    );
+  }
+  if (opts.planning === true) {
+    const plan = opts.tools.find((t) => t.opensPlan)?.name;
+    const step = opts.tools.find((t) => t.closesPlan)?.name;
+    const jot = opts.tools.find((t) => t.keepsNote)?.name;
+    /* No names, no section. Inventing `plan` when this conversation was not
+       given that tool is how a local model gets shown a call that cannot work. */
+    if (plan && step) parts.push(planningRules(plan, step, jot));
+  } else if (opts.planning === "auto") {
     const plan = opts.tools.find((t) => t.opensPlan)?.name;
     if (plan) parts.push(autoPlanRules(plan));
   }
