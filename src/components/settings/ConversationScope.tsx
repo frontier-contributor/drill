@@ -13,7 +13,7 @@ import { formatCost, formatTokens } from "@/lib/tokens";
 import { describeSource, retrieveForSource } from "@/lib/chatContext";
 import { originLabel, resolveBackend, resolveEffort, resolveModel } from "@/lib/resolveSetting";
 import type { RetrievalTrace, ScoreComponents } from "@/lib/memoryRetrieval";
-import { useMaybeChat } from "@/context/ChatContext";
+import { useMaybeChat } from "@/context/chatCtx";
 import Section from "./Section";
 import SelectRow from "../ui/SelectRow";
 import ModelPicker from "../ui/ModelPicker";

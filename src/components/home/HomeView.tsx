@@ -414,7 +414,7 @@ export default function HomeView() {
           </Section>
 
           <div className="home-footer">
-            <a href="https://github.com/frontier-contributor/drill" target="_blank" rel="noopener noreferrer" className="home-github-link" title="View on GitHub">
+            <a href="https://github.com/AayushtheCoder01/drill" target="_blank" rel="noopener noreferrer" className="home-github-link" title="View on GitHub">
               <Icon name="github" size={18} />
               GitHub
             </a>

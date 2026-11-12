@@ -27,6 +27,7 @@ const SHORTCUTS: ShortcutGroup[] = [
   {
     title: "Anywhere",
     items: [
+      { keys: [MOD, "K"], desc: "Command palette — go anywhere, switch project, open a settings page" },
       { keys: [MOD, "B"], desc: "Show or hide the navigation" },
       { keys: [MOD, "\\"], desc: "Show or hide the right-hand panel" },
       { keys: [MOD, ","], desc: "Settings — the same panel from every section" },
@@ -51,7 +52,6 @@ const SHORTCUTS: ShortcutGroup[] = [
   {
     title: "Chat",
     items: [
-      { keys: [MOD, "K"], desc: "Command palette" },
       { keys: [MOD, "J"], desc: "New conversation" },
       { keys: ["Enter"], desc: "Send" },
       { keys: ["Shift", "Enter"], desc: "New line instead of sending" },

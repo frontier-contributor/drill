@@ -6,13 +6,19 @@
 <meta name="theme-color" content="#2b2723">
 <meta name="description" content="Drill — spaced repetition, a journal, generated exams and a tutor that knows what you keep forgetting.">
 <title>Drill</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- Serif to read, sans for the machinery, mono for what the computer said.
-     Source Serif 4 is loaded with its italic: the reading surfaces use real
-     italics for emphasis, and a synthesised oblique is the fastest way to
-     make a page stop looking typeset. -->
-<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400..600&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<!-- No font links: the three faces are served by the app itself (main.tsx),
+     so opening Drill makes no request to anyone but the backend you chose,
+     and the type is the same with no network at all. -->
+<style>
+/* The title page below is real markup, on screen before any script has run.
+   It stays hidden until the stylesheet that knows how to set it has loaded —
+   in the build that is before first paint, so nothing is lost; in dev, where
+   styles arrive with the scripts, it avoids a flash of unstyled text. */
+.boot-static { visibility: hidden; }
+</style>
 <script>
 /* Set the printing before first paint. Without this the page renders night,
    then flips to day one frame later for anyone who chose paper — the exact
@@ -33,7 +39,10 @@
 </script>
 </head>
 <body>
-<div id="root"></div>
+<!-- The same title page App.tsx renders while the store loads, written here so
+     it is painted as soon as the stylesheet lands rather than after the script
+     has been fetched, parsed and run. React replaces it on mount. -->
+<div id="root"><div class="app"><div class="app-scroll"><div class="boot boot-static"><div class="boot-mark">Drill</div><div class="working-stick" aria-hidden="true"><i></i><i style="animation-delay:.12s"></i><i style="animation-delay:.24s"></i><i style="animation-delay:.36s"></i><i style="animation-delay:.48s"></i><i style="animation-delay:.6s"></i></div></div></div></div></div>
 <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

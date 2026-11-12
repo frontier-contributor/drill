@@ -11,7 +11,8 @@
     "test": "tsx --test \"src/**/*.test.ts\"",
     "bench:memory": "tsx tools/bench-memory.ts",
     "seed:json": "tsx tools/seed-to-json.ts",
-    "deck:index": "tsx tools/build-deck-index.ts"
+    "deck:index": "tsx tools/build-deck-index.ts",
+    "icons": "tsx tools/make-icons.ts"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.1",
@@ -30,6 +31,9 @@
     "vega-lite": "^6.4.3"
   },
   "devDependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
+    "@fontsource-variable/source-serif-4": "^5.3.1",
     "@types/dompurify": "^3.0.5",
     "@types/node": "^26.4.0",
     "@types/react": "^18.3.12",

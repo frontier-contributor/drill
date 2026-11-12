@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState, type ComponentType, type LazyExoticComponent } from "react";
 import * as CFG from "@/lib/config";
 import * as store from "@/services/store";
 import * as chatStore from "@/services/chatStore";
@@ -16,9 +16,10 @@ import { ToastProvider } from "@/context/ToastContext";
 import { SheetProvider } from "@/context/SheetContext";
 import { SettingsProvider } from "@/context/SettingsContext";
 import { ReviewProvider } from "@/context/ReviewContext";
-import { RouteProvider, useRoute } from "@/context/RouteContext";
-import { ChatProvider } from "@/context/ChatContext";
+import { RouteProvider, useRoute, type View } from "@/context/RouteContext";
 import AppShell from "@/components/AppShell";
+import Shell from "@/components/Shell";
+import { SECTION_LOADERS, preloadSectionsWhenIdle } from "@/components/sections";
 import { BootRescue } from "@/components/Rescue";
 
 /** Renders nothing — just keeps :root's appearance custom properties in sync
@@ -36,94 +37,86 @@ function AppearanceSync() {
 /* Home, chat, journal and exam all pull in weight the review loop should not pay
    for on its first paint (KaTeX/highlight.js for chat; the journal/exam
    views are smaller but still no reason to ship on the daily path) — each is
-   its own chunk, lazy-loaded only when its view is actually opened. */
-const HomeView = lazy(() => import("@/components/home/HomeView"));
-const CardsView = lazy(() => import("@/components/cards/CardsView"));
-const ChatView = lazy(() => import("@/components/chat/ChatView"));
-const JournalView = lazy(() => import("@/components/journal/JournalView"));
-const ExamView = lazy(() => import("@/components/exam/ExamView"));
-const FiguresView = lazy(() => import("@/components/figures/FiguresView"));
+   its own chunk. The loaders live in components/sections.ts because the
+   sidebar and the idle preloader call the same ones: a section is usually
+   fetched before it is asked for, and React.lazy then finds it waiting. */
+const SECTIONS: Record<Exclude<View, "drill">, LazyExoticComponent<ComponentType>> = {
+  home: lazy(SECTION_LOADERS.home),
+  cards: lazy(SECTION_LOADERS.cards),
+  journal: lazy(SECTION_LOADERS.journal),
+  exam: lazy(SECTION_LOADERS.exam),
+  figures: lazy(SECTION_LOADERS.figures),
+  chat: lazy(SECTION_LOADERS.chat)
+};
 
-/** Shown twice: while the store loads at cold start, and again for the half
- *  second a lazy view takes to arrive. Set as a title page rather than a
- *  spinner — it is the first thing the app ever shows, and a lone grey dot on
- *  black is a poor first sentence. */
+/** The row of marks that means "working". Six, staggered. */
+function WorkingStick() {
+  return (
+    <div className="working-stick" aria-hidden="true">
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <i key={i} style={{ animationDelay: i * 0.12 + "s" }} />
+      ))}
+    </div>
+  );
+}
+
+/** The title page, shown once: while the store loads at cold start. The same
+ *  markup is written into index.html, so it is on screen before this file has
+ *  been parsed and React takes it over without anything moving. Set as a
+ *  title page rather than a spinner — it is the first thing the app ever
+ *  shows, and a lone grey dot on black is a poor first sentence. */
 function LoadingShell() {
   return (
     <div className="app">
       <div className="app-scroll">
         <div className="boot">
           <div className="boot-mark">Drill</div>
-          <div className="working-stick" aria-hidden="true">
-            {[0, 1, 2, 3, 4, 5].map((i) => (
-              <i key={i} style={{ animationDelay: i * 0.12 + "s" }} />
-            ))}
-          </div>
+          <WorkingStick />
         </div>
       </div>
     </div>
   );
 }
 
+/** What a section shows while its chunk arrives: the real frame, with the
+ *  navigation already pointing at where you are going, and an empty page.
+ *
+ *  This used to be LoadingShell, which replaced the entire app — sidebar
+ *  included — with the title page, so the first visit to every section blinked
+ *  the navigation off the screen and back. The shell is in the entry chunk and
+ *  costs nothing to draw; only the page is missing, so only the page waits.
+ *  The marks fade in late (.page-loading), because a chunk that lands in a
+ *  fifth of a second should not flash a loader at all. */
+function SectionLoading({ view }: { view: View }) {
+  return (
+    <Shell current={view}>
+      <div className="app-scroll">
+        <div className="page page-loading" aria-busy="true">
+          <WorkingStick />
+        </div>
+      </div>
+    </Shell>
+  );
+}
+
 function Views() {
   const { view } = useRoute();
 
-  if (view === "home") {
+  if (view === "drill") {
     return (
-      <Suspense fallback={<LoadingShell />}>
-        <HomeView />
-      </Suspense>
+      <SheetProvider>
+        <ReviewProvider>
+          <AppShell />
+        </ReviewProvider>
+      </SheetProvider>
     );
   }
 
-  if (view === "cards") {
-    return (
-      <Suspense fallback={<LoadingShell />}>
-        <CardsView />
-      </Suspense>
-    );
-  }
-
-  if (view === "chat") {
-    return (
-      <ChatProvider>
-        <Suspense fallback={<LoadingShell />}>
-          <ChatView />
-        </Suspense>
-      </ChatProvider>
-    );
-  }
-
-  if (view === "journal") {
-    return (
-      <Suspense fallback={<LoadingShell />}>
-        <JournalView />
-      </Suspense>
-    );
-  }
-
-  if (view === "exam") {
-    return (
-      <Suspense fallback={<LoadingShell />}>
-        <ExamView />
-      </Suspense>
-    );
-  }
-
-  if (view === "figures") {
-    return (
-      <Suspense fallback={<LoadingShell />}>
-        <FiguresView />
-      </Suspense>
-    );
-  }
-
+  const Section = SECTIONS[view];
   return (
-    <SheetProvider>
-      <ReviewProvider>
-        <AppShell />
-      </ReviewProvider>
-    </SheetProvider>
+    <Suspense fallback={<SectionLoading view={view} />}>
+      <Section />
+    </Suspense>
   );
 }
 
@@ -186,6 +179,13 @@ export default function App() {
       window.removeEventListener("pagehide", flush);
     };
   }, []);
+
+  /* Once the app is up, fetch the other sections in the background so the
+     first click on any of them finds it already here. */
+  useEffect(() => {
+    if (status !== "ready") return;
+    return preloadSectionsWhenIdle();
+  }, [status]);
 
   if (status === "error" && error) {
     return <BootRescue error={error} unreadable={error instanceof store.UnreadableDatabaseError} />;

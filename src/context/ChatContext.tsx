@@ -7,9 +7,7 @@
  * IndexedDB would be pointless I/O. The finished text is committed once.
  * ========================================================================== */
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -38,6 +36,8 @@ import type { Effort } from "@/types/core";
 import { costOf } from "@/lib/tokens";
 import { resolveBackend, resolveEffort, resolveModel } from "@/lib/resolveSetting";
 import { useRoute } from "./RouteContext";
+import { ChatCtx as Ctx } from "./chatCtx";
+import { coalesce, streamInterval, type Coalescer } from "@/lib/coalesce";
 import type { Attachment, ChatMode, Conversation, ContextSource, GeneratedVideo, Turn, Usage, Variant, VideoJob, VideoSpec } from "@/types/chat";
 import { runAgentTurn } from "@/services/agent";
 import { TOOL_WORDS } from "@/services/agent/tools";
@@ -181,7 +181,7 @@ function carryInto(
   else if (r.as === "file") needs.push({ kind: "file", fileIds: [r.fileId], name: a.name, mime: r.mime });
 }
 
-interface ChatState {
+export interface ChatState {
   conversation: Conversation | null;
   loading: boolean;
   /** text arriving right now, or null when idle */
@@ -246,7 +246,10 @@ interface ChatState {
   setDraftVideo: Dispatch<SetStateAction<VideoSpec>>;
 }
 
-const Ctx = createContext<ChatState | null>(null);
+/* The context object and its hooks live in chatCtx.ts, so that reading the
+   context does not import this file. Re-exported so chat's own components,
+   which are in this chunk anyway, keep one import. */
+export { useChat, useMaybeChat } from "./chatCtx";
 
 /** A clip the model could not make — as opposed to one this tab lost touch
  *  with. The difference decides whether Retry asks again or waits again. */
@@ -316,11 +319,50 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [loading, setLoading] = useState(false);
-  const [streaming, setStreaming] = useState<string | null>(null);
+  const [streaming, setStreamingState] = useState<string | null>(null);
   const [streamingTurnId, setStreamingTurnId] = useState<string | null>(null);
   const [agentLive, setAgentLive] = useState<AgentLive | null>(null);
-  const [thinking, setThinking] = useState<ThinkingLive | null>(null);
+  const [thinking, setThinkingState] = useState<ThinkingLive | null>(null);
   const [busy, setBusy] = useState(false);
+
+  /* Tokens are coalesced on their way to the screen (lib/coalesce.ts): one
+     React update per token re-rendered every turn in the thread and re-parsed
+     the whole reply, fifty to a hundred times a second. The reply itself is
+     never held back — `acc` in run() is the text that gets saved, and the
+     voice session is handed every token directly; only the painting waits.
+
+     setStreaming and setThinking keep their names and gain one duty: anything
+     that is not a token (the start of a run, a round thrown away, the end)
+     first drops whatever token was waiting. Without that, a held token
+     delivered just after setStreaming(null) would leave a finished reply on
+     screen as one still being written, with nothing left to clear it. */
+  const streamOut = useRef<Coalescer<string> | null>(null);
+  if (!streamOut.current) streamOut.current = coalesce<string>(setStreamingState, streamInterval);
+  const thinkOut = useRef<Coalescer<string> | null>(null);
+  if (!thinkOut.current) {
+    thinkOut.current = coalesce<string>(
+      (text) => setThinkingState((t) => (t ? { ...t, text } : t)),
+      streamInterval
+    );
+  }
+  const setStreaming = useCallback((text: string | null) => {
+    streamOut.current?.cancel();
+    setStreamingState(text);
+  }, []);
+  /* A functional update (the answer starting, which stamps endedAt) leaves a
+     waiting chunk of reasoning alone: it is still the newest text and lands
+     a moment later. Only a replacement — a new run, or null — discards it. */
+  const setThinking = useCallback((next: SetStateAction<ThinkingLive | null>) => {
+    if (typeof next !== "function") thinkOut.current?.cancel();
+    setThinkingState(next);
+  }, []);
+  useEffect(
+    () => () => {
+      streamOut.current?.cancel();
+      thinkOut.current?.cancel();
+    },
+    []
+  );
   const [error, setError] = useState<string | null>(null);
   const [followups, setFollowups] = useState<string[]>([]);
   const [draftModel, setDraftModel] = useState("");
@@ -748,7 +790,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             onEvent: (e) => {
               if (e.kind === "token") {
                 acc = e.acc;
-                setStreaming(e.acc);
+                streamOut.current?.push(e.acc);
                 voice?.onText(e.acc);
               } else if (e.kind === "reasoning") {
                 reasoned = true;
@@ -815,12 +857,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             onToken: (_t, a) => {
               answerStarted();
               acc = a;
-              setStreaming(a);
+              streamOut.current?.push(a);
             },
             onReasoning: (_chunk, all) => {
               reasoned = true;
               chain = all;
-              setThinking((t) => (t ? { ...t, text: all } : t));
+              thinkOut.current?.push(all);
             },
             /* The evidence in the opaque case. A model can reason without
                sending a word of it, and `reasoned` here is the difference
@@ -1281,16 +1323,3 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
-export function useChat(): ChatState {
-  const ctx = useContext(Ctx);
-  if (!ctx) throw new Error("useChat must be used within ChatProvider");
-  return ctx;
-}
-
-/** Settings is one surface opened from every section, and one of its
- *  categories — "This chat" — is only meaningful inside chat. This is how it
- *  asks whether it is there, rather than being offered in every view and
- *  throwing in five of them. */
-export function useMaybeChat(): ChatState | null {
-  return useContext(Ctx);
-}

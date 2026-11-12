@@ -18,7 +18,7 @@
  * is subject to the same rule for the same reason: a panel that tells you how
  * far through today you are is worthless if the page can push it away.
  * ========================================================================== */
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState, type ReactNode } from "react";
 import * as store from "@/services/store";
 import { useDrillStore } from "@/hooks/useDrillStore";
 import type { View } from "@/context/RouteContext";
@@ -30,6 +30,11 @@ import ShortcutsModal from "./ui/ShortcutsModal";
 import SettingsSurface from "./settings/SettingsSurface";
 import Icon from "./ui/Icon";
 import { useSettings } from "@/context/SettingsContext";
+
+/* Loaded on the first ctrl/cmd+K rather than carried: it brings the settings
+   catalogue with it, which nothing else at boot reads. */
+const loadPalette = () => import("./ui/GlobalPalette");
+const GlobalPalette = lazy(loadPalette);
 
 const MOBILE = "(max-width: 900px)";
 
@@ -45,6 +50,8 @@ const TITLES: Record<View, string> = {
 
 export default function Shell({
   current,
+  title,
+  onPalette,
   sidebar,
   dock,
   aside,
@@ -52,6 +59,13 @@ export default function Shell({
   children
 }: {
   current: View;
+  /** What this page is called in the tab, when the section name alone would
+   *  not say — a conversation's title. Defaults to the section. */
+  title?: string;
+  /** A section with a palette of its own — chat, whose list carries its
+   *  commands as well — hands its opener here, and Shell then neither opens
+   *  a second palette nor listens for the keys. */
+  onPalette?: () => void;
   /** Extra sidebar content for this section, under the section list. */
   sidebar?: ReactNode;
   /** Docked below the scroll area — the grade bar. */
@@ -70,6 +84,7 @@ export default function Shell({
   const settings = useSettings();
   const [drawer, setDrawer] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
+  const [palette, setPalette] = useState(false);
   const [mobile, setMobile] = useState(
     () => typeof window !== "undefined" && window.matchMedia(MOBILE).matches
   );
@@ -117,7 +132,15 @@ export default function Shell({
           return;
         }
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k" && !onPalette) {
+        /* Everywhere but a section that brought its own — chat listens for
+           the same keys and opens the same palette with its commands added. Two listeners
+           toggling one piece of state each would open it and shut it in the
+           same keypress. */
+        e.preventDefault();
+        void loadPalette();
+        setPalette((v) => !v);
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
         e.preventDefault();
         toggle();
       } else if ((e.ctrlKey || e.metaKey) && e.key === "\\") {
@@ -138,7 +161,10 @@ export default function Shell({
            thing Escape means while it is open. */
         /* Marked when used, so a layer beneath — a voice call, listening on
            window after this — can tell the keypress has been spent. */
-        if (settings.cat) {
+        if (palette) {
+          setPalette(false);
+          e.preventDefault();
+        } else if (settings.cat) {
           settings.close();
           e.preventDefault();
         } else if (shortcuts) {
@@ -152,9 +178,23 @@ export default function Shell({
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [toggle, toggleRail, drawer, shortcuts, settings]);
+  }, [toggle, toggleRail, drawer, shortcuts, palette, settings, onPalette]);
+
+  const openPalette = useCallback(() => {
+    if (onPalette) return onPalette();
+    void loadPalette();
+    setPalette(true);
+  }, [onPalette]);
 
   const activeProject = store.activeProject();
+
+  /* The tab says where you are. It read "Drill" on every page, so seven tabs
+     of this app — or its entries in the browser's history and the window
+     switcher — were seven identical lines. */
+  const pageTitle = title || TITLES[current];
+  useEffect(() => {
+    document.title = pageTitle + " · " + activeProject.name + " — Drill";
+  }, [pageTitle, activeProject.name]);
 
   return (
     <div className={"app" + (collapsed ? " nav-collapsed" : "")}>
@@ -165,6 +205,7 @@ export default function Shell({
         onToggle={toggle}
         onNavigate={() => setDrawer(false)}
         onShortcuts={() => setShortcuts(true)}
+        onPalette={openPalette}
       >
         {sidebar}
       </Sidebar>
@@ -246,6 +287,12 @@ export default function Shell({
       </div>
 
       {shortcuts && <ShortcutsModal onClose={() => setShortcuts(false)} />}
+
+      {palette && (
+        <Suspense fallback={null}>
+          <GlobalPalette onClose={() => setPalette(false)} />
+        </Suspense>
+      )}
 
       {/* The one settings window in the app. Rendered from the shell every
           section mounts, so it is the same window with the same navigation

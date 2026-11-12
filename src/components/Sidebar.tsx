@@ -22,7 +22,11 @@ import { useRoute, type View } from "@/context/RouteContext";
 import { applyAppearance } from "@/lib/theme";
 import { useSettings } from "@/context/SettingsContext";
 import ProjectSwitcher from "./ProjectSwitcher";
+import { preloadSection } from "./sections";
 import Icon, { type IconName } from "./ui/Icon";
+
+/* The key the platform calls its own, as the shortcuts sheet spells it. */
+const MOD = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
 
 const SECTIONS: { view: View; label: string; icon: IconName }[] = [
   { view: "home", label: "Home", icon: "home" },
@@ -43,6 +47,7 @@ export default function Sidebar({
   onToggle,
   onNavigate,
   onShortcuts,
+  onPalette,
   children
 }: {
   current: View;
@@ -53,6 +58,8 @@ export default function Sidebar({
   /** Shell owns the cheatsheet, so opening it from here and opening it with
    *  "?" cannot put two of them on the screen at once. */
   onShortcuts: () => void;
+  /** Opens the command palette — Shell's, or the current section's own. */
+  onPalette: () => void;
   children?: ReactNode;
 }) {
   const db = useDrillStore();
@@ -117,6 +124,25 @@ export default function Sidebar({
         <ProjectSwitcher variant="inline" />
       </div>
 
+      {/* The palette, where you can see it. ctrl/cmd+K is the fastest way
+          around the app and a shortcut nobody is shown is a shortcut nobody
+          uses; this row is the same thing with a face on it. */}
+      <div className="nav-sections nav-find">
+        <button
+          className="nav-item nav-find-btn"
+          onClick={() => {
+            onPalette();
+            onNavigate();
+          }}
+          title={"Go to anything  (" + MOD + " + K)"}
+          aria-label="Go to anything"
+        >
+          <Icon name="search" size={17} />
+          <span className="nav-label">Go to…</span>
+          <span className="nav-kbd">{MOD} K</span>
+        </button>
+      </div>
+
       <nav className="nav-sections">
         {SECTIONS.map((s) => {
           const badge = badges[s.view];
@@ -126,6 +152,11 @@ export default function Sidebar({
               className={"nav-item" + (s.view === current ? " on" : "")}
               aria-current={s.view === current ? "page" : undefined}
               title={s.label + (badge ? ` (${badge})` : "")}
+              /* The pointer arriving, or Tab landing, is a few hundred
+                 milliseconds of notice before the click — enough to have the
+                 section's chunk here by the time it is asked for. */
+              onPointerEnter={() => preloadSection(s.view)}
+              onFocus={() => preloadSection(s.view)}
               onClick={() => {
                 go[s.view]();
                 onNavigate();

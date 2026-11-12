@@ -41,6 +41,7 @@ import ChatSidebar from "./ChatSidebar";
 import MessageTurn from "./MessageTurn";
 import Composer, { type SlashCommand } from "./Composer";
 import CommandPalette, { type PaletteAction } from "./CommandPalette";
+import { useGlobalActions } from "../ui/globalActions";
 import CardsModal from "./CardsModal";
 import ChatEmpty from "./ChatEmpty";
 import ReadProgress from "./ReadProgress";
@@ -707,15 +708,21 @@ It is built from your memories and what the review loop says you keep getting wr
 
   /* --------------------------------------------------- palette actions -- */
 
+  const globalActions = useGlobalActions();
+
   const paletteActions: PaletteAction[] = useMemo(
     () => [
       { id: "new", label: "New chat", hint: "ctrl+J", run: newChat },
-      { id: "drill", label: "Go to the review loop", hint: "view", run: openDrill },
       { id: "settings", label: "Conversation settings", hint: "action", run: () => settings.open("conversation") },
       { id: "export", label: "Export this conversation", hint: "action", run: exportConversation },
-      ...commands.map((cm) => ({ id: cm.cmd, label: cm.desc, hint: cm.cmd, run: () => cm.run("") }))
+      ...commands.map((cm) => ({ id: cm.cmd, label: cm.desc, hint: cm.cmd, run: () => cm.run("") })),
+      /* Then everything the palette does from any section — the other
+         sections, projects, settings pages. Its plain "New chat" is left out:
+         the one above carries the drafts, and two rows with one name is a
+         coin toss. */
+      ...globalActions.filter((a) => a.id !== "new-chat")
     ],
-    [newChat, openDrill, exportConversation, commands, settings]
+    [newChat, exportConversation, commands, settings, globalActions]
   );
 
   /* -------------------------------------------------------------- render -- */
@@ -736,7 +743,7 @@ It is built from your memories and what the review loop says you keep getting wr
        own navigation, its own project switcher and its own settings surface,
        none of which agreed with the rest of the app; what is left below is
        only the conversation itself. */
-    <Shell current="chat" sidebar={<ChatSidebar onNew={newChat} />} aside={<ChatRail conversation={c} />} asideLabel="Context">
+    <Shell current="chat" title={c?.title || undefined} onPalette={() => setPalette(true)} sidebar={<ChatSidebar onNew={newChat} />} aside={<ChatRail conversation={c} />} asideLabel="Context">
       <div
         className="chat-main"
         onDragEnter={(e) => {

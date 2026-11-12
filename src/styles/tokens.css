@@ -154,9 +154,9 @@
   /* Serif to read, sans for the machinery, mono for anything the computer
      said. The reading face carries the book; the sans is deliberately quiet
      so it never competes with it. */
-  --serif: "Source Serif 4", "Iowan Old Style", Charter, Georgia, serif;
-  --sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --serif: "Source Serif 4 Variable", "Source Serif 4", "Iowan Old Style", Charter, Georgia, serif;
+  --sans: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
   /* Nine steps, and nine is the budget. Reading sizes (--t-read and up)
      are multiplied by --text-scale at the point of use; UI chrome is not. */

@@ -490,6 +490,7 @@ Press `?` anywhere for this list in the app.
 
 | Key | Does |
 | --- | ---- |
+| `ctrl` + `k` | command palette — any section, project, settings page or conversation |
 | `ctrl` + `b` | show or hide the navigation |
 | `ctrl` + `\` | show or hide the right-hand panel |
 | `?` | keyboard shortcuts |
@@ -514,7 +515,6 @@ Press `?` anywhere for this list in the app.
 | `enter` | send |
 | `shift` + `enter` | newline |
 | `/` | slash commands (at the start of a message) |
-| `ctrl` + `k` | command palette — jump to any conversation |
 | `ctrl` + `j` | new chat |
 | `esc` | close whatever is open |
 

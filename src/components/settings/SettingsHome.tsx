@@ -31,7 +31,7 @@
  * ========================================================================== */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDrillStore } from "@/hooks/useDrillStore";
-import { useMaybeChat } from "@/context/ChatContext";
+import { useMaybeChat } from "@/context/chatCtx";
 import { useSettings } from "@/context/SettingsContext";
 import ErrorGuard from "../ui/ErrorGuard";
 import Icon from "../ui/Icon";
@@ -175,7 +175,7 @@ export default function SettingsHome() {
           </div>
 
           <div className="setfooter">
-            <a href="https://github.com/frontier-contributor/drill" target="_blank" rel="noopener noreferrer" className="setgithub-link" title="View on GitHub">
+            <a href="https://github.com/AayushtheCoder01/drill" target="_blank" rel="noopener noreferrer" className="setgithub-link" title="View on GitHub">
               <Icon name="github" size={16} />
               GitHub
             </a>

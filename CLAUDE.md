@@ -109,6 +109,31 @@ review loop is opened every day. Never import chat's rendering stack from
 anything the review loop touches — that is what `lib/plaintext.ts` exists for,
 as the KaTeX-free counterpart to `lib/markdown.ts`.
 
+**The entry chunk has a budget, and the build holds it.** `entryBudget()` in
+`vite.config.ts` fails the build when the chunk the review loop starts from
+passes 430 kB, and names the largest modules in it. It had drifted to 496 kB
+unnoticed: `ChatProvider` was imported eagerly from `App.tsx`, and the agent
+loop, drawing, video and the file wire came in behind it. The provider now
+loads with its view (`chat/ChatRoot.tsx`), and the context object and its
+hooks live apart in `context/chatCtx.ts` — **its import of `ChatState` is
+type-only and must stay so**, or Settings (which only wants `useMaybeChat`)
+drags the provider back in.
+
+**Sections are fetched before they are asked for.** `components/sections.ts`
+holds the one `import()` per section; `React.lazy`, the sidebar (pointer or
+focus on a row) and an idle queue after boot all call the same ones. The
+Suspense fallback is `SectionLoading` — the real `Shell` with an empty page —
+never the title page, which replaced the whole app and blinked the navigation
+away on the first visit to every section. Add a section, add it to
+`SECTION_LOADERS`.
+
+**Streamed tokens are coalesced on the way to the screen** (`lib/coalesce.ts`).
+One React update per token re-rendered every turn and re-parsed the whole
+reply. In `ChatContext`, tokens go through `streamOut.push`; `setStreaming`
+(start, a round thrown away, the end) cancels whatever was held first — a held
+token landing after `setStreaming(null)` would leave a finished reply looking
+live. `acc` and the voice session still get every token.
+
 **Never string-splice HTML into rendered output.** Walk the DOM. Everything
 user- or model-supplied goes through `lib/markdown.ts` (DOMPurify) first.
 
@@ -179,7 +204,8 @@ streak has one definition, `lib/activity.ts`'s, computed from the log;
 `pool()` when `rollover()` runs, and it drifted from the computed one.
 
 **Keyboard bindings live in three places** and `components/ui/ShortcutsModal.tsx`
-is the published promise about all of them: `Shell.tsx` (ctrl+B, ctrl+\, ctrl+,
+is the published promise about all of them: `Shell.tsx` (ctrl+K — the palette,
+unless the section passes its own `onPalette`, which chat does — ctrl+B, ctrl+\, ctrl+,
 `?`, Escape), `AppShell.tsx` (the review loop: Space, 1–4, G, N, S — all guarded
 to not fire while an INPUT/TEXTAREA/SELECT has focus, *or* while settings is
 open, since it covers the card it would otherwise grade), and

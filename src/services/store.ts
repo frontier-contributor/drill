@@ -670,12 +670,23 @@ function loadRaw(): LoadedRaw | null {
   return shell;
 }
 
+/** The `created` of a card that shipped with the app rather than being
+ *  written by its owner. Not zero: normCard treats a falsy stamp as missing
+ *  and writes the current time over it. One millisecond into 1970 survives
+ *  that, falls outside every window the day brief asks about, and is what
+ *  services/activity.ts tests for. */
+export const STARTER_CREATED = 1;
+
 function freshDB(cfg?: DrillConfig): DrillDB {
   const seed = SEED_DECK || { name: "New deck", cards: [] };
   const project = migrate.makeProject(migrate.DEFAULT_PROJECT_NAME, {
     blurb: "Your first project. Rename it, or add another."
   });
   const d = makeDeck(seed.name, seed.cards, project.id);
+  /* The starter deck came with the app; you did not write it today. Stamped
+     with now, like any other card, a brand-new install opened on "66 done
+     today, one-day streak" and told the tutor you had written 66 cards. */
+  for (const c of d.cards) c.created = STARTER_CREATED;
   project.deckIds.push(d.id);
   const o: DrillDB = {
     v: migrate.CURRENT_DB_VERSION,

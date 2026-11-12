@@ -73,7 +73,7 @@ export function sourceFor(projectId: string): ActivitySource {
      edits on purpose, so this counts the day a card came into existence and
      not the last day somebody touched a typo in it. */
   for (const d of decks) {
-    for (const c of d.cards) if (c.created) src.card.push(c.created);
+    for (const c of d.cards) if (c.created && c.created > store.STARTER_CREATED) src.card.push(c.created);
   }
 
   for (const n of store.notesOf(projectId)) src.note.push(n.t);

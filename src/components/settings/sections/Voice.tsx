@@ -36,7 +36,7 @@ import { TIMING } from "@/lib/voice/turns";
 import { deviceVoiceName, hostedVoiceName, type VoiceName } from "@/lib/speech/names";
 import { useDrillStore } from "@/hooks/useDrillStore";
 import { useStoreSync } from "@/hooks/useStoreSync";
-import { useMaybeChat } from "@/context/ChatContext";
+import { useMaybeChat } from "@/context/chatCtx";
 import { useSettings } from "@/context/SettingsContext";
 import VoiceOrb, { type OrbPhase, type OrbSource } from "@/components/chat/voice/VoiceOrb";
 import ModelPicker from "../../ui/ModelPicker";

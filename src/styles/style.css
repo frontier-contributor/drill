@@ -618,6 +618,35 @@ button.rail-item:hover .rail-item-text {
   pointer-events: none;
 }
 
+/* The palette's row. A nav-item like the rest, outlined so it reads as a
+   field you can press rather than an eighth section, with its keys at the
+   far end the way the section badges sit. */
+.nav-find {
+  margin-bottom: var(--s-2);
+}
+.nav-find-btn {
+  border: 1px solid var(--rule-soft);
+  color: var(--ink-3);
+}
+.nav-find-btn:hover {
+  border-color: var(--rule);
+}
+.nav-kbd {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+  transition: opacity 0.14s linear 0.09s;
+}
+.nav.collapsed .nav-kbd {
+  opacity: 0;
+  pointer-events: none;
+}
+.nav.collapsed .nav-find-btn {
+  border-color: transparent;
+}
+
 /* Whatever the section hangs under its own name — chat's conversation index.
    The only part of the sidebar that scrolls. */
 .nav-extra {
@@ -1488,6 +1517,27 @@ header {
   letter-spacing: var(--track-tight);
   color: var(--ink);
   animation: stage-in 0.6s var(--ease);
+}
+
+/* index.html hides its copy of the title page until this file has loaded. */
+.boot.boot-static {
+  visibility: visible;
+}
+
+/* A section whose chunk is still arriving: the frame is real, the page is
+   empty. The marks stay invisible for the first fifth of a second and then
+   fade in, so a chunk that was preloaded — nearly all of them — never shows
+   a loader, and one that is genuinely slow does not sit there looking dead.
+   `backwards` holds the first keyframe through the delay; without it the
+   marks would be fully visible until the animation starts. */
+.page-loading {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.page-loading .working-stick {
+  animation: stage-in 0.4s var(--ease) 0.2s backwards;
 }
 
 .pulse,
@@ -4336,4 +4386,89 @@ select.fi.auto {
   .mdlg .mb-list {
     max-height: 56vh;
   }
+}
+
+/* Moved here from chat.css when the palette stopped being chat's alone: it
+   opens from every section now, and chat's stylesheet is lazy. */
+/* ---------------------------------------------------- command palette -- */
+.palette-wrap {
+  align-items: flex-start;
+  padding: 12vh var(--s-5) var(--s-5);
+}
+.palette {
+  width: 100%;
+  max-width: 34rem;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-3);
+  overflow: hidden;
+  box-shadow: var(--lift-3);
+  display: flex;
+  flex-direction: column;
+  max-height: 66vh;
+  animation: rise var(--fast) var(--ease);
+}
+.palette input {
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--rule-soft);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: var(--t-md);
+  padding: var(--s-4) var(--s-5);
+  outline: none;
+  transition: border-color var(--fast);
+}
+.palette input:focus {
+  border-bottom-color: var(--accent);
+}
+.palette input::placeholder {
+  color: var(--ink-3);
+}
+.palette-list {
+  overflow-y: auto;
+  padding: var(--s-2);
+}
+.palette-item {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  transition: background var(--fast);
+}
+.palette-item.sel {
+  background: var(--accent-10);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.palette-item .pt {
+  font-family: var(--sans);
+  font-size: var(--t-sm);
+  color: var(--ink);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.palette-item .pk {
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  color: var(--ink-3);
+  letter-spacing: 0.06em;
+}
+.palette-empty {
+  padding: var(--s-6);
+  text-align: center;
+  color: var(--ink-3);
+  font-family: var(--serif);
+  font-size: var(--t-read);
 }

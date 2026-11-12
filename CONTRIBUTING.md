@@ -97,8 +97,10 @@ escape the 56px rail — so the clipping lives on `.nav-head`, `.nav-extra`,
 **Do not import `lib/markdown.ts` outside the chat view.** It pulls in KaTeX
 and highlight.js (~450KB), and the chat view is lazy-loaded specifically so the
 review loop never downloads them. If you only need to strip markdown syntax,
-import `lib/plaintext.ts`. Check with `npm run build`: the review chunk should
-stay around 250KB.
+import `lib/plaintext.ts`. `npm run build` enforces this: the entry chunk has a
+budget in `vite.config.ts` (430 kB; React alone is 134), and a build over it
+fails and lists the largest modules in the chunk. `ENTRY_REPORT=1 npm run build`
+prints the same list on a build that passes.
 
 **Never splice HTML into rendered model output by string replacement.**
 `markdown.ts` renders maths by walking the sanitised DOM (`restoreMath`)

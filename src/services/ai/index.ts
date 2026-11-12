@@ -88,7 +88,7 @@ export function resolve(override?: Override): ResolvedBackend {
 
 export function ready(override?: Override): { ok: boolean; why?: string } {
   const r = resolve(override);
-  if (r.backend.needsKey && !r.apiKey) return { ok: false, why: "No " + r.backend.label + " key yet — Menu → Settings." };
+  if (r.backend.needsKey && !r.apiKey) return { ok: false, why: "No " + r.backend.label + " key yet — add one under Settings → Connection." };
   if (!r.model) return { ok: false, why: "No model chosen — Menu → Settings." };
   return { ok: true };
 }

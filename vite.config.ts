@@ -77,8 +77,54 @@ function excalidrawFonts() {
   };
 }
 
+/* The entry chunk is what the review loop — the thing opened every day —
+ * waits for before it can draw. CONTRIBUTING used to ask you to check its size
+ * by eye after a build, and by the time anyone did it had doubled: chat's
+ * provider was imported from App.tsx, and the agent loop, drawing, video and
+ * the file wire came in behind it. A rule nobody is made to read is not a
+ * rule, so the build holds this one.
+ *
+ * Over budget, the build fails and names the largest modules in the chunk,
+ * which is almost always enough to see what was imported from the wrong side
+ * of a lazy boundary. Raise the number only on purpose.
+ *
+ * ENTRY_REPORT=1 prints the same list on a build that passes. */
+const ENTRY_BUDGET_KB = 430;
+const NL = String.fromCharCode(10);
+
+function entryBudget() {
+  return {
+    name: "drill-entry-budget",
+    apply: "build" as const,
+    generateBundle(
+      this: { error: (msg: string) => never },
+      _opts: unknown,
+      bundle: Record<string, { type: string; isEntry?: boolean; code?: string; modules?: Record<string, { renderedLength: number }> }>
+    ) {
+      for (const [name, chunk] of Object.entries(bundle)) {
+        if (chunk.type !== "chunk" || !chunk.isEntry || !chunk.code) continue;
+        const kb = chunk.code.length / 1000;
+        const over = kb > ENTRY_BUDGET_KB;
+        if (!over && !process.env.ENTRY_REPORT) continue;
+        const top = Object.entries(chunk.modules || {})
+          .sort((a, b) => b[1].renderedLength - a[1].renderedLength)
+          .slice(0, 15)
+          .map(([id, m]) => "  " + String(Math.round(m.renderedLength / 1000)).padStart(4) + " kB  " + path.relative(__dirname, id.split("?")[0]))
+          .join(NL);
+        const line = name + " is " + kb.toFixed(0) + " kB; the budget is " + ENTRY_BUDGET_KB + " kB.";
+        if (over) {
+          this.error(
+            line + NL + "Something the review loop does not need is being imported eagerly. Largest modules in the chunk (before minifying):" + NL + top
+          );
+        }
+        console.log(NL + line + NL + top + NL);
+      }
+    }
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), dropLocalConfig(), excalidrawFonts()],
+  plugins: [react(), dropLocalConfig(), excalidrawFonts(), entryBudget()],
   // Honour PORT so several dev servers can run side by side without each one
   // needing its own hardcoded flag. Falls back to Vite's default.
   server: process.env.PORT ? { port: Number(process.env.PORT) } : undefined,
