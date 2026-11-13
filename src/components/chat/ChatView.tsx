@@ -27,12 +27,14 @@ import { useRoute } from "@/context/RouteContext";
 import { useSettings } from "@/context/SettingsContext";
 import { useToast } from "@/context/ToastContext";
 import { useDrillStore } from "@/hooks/useDrillStore";
-import { describeSource } from "@/lib/chatContext";
+import { useStoreSync } from "@/hooks/useStoreSync";
+import * as examStore from "@/services/examStore";
 import { catalogue } from "@/lib/references";
 import { markdownToText } from "@/lib/markdown";
 import { ASK_ABOUT_TODAY } from "@/lib/dayBrief";
 import { estimateTurnTokens, formatCost, formatTokens } from "@/lib/tokens";
-import { getPersona } from "@/lib/personas";
+import { COMPANION_PERSONA_ID, DEFAULT_PERSONA_ID, getPersona } from "@/lib/personas";
+import { isPersonalProject } from "@/lib/migrate";
 import { download, slug } from "@/lib/util";
 import Shell from "../Shell";
 import ChatRail from "../rail/ChatRail";
@@ -47,6 +49,7 @@ import ChatEmpty from "./ChatEmpty";
 import ReadProgress from "./ReadProgress";
 import ModelChip from "./ModelChip";
 import ToolsMenu from "./ToolsMenu";
+import { answerRoute } from "@/lib/answerRoute";
 import ImageComposer from "./ImageComposer";
 import VideoComposer from "./VideoComposer";
 import ListenBar from "./ListenBar";
@@ -90,6 +93,10 @@ export default function ChatView() {
      opens the one panel now, on this thread's own page. */
   const settings = useSettings();
   useDrillStore(); // deck/note changes should refresh context labels
+  /* The "@" menu lists past conversations and exams, so it has to hear about
+     a thread renamed in the sidebar or an exam finished in another section. */
+  useStoreSync(chatStore);
+  useStoreSync(examStore);
 
   const [palette, setPalette] = useState(false);
   const [cardSource, setCardSource] = useState<string | null>(null);
@@ -121,9 +128,9 @@ export default function ChatView() {
      for — a journal entry written a minute ago has to be referenceable now,
      not after a reload. Cheap: every `text` in it is a thunk. */
   const references = useMemo(
-    () => catalogue(c?.projectId || store.get().activeProjectId),
+    () => catalogue(c?.projectId || store.get().activeProjectId, { conversationId: c?.id }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [c?.projectId, store.getVersion()]
+    [c?.projectId, c?.id, store.getVersion(), chatStore.getVersion(), examStore.getVersion()]
   );
 
   useEffect(() => {
@@ -491,13 +498,15 @@ export default function ChatView() {
       const image = attachVerdicts.image;
       if (a.kind === "image") return imageWarning(target.model, image);
       if (a.kind === "pdf") {
-        const mode = c ? c.mode || "direct" : chat.draftMode;
-        const engine = mode === "direct" ? store.settings().pdfEngine || "local" : "local";
+        /* The same map the send path asks — only a single request can name
+           OpenRouter's parser, so the warning must not promise one otherwise. */
+        const route = c ? answerRoute(c.mode, c.actions) : answerRoute(chat.draftMode, chat.draftActions);
+        const engine = route === "single" ? store.settings().pdfEngine || "local" : "local";
         return scannedWarning(target.model, image, a.scanned?.length || 0, engine, target.type);
       }
       return null;
     },
-    [c, chat.draftMode, target, attachVerdicts.image]
+    [c, chat.draftMode, chat.draftActions, target, attachVerdicts.image]
   );
 
   /* --------------------------------------------------------- whiteboard -- */
@@ -736,6 +745,41 @@ It is built from your memories and what the review loop says you keep getting wr
      the composer follows. */
   const drawing = (c ? c.mode : chat.draftMode) === "image";
   const filming = (c ? c.mode : chat.draftMode) === "video";
+  /* No conversation yet, or one with nothing said in it: the companion home,
+     with the box in the middle of the page. Drawing, filming and a live call
+     keep their surfaces at the foot, where their dials are. */
+  const empty = !c || c.turns.length === 0;
+  const centred = empty && !drawing && !filming && !voiceOn;
+  const persona = c ? getPersona(c.personaId) : null;
+  /* Shown in the head only when it is not what a thread here starts as — the
+     default is the state you should not have to read about. */
+  const unusualPersona = !!c && c.personaId !== (isPersonalProject(c.projectId) ? COMPANION_PERSONA_ID : DEFAULT_PERSONA_ID);
+  const MODE_NAMES: Record<string, string> = { quick: "Quick", deep: "Deep", image: "Image", video: "Video" };
+  const modeName = c && c.mode && c.mode !== "auto" ? MODE_NAMES[c.mode] : null;
+
+  const composer = (
+    <Composer
+      key={conversationId || "new"}
+      disabled={!readiness.ok}
+      busy={chat.busy}
+      commands={commands}
+      references={references}
+      tools={<ToolsMenu />}
+      trailing={<ModelChip conversation={c} draftModel={chat.draftModel} onDraftModel={chat.setDraftModel} />}
+      seed={seed}
+      droppedNonce={dropNonce}
+      takeDropped={takeDropped}
+      warnFor={warnFor}
+      attachVerdicts={attachVerdicts}
+      attachReasons={attachReasons}
+      onPreview={setPreview}
+      placeholder={readiness.ok ? (centred ? "How can I help today?" : "Reply — or @ to bring in a chat, card or exam") : readiness.why}
+      onSend={(text, attachments) => void chat.send(text, attachments)}
+      onStop={chat.stop}
+      onVoice={startVoice}
+      voiceWhy={voiceBlocked()}
+    />
+  );
 
   return (
     /* The conversation index is passed to the shared sidebar rather than
@@ -778,80 +822,66 @@ It is built from your memories and what the review loop says you keep getting wr
             <span>Drop to attach — pictures, PDFs, Word, Excel, text and code</span>
           </div>
         )}
-        <div className="chat-head">
-          {c ? (
-            <>
-              <button
-                className="chat-title"
-                title="Rename"
-                onClick={() => {
-                  const n = window.prompt("Rename this conversation:", c.title);
-                  if (n) chatStore.rename(c, n);
-                }}
-              >
-                {c.title}
-              </button>
+        {/* The head is the conversation's, so it appears with one. The page
+            before the first message is a greeting and a box, nothing else. */}
+        {!empty && c && (
+          <div className="chat-head">
+            <button
+              className="chat-title"
+              title="Rename"
+              onClick={() => {
+                const n = window.prompt("Rename this conversation:", c.title);
+                if (n) chatStore.rename(c, n);
+              }}
+            >
+              {c.title}
+            </button>
+            {(modeName || unusualPersona) && (
               <div className="chat-meta">
-                {/* The model by name where the catalogue knows it, as every
-                    picker now shows it; the id is in the tooltip. */}
-                <span className={"head-badge" + (catalogueEntry(resolved.model)?.title ? "" : " mono")} title={`Active model · ${resolved.model}`}>
-                  <Icon name="sparkle" size={10} />
-                  {catalogueEntry(resolved.model)?.title || resolved.model}
-                </span>
-                <span className="head-badge" title="Persona">
-                  <Icon name="bubble" size={10} />
-                  {getPersona(c.personaId).name}
-                </span>
-                <span className="head-badge mono" title="Approximate tokens in context">
-                  ~{formatTokens(contextTokens)} ctx
-                </span>
-                {c.usage.cost != null && (
-                  <span className="head-badge mono" title="Estimated cost">
-                    {formatCost(c.usage.cost)}
+                {modeName && (
+                  <span className="head-badge" title="How this thread answers — change it from Tools in the composer">
+                    {modeName}
+                  </span>
+                )}
+                {unusualPersona && persona && (
+                  <span className="head-badge" title="Persona">
+                    {persona.name}
                   </span>
                 )}
               </div>
-              <button
-                className={"chat-headbtn" + (c.pinned ? " on" : "")}
-                onClick={() => chatStore.setPinned(c, !c.pinned)}
-                title={c.pinned ? "Unpin" : "Pin"}
-                aria-pressed={c.pinned}
-              >
-                <Icon name={c.pinned ? "star-filled" : "star"} size={13} />
-              </button>
-              <button
-                className={"chat-headbtn" + (settings.cat === "conversation" ? " on" : "")}
-                onClick={() => settings.open("conversation")}
-                title="Conversation settings  (ctrl + ,)"
-              >
-                <Icon name="settings" size={13} />
-                <span>Settings</span>
-              </button>
-            </>
-          ) : (
-            <>
-              <span className="chat-title">New conversation</span>
-              <div className="chat-meta">
-                <span className="head-badge mono">{resolved.backend.label}</span>
-              </div>
-            </>
-          )}
-        </div>
-
-        {c && c.context.length > 0 && (
-          <div className="ctxbar">
-            <span className="lbl">Context</span>
-            {c.context.map((s, i) => (
-              <span key={i} className="ctxchip">
-                {describeSource(s)}
-                <button onClick={() => chat.setContext(c.context.filter((_, j) => j !== i))} aria-label="Remove">
-                  <Icon name="close" size={11} />
-                </button>
+            )}
+            <span className="chat-head-gap" />
+            {/* What the thread has cost, and how much of it goes back up the
+                wire — the two numbers that decide what the next message costs. */}
+            {c.usage.cost != null && (
+              <span className="head-spend" title={`Spent on this thread so far. About ${formatTokens(contextTokens)} tokens of it go back with each message.`}>
+                {formatCost(c.usage.cost)}
               </span>
-            ))}
+            )}
+            <button
+              className={"chat-headbtn icon" + (c.pinned ? " on" : "")}
+              onClick={() => chatStore.setPinned(c, !c.pinned)}
+              title={c.pinned ? "Unpin" : "Pin"}
+              aria-label={c.pinned ? "Unpin" : "Pin"}
+              aria-pressed={c.pinned}
+            >
+              <Icon name={c.pinned ? "star-filled" : "star"} size={15} />
+            </button>
+            <button
+              className={"chat-headbtn icon" + (settings.cat === "conversation" ? " on" : "")}
+              onClick={() => settings.open("conversation")}
+              title="This chat's settings — model, persona, what it can see  (ctrl + ,)"
+              aria-label="This chat's settings"
+            >
+              <Icon name="settings" size={15} />
+            </button>
           </div>
         )}
 
+        {/* Pinned material stays visible, because it is paid for on every
+            message. The standing context sources do not: they cost nothing
+            when empty, the rail lists them, and six chips above every thread
+            made the plumbing the loudest thing on the page. */}
         {c && c.pinnedAttachments.length > 0 && (
           <div className="ctxbar">
             <span className="lbl">Pinned</span>
@@ -878,7 +908,7 @@ It is built from your memories and what the review loop says you keep getting wr
           resyncKey={`${conversationId || ""}:${c?.turns.length ?? 0}`}
         />
 
-        {!c || c.turns.length === 0 ? (
+        {empty ? (
           /* The chat welcome is chat's: its starters are questions, and
              offering "What should I revise today?" above a surface whose only
              verb is Draw is the mixing this mode exists to undo. Nested inside
@@ -898,6 +928,7 @@ It is built from your memories and what the review loop says you keep getting wr
               }
             }}
             onPrefill={(text) => setSeed({ text, nonce: Date.now() })}
+            composer={centred ? composer : undefined}
           />
           )
         ) : (
@@ -997,28 +1028,8 @@ It is built from your memories and what the review loop says you keep getting wr
             onSend={(text, attachments) => void chat.send(text, attachments)}
             onStop={chat.stop}
           />
-        ) : (
-        <Composer
-          key={conversationId || "new"}
-          disabled={!readiness.ok}
-          busy={chat.busy}
-          commands={commands}
-          references={references}
-          tools={<ToolsMenu />}
-          trailing={<ModelChip conversation={c} draftModel={chat.draftModel} onDraftModel={chat.setDraftModel} />}
-          seed={seed}
-          droppedNonce={dropNonce}
-          takeDropped={takeDropped}
-          warnFor={warnFor}
-          attachVerdicts={attachVerdicts}
-          attachReasons={attachReasons}
-          onPreview={setPreview}
-          placeholder={readiness.ok ? "Ask anything" : readiness.why}
-          onSend={(text, attachments) => void chat.send(text, attachments)}
-          onStop={chat.stop}
-          onVoice={startVoice}
-          voiceWhy={voiceBlocked()}
-        />
+        ) : centred ? null : (
+          composer
         )}
 
         {voiceOn && stage && (

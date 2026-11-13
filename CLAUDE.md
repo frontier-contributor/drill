@@ -378,10 +378,11 @@ what is sent is `lib/videoSpec.ts`'s `effectiveVideo` — never a value the
 model does not take. `referencedFileIds` walks `Variant.videos`: a clip is
 the costliest file to lose to "Remove unused".
 
-**`repair()` whitelists modes.** A mode missing from its list is reset to
-`direct` on every load — Image was, from the day it shipped until
+**`repairMode()` whitelists modes.** A mode missing from its list is reset to
+`auto` on every load — Image was, from the day it shipped until
 2026-09-25, so every drawing thread came back from a reload as chat. Add a
-mode, add it there.
+mode, add it there. The Tools menu reads a thread's mode through the same
+function, so the picker and the send path cannot name it differently.
 
 **Backends and credentials.** `services/ai/backends.ts` holds one entry per
 provider — OpenRouter, Groq, Ollama, and a generic OpenAI-compatible one — and
@@ -402,11 +403,43 @@ anything speaking the OpenAI wire format needs only headers, via
 **Singleton components with entity-scoped state need a `key`.** `Composer` is
 keyed on the conversation id because otherwise a draft leaks between threads.
 
-**Chat has three modes, and one of them is an agent loop.** `Conversation.mode`
-is `direct` (one call, the default) / `agent` (reactive lookups) / `deep` (plan
-first, close every step, then answer). The loop lives in `services/agent/` —
+**Chat answers in Auto, and Auto is the agent loop.** Since 2026-11-13 a
+message goes and gets what it needs without being put in a mode first — the
+user asked for a companion like the Claude and ChatGPT apps, where you refer to
+something and it is looked up. `Conversation.mode` is `auto` (the default: the
+loop with a plan offered, never required — a plain question is still answered
+in the first request) / `quick` (one call, no tools: the old `direct`) / `deep`
+(plan first, close every step, then answer) / `image` / `video`. `direct`,
+`agent` and `chat` are retired spellings that `repairMode()` reads as `auto` —
+`direct` was the default, so it cannot say whether anyone chose it.
+`lib/answerRoute.ts` is the one map from mode to engine (single call or loop);
+the send path, `buildMessages` (only a single call can name OpenRouter's PDF
+parser) and the Tools menu all ask it. The loop lives in `services/agent/` —
 read `tools.ts`'s header before touching the catalogue, and START-HERE §13 for
-the whole picture. Four things bite:
+the whole picture. Seven things bite:
+
+- **Not every model takes `tools`, and OpenRouter refuses the whole request
+  when one does not** (404, "no endpoints found that support tool use").
+  `ModelPrice.tools` is read off `supported_parameters` (three states, absent =
+  not known); `protocolFor(backend, tools)` gives a known "no" the text
+  protocol, and `runAgentTurn` reruns on the text protocol once when a native
+  first round is refused (`isToolRefusal`) — never after anything has been
+  emitted, or the lookups on screen would repeat.
+- **The tools reach everything, and the personal space reaches every
+  project.** `recall` searches memory, cards, journal, notes, files, past
+  chats, exams and kept figures; `open` reads `mem:`/`card:`/`day:`/`chat:`/
+  `exam:`/`figure:`/`deck:`/`project:` refs. `whereFor()` decides which
+  projects a read looks inside: the thread's own, a `project` the model named,
+  or — from the personal space, which belongs to no body of work — all of
+  them, with each line saying where it came from. A day is only unique within
+  a project, so a wide search writes `day:<projectId>:<day>`.
+- **A chat or an exam is read back by `lib/digest.ts`, for both callers.**
+  The tool that finds "the chat about attention" and the `@` that attaches it
+  must hand the model the same account of it. `@` reaches chats, exams and
+  other projects too (`lib/references.ts`), and from the personal space the
+  whole catalogue spans every project. A reference's `text` may be a promise
+  (a chat is read from IndexedDB); the composer shows it as a pending row and
+  Send waits for it.
 
 - **`loop.ts` takes `chat` *and* `runTool` injected.** That is the only reason
   its 28 tests run with no API key and no IndexedDB. Do not "simplify" it by
@@ -415,9 +448,11 @@ the whole picture. Four things bite:
   rename that deleted that tool, and taught every local model to call something
   that did not exist. Derive it from the catalogue.
 - **Effort is read by every mode; `agentSteps` only means something in
-  `agent`/`deep`.** `EffortBudget.blurb` must stay mode-neutral;
+  `auto`/`deep`.** Both get `roundsFor(agentSteps)` — a plain answer spends
+  none of it. `EffortBudget.blurb` must stay mode-neutral;
   `effortMeans(effort, mode)` is the only thing that phrases the lookup budget,
-  and `effort.test.ts` enforces it.
+  and `effort.test.ts` enforces it — including that Auto says a plain question
+  is still one request.
 - **Anything settable before a conversation exists needs a draft.**
   `ChatContext.update()` returns early with no conversation, so a new
   per-conversation control silently does nothing on the empty chat screen until
@@ -426,7 +461,9 @@ the whole picture. Four things bite:
   creation path (send, starters, slash commands, ctrl+J) funnels through.
   `withDrafts` reads a ref, not state, because ChatView's ctrl+J listener is
   re-registered only when the palette or drawer moves and otherwise holds a
-  first-render closure.
+  first-render closure. `draftActions` starts with Web on when
+  `settings.webByDefault` says so (the default): in Auto that is a lookup the
+  model may choose, in Quick a search before every reply.
 
 **The composer's + asks what kind, and `lib/files/kinds.ts` is the one list
 it asks from** — the row, the `accept` the OS dialog opens on, the size quoted

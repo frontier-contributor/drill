@@ -177,6 +177,10 @@ export function fromRaw(m: RawModel): ModelPrice | undefined {
        "include_reasoning" only asks for the trace back. A model that
        advertises either one accepts the switch. */
     reasoning: params.includes("reasoning") || params.includes("include_reasoning"),
+    /* Only a listing that says something counts. A record with no
+       `supported_parameters` at all is "not known", and rounding that down to
+       "no tools" would send every unlisted model to the slower protocol. */
+    tools: params.length ? params.includes("tools") : undefined,
     inputModalities: m.architecture?.input_modalities,
     outputModalities: output,
     maxOutput: m.top_provider?.max_completion_tokens || undefined,

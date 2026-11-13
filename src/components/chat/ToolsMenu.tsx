@@ -30,8 +30,10 @@
  *
  * Two sections, in the order the decisions are actually made:
  *
- *   How to answer   direct / agent / deep / image. Each says what it costs in
- *                   requests, because that is the real question.
+ *   How to answer   auto / quick / deep / image / video. Each says what it
+ *                   costs in requests, because that is the real question.
+ *                   Auto is the default and the button says nothing about it
+ *                   — it is the state you should not have to think about.
  *   Effort          how much of everything one message gets.
  *
  * The model-dependent switch is new, and it is why this file asks
@@ -50,7 +52,9 @@ import { loadPricing } from "@/services/pricing";
 import { useChat } from "@/context/ChatContext";
 import { useToast } from "@/context/ToastContext";
 import { ACTION_ORDER, CHAT_ACTIONS, availability, type ChatActionId } from "@/lib/chatActions";
-import { EFFORT_ORDER, budgetFor, deepSteps, effortMeans } from "@/lib/effort";
+import { EFFORT_ORDER, budgetFor, effortMeans, roundsFor } from "@/lib/effort";
+import { answerRoute } from "@/lib/answerRoute";
+import { repairMode } from "@/services/chatStore";
 import { resolveEffort } from "@/lib/resolveSetting";
 import type { ChatMode } from "@/types/chat";
 import type { Effort } from "@/types/core";
@@ -67,25 +71,25 @@ interface ModeDef {
 
 const MODES: ModeDef[] = [
   {
-    id: "direct",
-    label: "Direct",
-    icon: "bubble",
-    blurb: "One request. Context picked before the call. Right for most questions.",
-    steps: () => 0
+    id: "auto",
+    label: "Auto",
+    icon: "sparkle",
+    blurb: "Answers at once when it can. Looks things up in your record — or on the web — when the question needs it, and plans when it is several steps.",
+    steps: (n) => roundsFor(n)
   },
   {
-    id: "agent",
-    label: "Agent",
-    icon: "search",
-    blurb: "Looks things up in your record as it goes, then answers.",
-    steps: (n) => n
+    id: "quick",
+    label: "Quick",
+    icon: "bubble",
+    blurb: "One request and no lookups. The cheapest message there is.",
+    steps: () => 0
   },
   {
     id: "deep",
     label: "Deep",
-    icon: "sparkle",
+    icon: "search",
     blurb: "States a plan, works every step, then answers. For the questions worth waiting for.",
-    steps: (n) => deepSteps(n)
+    steps: (n) => roundsFor(n)
   },
   /* A mode rather than a second Image switch, and the switch stays. The
      difference is what the thread is *for*: the action lets a reply come back
@@ -114,6 +118,26 @@ const MODES: ModeDef[] = [
 ];
 
 const ACTION_ICON: Record<ChatActionId, IconName> = { web: "globe", think: "brain", image: "image" };
+
+/**
+ * One switch, two meanings, said per engine. Web in Auto or Deep is a tool the
+ * model reaches for when a question is about something outside the learner's
+ * record; in Quick it is OpenRouter's plugin, which searches before every
+ * reply. Both are right for their mode, and a tooltip that described one while
+ * the other was in force would be the dead-dial problem in prose. Image is the
+ * one switch that changes the engine itself — see lib/answerRoute.ts.
+ */
+function blurbFor(id: ChatActionId, route: ReturnType<typeof answerRoute>): string {
+  if (id === "web") {
+    return route === "single"
+      ? "Searches the web before every reply in this mode, and answers with sources."
+      : "May search the web when a question needs something outside your record, and names its sources.";
+  }
+  if (id === "image") {
+    return CHAT_ACTIONS.image.blurb + " While it is on, replies come back in one request — no lookups.";
+  }
+  return CHAT_ACTIONS[id].blurb;
+}
 
 export default function ToolsMenu() {
   const {
@@ -171,11 +195,9 @@ export default function ToolsMenu() {
      returns early with no conversation, so a control without one is a switch
      that lights up and does nothing until a thread exists to hold it. */
   const rawMode = conversation ? conversation.mode : draftMode;
-  /* Every mode but the default is named here. A mode missing from this list
-     is silently shown as Direct while the send path runs it for real, which
-     is the worst of both — the picker would disagree with what the app is
-     actually doing. */
-  const mode: ChatMode = rawMode === "agent" || rawMode === "deep" || rawMode === "image" || rawMode === "video" ? rawMode : "direct";
+  /* Read through the same function the store repairs with, so the picker and
+     the send path can never name the same thread's mode differently. */
+  const mode: ChatMode = repairMode(rawMode);
   const actions = conversation ? conversation.actions : draftActions;
   const pinnedEffort = conversation ? conversation.effort : draftEffort;
 
@@ -207,7 +229,7 @@ export default function ToolsMenu() {
   /* What the button says is what is in force behind it. At rest that is
      nothing worth reporting, so it says what it is; once the mode or the
      effort is not the default, it says that instead and lights up. */
-  const modeSet = mode !== "direct";
+  const modeSet = mode !== "auto";
   const label = modeSet
     ? current.label + (pinnedEffort ? " · " + pinnedEffort : "")
     : pinnedEffort
@@ -223,6 +245,10 @@ export default function ToolsMenu() {
   /* Video mode has no switches at all: a clip is not searched for, thought
      about or drawn — the model makes it, and the dials are on the composer. */
   const switches = mode === "video" ? [] : ACTION_ORDER.filter((id) => !(id === "image" && mode === "image"));
+  /* What the switches mean depends on which engine will answer — Web is a
+     lookup the model may choose in Auto and a search on every message in
+     Quick — so the tooltips ask the same map the send path does. */
+  const route = answerRoute(mode, actions);
 
   return (
     <>
@@ -260,7 +286,7 @@ export default function ToolsMenu() {
                     <span className="tools-text">
                       <span className="tools-name">
                         {m.label}
-                        <span className="tools-cost">{n ? "up to " + n + " lookups" : "1 request"}</span>
+                        <span className="tools-cost">{n ? (m.id === "auto" ? "1 request, more if needed" : "up to " + n + " lookups") : "1 request"}</span>
                       </span>
                       <span className="tools-blurb">{m.blurb}</span>
                     </span>
@@ -310,7 +336,7 @@ export default function ToolsMenu() {
            hosted model and cannot for a local one, and pretending otherwise
            is how a hedge turns into a promise. */
         const title = av.can
-          ? `${action.label}${on ? " is on" : ""} — ${action.blurb}${av.certain ? "" : " (unverified for this model)"}`
+          ? `${action.label}${on ? " is on" : ""} — ${blurbFor(id, route)}${av.certain ? "" : " (unverified for this model)"}`
           : `${action.label} — ${av.why}`;
         return (
           <button

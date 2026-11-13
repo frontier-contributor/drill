@@ -14,6 +14,30 @@ const FORMAT =
   "the interface renders it. Use fenced code blocks with a language tag. Keep paragraphs short.";
 
 export const PERSONAS: Persona[] = [
+  /* The personal space's default (asked for on 2026-11-13: "use it like a
+     companion, like the Claude or ChatGPT app"). The Tutor below is right
+     inside a project, where every exchange is study; it is wrong for "hey, I
+     have ten minutes, what should I do", which is what the space that belongs
+     to no project is for. Same honesty rules, different register: it answers
+     the size of what was asked, and it carries the thread of your work across
+     conversations because it can now go and read it. */
+  {
+    id: "companion",
+    name: "Companion",
+    blurb: "Warm and plain-spoken, knows your work, sized to the question",
+    builtin: true,
+    temperature: 0.7,
+    prompt:
+      "You are a study companion to one self-taught learner — the same one every day, across all of their " +
+      "projects. Talk like a thoughtful friend who happens to know the subject well: plain words, no " +
+      "performance, no flattery. Match the size of the answer to the size of the question — a sentence for " +
+      "a quick one, real depth when they ask for it. You know their work: their decks, their journal, their " +
+      "exams and what you have talked about before. Use it the way a friend who remembers would — pick up " +
+      "threads, notice patterns, connect today to last week — without reciting it back at them. When they " +
+      "are stuck, help them think rather than handing over the answer, unless they ask for it outright. " +
+      "Say plainly when you do not know." +
+      FORMAT
+  },
   {
     id: "tutor",
     name: "Tutor",
@@ -107,7 +131,12 @@ export const PERSONAS: Persona[] = [
 ];
 
 export const DEFAULT_PERSONA_ID = "tutor";
+/** What a new chat in the personal space talks as. */
+export const COMPANION_PERSONA_ID = "companion";
 
 export function getPersona(id: string): Persona {
-  return PERSONAS.find((p) => p.id === id) || PERSONAS[0];
+  /* An unknown id falls back to the tutor by name, not to the head of the
+     list — the companion now sits first, and a thread whose persona was
+     deleted should not change register silently. */
+  return PERSONAS.find((p) => p.id === id) || PERSONAS.find((p) => p.id === DEFAULT_PERSONA_ID)!;
 }

@@ -31,7 +31,7 @@ export interface EffortBudget {
   /** Whether the second, cheaper follow-up request is worth making. */
   followups: boolean;
   /**
-   * Rounds of tool use allowed in agent mode. START-HERE §2.2 named the effort
+   * The base for rounds of tool use. START-HERE §2.2 named the effort
    * dial as where an agent loop would land, and this is that landing: the dial
    * already meant "how much is one message allowed to cost", and a round of
    * tool use is a whole request, so it belongs to the same budget as history
@@ -46,8 +46,8 @@ export interface EffortBudget {
    * One line for the chip's tooltip, in plain words.
    *
    * Says nothing about lookups. Effort is read by every mode, but `agentSteps`
-   * only means something in agent and deep — a blurb that promised "up to
-   * three lookups" while the thread was set to Direct was describing a budget
+   * only means something in Auto and Deep — a blurb that promised "up to
+   * three lookups" while the thread was set to Quick was describing a budget
    * that could not be spent. The lookup sentence is appended by the chip,
    * which is the only place that knows the mode.
    */
@@ -101,6 +101,18 @@ export function deepSteps(agentSteps: number): number {
 }
 
 /**
+ * The ceiling the loop is given for a route — Deep's for both, which is what
+ * voice always had. Auto may open a plan when a request turns out to be
+ * several steps, and a plan that runs out of rounds before its own last item
+ * is worse than none; a plain answer spends none of it, so the ceiling costs
+ * nothing until it is needed. Lives here so the Tools menu quotes the number
+ * the loop is actually handed.
+ */
+export function roundsFor(agentSteps: number): number {
+  return deepSteps(agentSteps);
+}
+
+/**
  * What this effort buys *in the mode currently selected*, as one sentence.
  *
  * The two chips sit side by side in the composer and both look like cost
@@ -111,7 +123,7 @@ export function deepSteps(agentSteps: number): number {
  */
 export function effortMeans(effort: Effort, mode: ChatMode): string {
   const b = budgetFor(effort);
-  /* Image mode makes one request like Direct, but saying "no lookups" there
+  /* Image mode makes one request like Quick, but saying "no lookups" there
      would answer a question nobody asked: what effort buys when the reply is
      a picture is how much of the thread the model is reminded of, not how
      much it writes. */
@@ -119,7 +131,11 @@ export function effortMeans(effort: Effort, mode: ChatMode): string {
   /* A clip is one job whatever the effort; the dials that matter — length,
      resolution, sound — and its price are beside the composer. */
   if (mode === "video") return "A clip is one request whatever the effort. Its length, resolution, sound and price are beside the composer.";
-  if (mode === "direct") return b.blurb + " No lookups — Direct mode answers in one request.";
-  const n = mode === "deep" ? deepSteps(b.agentSteps) : b.agentSteps;
-  return `${b.blurb} In ${mode === "deep" ? "Deep" : "Agent"} mode it also sets the lookup budget: up to ${n}, each one a request.`;
+  if (mode === "quick") return b.blurb + " No lookups — Quick answers in one request.";
+  const n = roundsFor(b.agentSteps);
+  if (mode === "deep") return `${b.blurb} In Deep mode it also sets the lookup budget: up to ${n}, each one a request.`;
+  /* Auto's sentence has to say both halves, because the half people worry
+     about is the first: a plain question does not get dearer for being asked
+     in a mode that could look things up. */
+  return `${b.blurb} In Auto a plain question is still one request; one that needs looking things up may take up to ${n}, each one a request.`;
 }

@@ -243,11 +243,11 @@
 .chat-head {
   display: flex;
   align-items: center;
-  gap: var(--s-2);
+  gap: var(--s-1);
   padding: var(--s-2) calc(var(--gutter) - var(--s-2));
   border-bottom: 1px solid var(--rule-soft);
   flex: 0 0 auto;
-  min-height: 44px;
+  min-height: 48px;
 }
 .chat-title {
   font-family: var(--serif);
@@ -264,7 +264,7 @@
   border-radius: var(--r-1);
   cursor: text;
   min-width: 0;
-  max-width: 40%;
+  max-width: 60%;
 }
 .chat-title:hover {
   background: var(--surface-2);
@@ -276,7 +276,6 @@
   display: flex;
   gap: var(--s-2);
   align-items: center;
-  margin-right: auto;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -301,6 +300,40 @@
 .chat-headbtn {
   font-size: var(--t-2xs);
   padding: var(--s-2);
+}
+/* Icon-only in the conversation head: pin and settings are glyphs everyone
+   already reads, and two labelled buttons beside a title made the head a
+   toolbar. Ghost at rest, like the composer's glyphs. */
+.chat-headbtn.icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink-3);
+}
+.chat-headbtn.icon:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.chat-headbtn.icon.on {
+  color: var(--amber);
+}
+.chat-head-gap {
+  flex: 1;
+}
+/* What the thread has cost so far — a number, not a control, so it is set
+   like a folio rather than a button. */
+.head-spend {
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  color: var(--ink-3);
+  padding: 0 var(--s-2);
+  white-space: nowrap;
 }
 
 /* ------------------------------------------------------------ context -- */
@@ -472,19 +505,29 @@
   margin-bottom: var(--s-6);
   position: relative;
 }
+/* Your message sits on the right, in a bubble; the reply is the page. Who is
+   speaking is said by where the words are, which is why neither turn carries
+   a label any more — "YOU" and "ASSISTANT" in small caps above every message
+   were the one thing on screen that read like a log file. */
+.turn.user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-bottom: var(--s-5);
+}
+.turn.user .att-row {
+  justify-content: flex-end;
+}
 .turn-head {
-  font-family: var(--mono);
   font-size: var(--t-3xs);
-  letter-spacing: var(--track-caps);
-  text-transform: uppercase;
   color: var(--ink-3);
-  margin-bottom: var(--s-2);
+  margin-bottom: var(--s-1);
   display: flex;
   align-items: center;
   gap: var(--s-2);
 }
-.turn.user .turn-head {
-  color: var(--accent);
+.turn-star {
+  color: var(--amber);
 }
 /* A long answer's contents. Set like the front of a chapter: the summary
    line is always there, the list unfolds. Sans, quiet, at the measure — it
@@ -585,20 +628,21 @@
   margin-left: calc(-1 * (2px + var(--s-4)));
   transition: border-color var(--fast);
 }
-/* What you asked is in a soft prompt card; the reply is the reading surface. */
+/* What you asked is a bubble on the right, in the face the machinery uses;
+   the reply is the reading surface, in the book's. Flat — a shadow under
+   every question made the page look stacked with cards. */
 .turn.user .turn-body {
   font-family: var(--sans);
-  font-size: var(--t-sm);
-  line-height: 1.6;
+  font-size: calc(var(--t-md) * var(--text-scale));
+  line-height: 1.55;
   color: var(--ink);
   background: var(--surface-2);
-  border: 1px solid var(--rule-soft);
-  border-radius: var(--r-3);
+  border: 1px solid transparent;
+  border-radius: var(--r-4);
   padding: var(--s-3) var(--s-4);
-  max-width: var(--measure);
+  max-width: min(85%, var(--measure));
   white-space: pre-wrap;
   word-break: break-word;
-  box-shadow: var(--lift-1);
   margin-left: 0;
 }
 .turn.user.starred .turn-body {
@@ -1001,12 +1045,19 @@
 /* turn actions */
 .turn-acts {
   display: flex;
-  gap: var(--s-1);
+  gap: 2px;
   align-items: center;
-  margin-top: var(--s-3);
+  margin-top: var(--s-2);
+  margin-left: calc(-1 * var(--s-2));
   opacity: 0;
   transition: opacity var(--fast);
   flex-wrap: wrap;
+  max-width: var(--measure);
+}
+.turn.user .turn-acts {
+  margin-left: 0;
+  margin-right: calc(-1 * var(--s-1));
+  justify-content: flex-end;
 }
 .turn:hover .turn-acts,
 .turn-acts:focus-within {
@@ -1015,40 +1066,50 @@
 .turn-acts.always {
   opacity: 1;
 }
+/* A glyph you can press, ghost at rest: a row of outlined, shadowed caps
+   buttons under every reply was a toolbar, and a toolbar under every
+   paragraph was the loudest thing in the conversation. The words live in the
+   tooltips; the one kept on the row (`.tact-word`) is the action this app
+   exists for. */
 .tact {
-  font-family: var(--mono);
-  font-size: var(--t-3xs);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 4px var(--s-2);
-  border-radius: var(--r-1);
-  border: 1px solid var(--rule-soft);
-  background: var(--surface);
+  font-family: var(--sans);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  height: 30px;
+  min-width: 30px;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-2);
+  border: 0;
+  background: transparent;
   color: var(--ink-3);
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 6px;
   cursor: pointer;
-  box-shadow: var(--lift-1);
-  transition: color var(--fast), background var(--fast), border-color var(--fast), transform var(--fast);
+  transition: color var(--fast), background var(--fast), transform var(--fast);
 }
-.tact:hover {
+.tact:hover:not(:disabled) {
   color: var(--ink);
   background: var(--surface-2);
-  border-color: var(--rule);
 }
-.tact:active {
-  transform: scale(0.96);
+.tact:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.tact:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 .tact.on {
-  color: var(--amber);
-  background: var(--amber-tint);
-  border-color: var(--amber-edge);
+  color: var(--ink);
+  background: var(--surface-2);
 }
 .tact.danger:hover {
   color: var(--red);
   background: var(--red-tint);
-  border-color: var(--red-edge);
+}
+.tact-word {
+  padding: 0 var(--s-3) 0 var(--s-2);
 }
 /* Regenerate is a split button: the label redoes the reply as-is, the caret
    opens the same upward popover ModelChip uses, but scoped to one variant —
@@ -1065,9 +1126,9 @@
 .regenmenu-caret {
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
-  border-left: 0;
-  padding-left: 4px;
-  padding-right: 4px;
+  min-width: 18px;
+  padding-left: 2px;
+  padding-right: 2px;
 }
 
 /* ------------------------------------------------------------ listening -- */
@@ -1077,7 +1138,6 @@
 .listenmenu .tact.playing {
   color: var(--accent);
   background: var(--accent-10);
-  border-color: var(--accent-45);
 }
 .listenmenu .tact[aria-busy="true"] svg {
   animation: listen-pulse 1.1s var(--ease) infinite;
@@ -1199,34 +1259,109 @@
   min-width: 3.4em;
   justify-content: center;
 }
+/* "2 / 3" — which version of this reply you are reading. First on the row,
+   where every chat app has taught people to look for it. */
 .variant-nav {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--s-1);
-  font-family: var(--mono);
-  font-size: var(--t-3xs);
+  gap: 2px;
+  font-family: var(--sans);
+  font-size: var(--t-2xs);
   color: var(--ink-3);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-1);
-  padding: 2px var(--s-1);
+  margin-right: var(--s-1);
 }
 .variant-nav button {
+  width: 24px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
+  border-radius: var(--r-2);
   color: var(--ink-2);
   cursor: pointer;
-  padding: 1px 3px;
-  font-size: var(--t-3xs);
+  padding: 0;
+}
+.variant-nav button:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--ink);
 }
 .variant-nav button:disabled {
   opacity: 0.3;
   cursor: default;
 }
+.vnav-prev {
+  transform: rotate(90deg);
+}
+.vnav-next {
+  transform: rotate(-90deg);
+}
+.vnav-count {
+  font-variant-numeric: tabular-nums;
+  min-width: 2.6em;
+  text-align: center;
+}
+/* The receipt rides at the end of the action row — what answered, how long,
+   what it cost — and appears with it. */
 .turn-foot {
   font-family: var(--mono);
   font-size: var(--t-3xs);
   color: var(--ink-3);
-  margin-top: var(--s-2);
+  margin-left: auto;
+  padding-left: var(--s-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+/* Everything a reply needs now and then rather than every time. Opens
+   upward: it is pressed most under the newest reply, which sits on the
+   composer, and a menu that dropped down would open under the box. */
+.tmore {
+  position: relative;
+  display: inline-flex;
+}
+.tmore-pop {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  min-width: 13rem;
+  padding: var(--s-1);
+  background: var(--surface-elevated);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-3);
+  box-shadow: var(--lift-2);
+  display: flex;
+  flex-direction: column;
+}
+.turn.user .tmore-pop {
+  left: auto;
+  right: 0;
+}
+.tmore-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border: 0;
+  border-radius: var(--r-2);
+  background: transparent;
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: var(--t-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.tmore-item:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.tmore-item.danger:hover {
+  color: var(--red);
+  background: var(--red-tint);
 }
 .caret {
   display: inline-block;
@@ -1248,40 +1383,32 @@
 }
 
 /* ----------------------------------------------------------- followups -- */
+/* Suggested next questions, as things you can press rather than a list you
+   read: the same pill the starters on the empty page use. */
 .followups {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--s-1);
-  margin: 0 0 var(--s-6);
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin: calc(-1 * var(--s-2)) 0 var(--s-6);
   max-width: var(--measure);
 }
 .fchip {
-  background: none;
-  border: none;
-  border-bottom: 1px solid var(--rule-soft);
-  border-radius: 0;
+  background: var(--surface);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r-3);
   color: var(--ink-2);
-  font-family: var(--serif);
-  font-size: var(--t-sm);
-  line-height: 1.5;
-  padding: var(--s-3) 0;
+  font-family: var(--sans);
+  font-size: var(--t-xs);
+  line-height: 1.45;
+  padding: var(--s-2) var(--s-3);
   cursor: pointer;
   text-align: left;
-  width: 100%;
-  transition: color var(--fast);
-}
-.fchip::before {
-  content: "→";
-  color: var(--ink-3);
-  margin-right: var(--s-2);
-  font-family: var(--sans);
+  transition: color var(--fast), border-color var(--fast), background var(--fast);
 }
 .fchip:hover {
-  color: var(--accent);
-}
-.fchip:hover::before {
-  color: var(--accent);
+  color: var(--ink);
+  border-color: var(--accent-45);
+  background: var(--surface-2);
 }
 
 /* ------------------------------------------------------------ composer -- */
@@ -1784,119 +1911,157 @@
 /* The model browser itself opens in a dialog (ui/ModelDialog.tsx, styled in
    style.css). `.modelpop` is still the Listen button's popover. */
 
-/* --------------------------------------------------------- empty state -- */
-.chat-empty {
+/* ------------------------------------------------------ the empty page -- */
+/* A greeting, a line that shows it knows where you are, the box in the middle
+   of the page, and a few things worth asking. `margin: auto` on the inner
+   column rather than `justify-content: center` on the page: a centred flex
+   column taller than its box is clipped at the top and cannot be scrolled
+   to, and a phone held sideways is exactly that. */
+.chat-home {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding: var(--s-7) var(--gutter);
   overflow-y: auto;
+  padding: var(--s-6) var(--gutter) var(--s-5);
 }
-.chat-empty-icon {
-  width: 54px;
-  height: 54px;
-  border-radius: var(--r-full);
-  background: var(--accent-10);
-  border: 1px solid var(--accent-45);
-  color: var(--accent);
+.chat-home-inner {
+  width: 100%;
+  max-width: var(--page-w);
+  margin: auto;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: var(--s-4);
-  box-shadow: var(--lift-1);
+  flex-direction: column;
 }
-.chat-empty h2 {
+.chat-hello {
   font-family: var(--serif);
-  font-weight: 600;
-  font-size: var(--t-xl);
+  font-weight: 500;
+  font-size: var(--t-2xl);
   letter-spacing: var(--track-tight);
+  line-height: 1.15;
   color: var(--ink);
-  margin: 0 0 var(--s-2);
   text-align: center;
+  margin: 0 0 var(--s-2);
 }
-.chat-empty p {
+.chat-hello-sub {
   font-family: var(--serif);
-  color: var(--ink-2);
   font-size: var(--t-read);
   line-height: var(--lh-body);
-  margin: 0 0 var(--s-6);
-  max-width: 48ch;
+  color: var(--ink-3);
   text-align: center;
+  margin: 0 auto var(--s-5);
+  max-width: 46ch;
+  text-wrap: balance;
 }
-.starters {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--s-3);
-  width: 100%;
-  max-width: var(--page-wide);
+.chat-hello-sub.warn {
+  color: var(--ink-2);
 }
-.starter {
-  background: var(--surface);
-  border: 1px solid var(--border-subtle, var(--rule-soft));
-  border-radius: var(--r-3);
-  padding: var(--s-4);
-  cursor: pointer;
-  text-align: left;
-  color: inherit;
-  font: inherit;
+.chat-hello-setup {
   display: flex;
-  align-items: flex-start;
-  gap: var(--s-3);
-  box-shadow: var(--lift-1);
-  transition: background var(--fast), border-color var(--fast), transform var(--fast), box-shadow var(--fast);
-}
-.starter:hover:not(:disabled) {
-  background: var(--surface-2);
-  border-color: var(--accent-45);
-  transform: translateY(-2px);
-  box-shadow: var(--lift-2);
-}
-.starter:active:not(:disabled) {
-  transform: scale(0.98);
-}
-.starter-icon {
-  flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--r-2);
-  background: var(--accent-10);
-  color: var(--accent);
-  display: flex;
-  align-items: center;
   justify-content: center;
+  margin: calc(-1 * var(--s-2)) 0 var(--s-5);
 }
-.starter-content {
-  flex: 1;
-  min-width: 0;
+/* The composer, borrowed: it keeps every behaviour and loses only the page
+   padding it has at the foot of a conversation. */
+.chat-home .composer {
+  padding: 0;
+  background: none;
 }
-.starter .t {
-  font-family: var(--serif);
-  font-weight: 600;
-  font-size: var(--t-md);
-  color: var(--ink);
-  display: block;
-  margin-bottom: 2px;
+.chat-home .composer-box textarea {
+  min-height: 56px;
 }
-.starter .s {
+.chat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+}
+.chip-starter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-full);
+  border: 1px solid var(--rule-soft);
+  background: transparent;
+  color: var(--ink-2);
   font-family: var(--sans);
   font-size: var(--t-xs);
-  color: var(--ink-3);
-  line-height: 1.45;
-  display: block;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--fast), border-color var(--fast), background var(--fast), transform var(--fast);
 }
-.starter-arrow {
+.chip-starter svg {
+  color: var(--ink-3);
+  transition: color var(--fast);
+}
+.chip-starter:hover {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--rule);
+}
+.chip-starter:hover svg {
+  color: var(--accent);
+}
+.chip-starter:active {
+  transform: scale(0.97);
+}
+/* A count on a starter — what is due, what is failing — set as a figure. */
+.chip-starter .n {
+  font-family: var(--mono);
+  font-size: var(--t-3xs);
+  color: var(--ink-3);
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+  padding: 1px 6px;
+}
+.chat-recent {
+  margin: var(--s-6) auto 0;
+  width: 100%;
+  max-width: 30rem;
+}
+.chat-recent-head {
+  font-family: var(--sans);
+  font-size: var(--t-2xs);
+  font-weight: 600;
+  color: var(--ink-3);
+  margin: 0 0 var(--s-1) var(--s-3);
+}
+.chat-recent-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  padding: var(--s-2) var(--s-3);
+  border: 0;
+  border-radius: var(--r-2);
+  background: transparent;
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: var(--t-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--fast), color var(--fast);
+}
+.chat-recent-row svg {
   flex: 0 0 auto;
   color: var(--ink-3);
-  opacity: 0;
-  transition: opacity var(--fast), transform var(--fast);
-  margin-top: 4px;
 }
-.starter:hover .starter-arrow {
-  opacity: 1;
-  color: var(--accent);
-  transform: translateX(2px);
+.chat-recent-row .t {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-recent-row .w {
+  flex: 0 0 auto;
+  font-size: var(--t-2xs);
+  color: var(--ink-3);
+}
+.chat-recent-row:hover {
+  background: var(--surface);
+  color: var(--ink);
 }
 
 /* -------------------------------------------------- conversation drawer -- */
@@ -2015,8 +2180,8 @@
   .chat-title {
     max-width: 55%;
   }
-  .starters {
-    grid-template-columns: 1fr;
+  .chat-hello {
+    font-size: var(--t-xl);
   }
 }
 
@@ -2218,6 +2383,7 @@
 .atrace-toggle {
   display: inline-flex;
   align-items: center;
+  max-width: 100%;
   gap: var(--s-2);
   padding: var(--s-1) var(--s-2);
   margin-left: calc(var(--s-2) * -1);
@@ -2240,6 +2406,41 @@
    the accent and pulses. Finished, it recedes to a footnote. */
 .atrace.live .atrace-toggle {
   color: var(--accent);
+}
+/* One line that says what is happening — "Searching your journal · attention"
+   — truncated rather than wrapped, so a long query cannot push the reply
+   down while it is being written. */
+.atrace-line {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The words shimmer while the work runs: the one moving thing on the page,
+   moving because something is happening. Painted from two inks, so it
+   re-prints with the theme. */
+.atrace.live .atrace-line {
+  background: linear-gradient(90deg, var(--accent) 0%, var(--ink) 45%, var(--accent) 90%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: atrace-shimmer 1.8s linear infinite;
+}
+@keyframes atrace-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .atrace.live .atrace-line {
+    animation: none;
+    background: none;
+    color: var(--accent);
+  }
 }
 .atrace.live .atrace-toggle svg {
   animation: atrace-pulse 1.4s var(--ease) infinite;

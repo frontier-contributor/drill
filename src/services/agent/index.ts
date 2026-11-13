@@ -8,8 +8,9 @@
  * a server endpoint later means changing `chat` here and nothing else.
  * ========================================================================== */
 import * as AI from "@/services/ai";
+import { catalogueEntry } from "@/services/pricing";
 import { runAgent, type AgentResult } from "./loop";
-import { protocolFor } from "./protocol";
+import { isToolRefusal, protocolFor } from "./protocol";
 import { runTool, toolsFor } from "./tools";
 import type { AgentEvent } from "@/types/agent";
 import type { BackendType, ChatMessage, Citation } from "@/types";
@@ -31,6 +32,9 @@ export interface AgentTurnOpts {
   turnId: string;
   /** Which backend this thread resolved to, which decides the protocol. */
   backend: BackendType;
+  /** The model the request will actually reach. The catalogue's word on
+   *  whether it takes tools decides between the two protocols. */
+  model?: string;
   maxSteps: number;
   /** False for the scratch thread — no decks, no journal, no exams, so the
    *  project tools would only offer the model things it cannot use. */
@@ -39,11 +43,12 @@ export interface AgentTurnOpts {
    *  model being asked nicely, because "please do not write" is not a
    *  permission model. */
   allowWrites: boolean;
-  /** Deep mode: plan first, close every step, then answer. "auto" is voice:
-   *  a plan is offered, not required. */
+  /** Deep mode: plan first, close every step, then answer. "auto" is Auto and
+   *  voice: a plan is offered, not required. */
   planning?: boolean | "auto";
-  /** Voice mode may search the web as a tool. Only honoured where the backend
-   *  can search — the caller asks availability() and passes the answer. */
+  /** Whether a web search is one of the tools. Only honoured where the
+   *  backend can search — the caller asks availability() and passes the
+   *  answer. */
   web?: boolean;
   /** Sources a web lookup drew on, for the turn's receipt. */
   onCitations?: (cs: Citation[]) => void;
@@ -90,7 +95,7 @@ export function runAgentTurn(opts: AgentTurnOpts): Promise<AgentResult> {
             temperature: 0.2,
             maxTokens: 500,
             signal,
-            label: "voice web",
+            label: "web lookup",
             actions: ["web"],
             onCitations: (cs) => {
               citations = cs;
@@ -103,42 +108,57 @@ export function runAgentTurn(opts: AgentTurnOpts): Promise<AgentResult> {
         return { text, citations };
       }
     : undefined;
-  return runAgent({
-    system: opts.system,
-    history: opts.history,
-    tools,
-    protocol: protocolFor(opts.backend),
-    ctx: {
-      projectId: opts.projectId,
-      conversationId: opts.conversationId,
-      turnId: opts.turnId,
+  const protocol = protocolFor(opts.backend, opts.model ? catalogueEntry(opts.model)?.tools : undefined);
+  /* Anything past the first round's request means the gateway took the tools,
+     so a later failure is a real one and is not retried on another protocol —
+     doing it again from the top would repeat lookups already on screen. */
+  let spoke = false;
+  const attempt = (p: typeof protocol) =>
+    runAgent({
+      system: opts.system,
+      history: opts.history,
+      tools,
+      protocol: p,
+      ctx: {
+        projectId: opts.projectId,
+        conversationId: opts.conversationId,
+        turnId: opts.turnId,
+        signal: opts.signal,
+        web
+      },
+      maxSteps: Math.max(1, opts.maxSteps),
+      allowWrites: opts.allowWrites,
+      planning,
+      /* Bound here rather than passed through, so every step of the loop lands
+         on the run transcript and the usage ledger the same way a single call
+         does. A loop whose steps 2..n were invisible to the meter would
+         under-report its own cost by most of it. */
+      chat: (messages, chatOpts) =>
+        AI.chat(
+          messages,
+          {
+            ...chatOpts,
+            /* Think only. Web stays a tool (see AgentTurnOpts.actions) — folding
+               the plugin into every round would search the web while the model
+               was reading a card, and a tools-plus-plugin request is a second
+               search the model did not ask for. */
+            actions: (opts.actions || []).filter((a) => a === "think")
+          },
+          opts.override
+        ),
+      runTool,
+      temperature: opts.temperature,
+      maxTokens: opts.maxTokens,
       signal: opts.signal,
-      web
-    },
-    maxSteps: Math.max(1, opts.maxSteps),
-    allowWrites: opts.allowWrites,
-    planning,
-    /* Bound here rather than passed through, so every step of the loop lands
-       on the run transcript and the usage ledger the same way a single call
-       does. A loop whose steps 2..n were invisible to the meter would
-       under-report its own cost by most of it. */
-    chat: (messages, chatOpts) =>
-      AI.chat(
-        messages,
-        {
-          ...chatOpts,
-          /* Think only. Web stays a tool (see AgentTurnOpts.actions) — folding
-             the plugin into every round would search the web while the model
-             was reading a card, and a tools-plus-plugin request is a second
-             search the model did not ask for. */
-          actions: (opts.actions || []).filter((a) => a === "think")
-        },
-        opts.override
-      ),
-    runTool,
-    temperature: opts.temperature,
-    maxTokens: opts.maxTokens,
-    signal: opts.signal,
-    onEvent: opts.onEvent
+      onEvent: (e) => {
+        if (e.kind !== "thinking") spoke = true;
+        opts.onEvent?.(e);
+      }
+    });
+
+  return attempt(protocol).catch((e) => {
+    if (protocol !== "native" || spoke || opts.signal?.aborted || !isToolRefusal(e)) throw e;
+    console.warn(`${opts.model || "this model"} refused tools; answering on the text protocol instead.`, e);
+    return attempt("text");
   });
 }

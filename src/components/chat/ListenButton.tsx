@@ -173,7 +173,7 @@ export default function ListenButton({
         aria-pressed={sounding}
         aria-busy={status === "loading" || undefined}
       >
-        <Icon name={icon} size={11} />
+        <Icon name={icon} size={14} />
       </button>
       <button
         className="tact regenmenu-caret"

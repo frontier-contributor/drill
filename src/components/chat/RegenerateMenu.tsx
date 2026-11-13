@@ -53,9 +53,9 @@ export default function RegenerateMenu({
         onClick={() => onRegenerate()}
         disabled={busy}
         title="Regenerate with the current model"
+        aria-label="Regenerate"
       >
-        <Icon name="sparkle" size={11} />
-        <span>Regenerate</span>
+        <Icon name="refresh" size={14} />
       </button>
       <button
         className="tact regenmenu-caret"

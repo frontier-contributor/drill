@@ -78,6 +78,7 @@ export const DEFAULT_SETTINGS: Settings = {
   effort: "medium",
   autonomy: "assisted",
   followups: false,
+  webByDefault: true,
   autoTitle: true,
   theme: "night",
   accent: "blue",

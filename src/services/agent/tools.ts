@@ -60,8 +60,14 @@ import { gapsFrom, renderGaps } from "@/lib/gaps";
 import { examMisses } from "@/lib/examScope";
 import { normMemType } from "@/services/ai";
 import * as examStore from "@/services/examStore";
+import * as chatStore from "@/services/chatStore";
+import * as figureShelf from "@/services/figures";
+import { isPersonalProject } from "@/lib/migrate";
+import { keptLabel } from "@/lib/visuals/keep";
+import { chatDigest, examDigest } from "@/lib/digest";
 import { MEMORY_TYPES_ENUM, type PlanItem, type Tool, type ToolContext, type ToolResult } from "@/types/agent";
-import type { Card, Deck, Memory, MemoryScope, SRSState } from "@/types";
+import type { Card, Deck, Memory, MemoryScope, Project, SRSState } from "@/types";
+import type { Conversation } from "@/types/chat";
 
 /* ------------------------------------------------------------ arg reading */
 
@@ -151,6 +157,114 @@ function matches(queryWords: string[], text: string): number {
   return hits / queryWords.length;
 }
 
+/* ------------------------------------------------------------------ where */
+
+/** The projects a read looks inside. `wide` when that is more than one, so
+ *  every line of the result says which body of work it came from — a card
+ *  from the wrong project, unlabelled, is a confident wrong answer. */
+interface Where {
+  ids: string[];
+  wide: boolean;
+}
+
+/** The bodies of work: every project but the personal space and the archived
+ *  ones, oldest first — the rule services/projects.list() keeps for the
+ *  switcher, restated because that module is a UI import. */
+function bodiesOfWork(): Project[] {
+  return Object.values(store.projects())
+    .filter((p) => !isPersonalProject(p.id) && !p.archived)
+    .sort((a, b) => a.created - b.created);
+}
+
+function projectName(id: string): string {
+  return store.projects()[id]?.name || "a project";
+}
+
+/** Shared by every read that can look somewhere other than its own thread's
+ *  project. Described once so the model is told the same thing by each. */
+const PROJECT_PARAM = {
+  type: "string" as const,
+  description:
+    'A project by name, to look inside one other than this conversation\'s, or "all" for every one. ' +
+    "Leave it out to stay where the conversation is — in the personal space that already means all of them."
+};
+
+/**
+ * Which projects a call looks inside.
+ *
+ * A thread in a project reads that project unless the model names another.
+ * The personal space is why this is a function: it belongs to no body of
+ * work, so "what did I get wrong this week", asked there, means across all of
+ * them. It used to mean the personal space's own starter deck — which is to
+ * say nothing — so the companion you talk to between projects could see none
+ * of the work it was meant to be a companion to. A named project is matched by
+ * id or by name, forgivingly, because the model only ever saw the name.
+ */
+function whereFor(args: Record<string, unknown>, ctx: ToolContext): Where | ToolResult {
+  const named = str(args, "project");
+  const lower = named.toLowerCase();
+  if (named && lower !== "all") {
+    const all = Object.values(store.projects());
+    const loose = all.filter((p) => p.name.toLowerCase().includes(lower));
+    const hit =
+      all.find((p) => p.id === named) || all.find((p) => p.name.toLowerCase() === lower) || (loose.length === 1 ? loose[0] : undefined);
+    if (!hit) {
+      const names = bodiesOfWork().map((p) => p.name);
+      return miss(`No project called "${named}". ${names.length ? "There are: " + names.join(", ") + "." : "There are no projects yet."}`);
+    }
+    return { ids: [hit.id], wide: false };
+  }
+  if (lower === "all" || isPersonalProject(ctx.projectId)) {
+    /* The personal space's own memory, notes and journal are part of what
+       "everything" means, so it rides along with the bodies of work. */
+    const ids = [...new Set([ctx.projectId, ...bodiesOfWork().map((p) => p.id)])].filter((id) => store.projects()[id]);
+    return { ids, wide: ids.length > 1 };
+  }
+  return { ids: [ctx.projectId], wide: false };
+}
+
+function isWhere(w: Where | ToolResult): w is Where {
+  return Array.isArray((w as Where).ids);
+}
+
+/** " · Project" on a line from a wide search, nothing on a narrow one. */
+function from(w: Where, projectId: string | null | undefined): string {
+  return w.wide && projectId ? ` · ${projectName(projectId)}` : "";
+}
+
+/** A clip of prose for a one-line result. */
+function clipText(text: string, n: number): string {
+  const t = U.stripTags(text).replace(/\s+/g, " ").trim();
+  return t.length > n ? t.slice(0, n - 1) + "…" : t;
+}
+
+/** The sentence around the first query word, so a hit in a long chat shows
+ *  why it matched rather than how the chat began. */
+function snippetAround(text: string, words: string[], n = 160): string {
+  const flat = text.replace(/\s+/g, " ");
+  const lower = flat.toLowerCase();
+  let at = -1;
+  for (const w of words) {
+    at = lower.indexOf(w);
+    if (at >= 0) break;
+  }
+  if (at < 0) return clipText(flat, n);
+  const start = Math.max(0, at - 50);
+  const out = flat.slice(start, start + n).trim();
+  return (start ? "…" : "") + out + (start + n < flat.length ? "…" : "");
+}
+
+/** Every conversation's words as one haystack. Capped per thread so one long
+ *  transcript cannot cost more to score than the rest put together. */
+function chatText(c: Conversation): string {
+  let out = c.title;
+  for (const t of c.turns) {
+    out += "\n" + chatStore.activeContent(t);
+    if (out.length > 24_000) break;
+  }
+  return out;
+}
+
 /* ------------------------------------------------------------ write gating */
 
 /** Whether the loop may change anything in this project. Resolved the same way
@@ -169,49 +283,100 @@ function blockedByManual(what: string): ToolResult {
 
 /* ============================================================ ORIENTATION */
 
+/** One body of work in a line — the shape a listing of projects is read in. */
+function projectLine(p: Project): string {
+  const decks = store.decksOf(p.id);
+  const now = Date.now();
+  let cards = 0;
+  let due = 0;
+  let failing = 0;
+  for (const d of decks) {
+    for (const c of d.cards) {
+      cards++;
+      const st = d.srs[c.id];
+      if (st && st.reps) {
+        if (st.due <= now) due++;
+        if (store.isLeech(st)) failing++;
+      }
+    }
+  }
+  const entries = journalStore.listForProject(p.id).length;
+  return (
+    `- ${p.name}${p.goals ? ` — goal: ${clipText(p.goals, 120)}` : ""}. ` +
+    `${decks.length} deck${decks.length === 1 ? "" : "s"}, ${cards} cards, ${due} due, ${failing} failing; ` +
+    `${entries} journal entr${entries === 1 ? "y" : "ies"}.`
+  );
+}
+
+function overviewOf(projectId: string): ToolResult {
+  const p = store.projects()[projectId];
+  if (!p) return miss("That project no longer exists.");
+  const decks = store.decksOf(projectId);
+  const now = Date.now();
+  let due = 0;
+  let leeches = 0;
+  let unseen = 0;
+  let total = 0;
+  for (const d of decks) {
+    for (const c of d.cards) {
+      total++;
+      const st = d.srs[c.id];
+      if (!st || !st.reps) unseen++;
+      else {
+        if (st.due <= now) due++;
+        if (store.isLeech(st)) leeches++;
+      }
+    }
+  }
+  const entries = journalStore.listForProject(projectId);
+  const mem = poolFor("both", projectId);
+  const topics = memoryStore.topics({ projectId });
+  return ok(
+    [
+      `Project: ${p.name}${p.blurb ? ` — ${p.blurb}` : ""}`,
+      p.goals ? `Their stated goal: ${p.goals}` : "No goal written for this project yet.",
+      `Decks (${decks.length}): ${decks.map((d) => `[deck:${d.id}] ${d.name} (${d.cards.length})`).join(", ") || "none"}`,
+      `Cards: ${total} total, ${due} due now, ${leeches} being failed repeatedly, ${unseen} never seen.`,
+      `Journal: ${entries.length} entries, ${entries.filter((e) => e.summary).length} written up.`,
+      `Memory: ${mem.filter((m) => m.scope === "project").length} for this project, ${mem.filter((m) => m.scope === "global").length} global.`,
+      topics.length ? `Memory topics: ${topics.slice(0, 12).map((t) => `${t.topic} (${t.count})`).join(", ")}` : "No memory topics filed yet.",
+      `Insight log: ${store.notesOf(projectId).length} notes.`,
+      `Exams: ${examStore.isLoaded() ? examStore.listForProject(projectId).length : "still loading"}. Figures kept: ${figureShelf.list(projectId).length}.`
+    ].join("\n")
+  );
+}
+
 const overview: Tool = {
   name: "overview",
   description:
-    "Where this project stands right now: the learner's stated goal, decks and sizes, what is due, what they are " +
-    "failing, journal and memory counts. Cheap and broad. Call it first when you do not know what you are looking at.",
+    "Where things stand right now: the learner's stated goal, decks and sizes, what is due, what they are failing, " +
+    "journal, memory, exam and figure counts. In the personal space, with no project named, it lists every project " +
+    "they have instead. Cheap and broad. Call it first when you do not know what you are looking at.",
   scope: "project",
   kind: "read",
-  schema: { properties: {}, required: [] },
-  run(_args, ctx) {
-    const p = store.projects()[ctx.projectId];
-    if (!p) return miss("That project no longer exists.");
-    const decks = store.decksOf(ctx.projectId);
-    const now = Date.now();
-    let due = 0;
-    let leeches = 0;
-    let unseen = 0;
-    let total = 0;
-    for (const d of decks) {
-      for (const c of d.cards) {
-        total++;
-        const st = d.srs[c.id];
-        if (!st || !st.reps) unseen++;
-        else {
-          if (st.due <= now) due++;
-          if (store.isLeech(st)) leeches++;
-        }
-      }
+  schema: { properties: { project: PROJECT_PARAM }, required: [] },
+  run(args, ctx) {
+    const named = str(args, "project");
+    const personal = isPersonalProject(ctx.projectId);
+    if ((personal && !named) || named.toLowerCase() === "all") {
+      const list = bodiesOfWork();
+      return ok(
+        [
+          personal ? "This conversation is in their personal space, which belongs to no project." : "Every project they have:",
+          list.length ? "Their projects:\n" + list.map(projectLine).join("\n") : "They have no projects yet.",
+          !list.length
+            ? ""
+            : personal
+              ? "Lookups here search all of them. Name one as `project` to look inside it alone."
+              : 'Lookups stay in this conversation\'s project unless you name another as `project`, or pass "all".'
+        ]
+          .filter(Boolean)
+          .join("\n")
+      );
     }
-    const entries = journalStore.listForProject(ctx.projectId);
-    const mem = poolFor("both", ctx.projectId);
-    const topics = memoryStore.topics({ projectId: ctx.projectId });
-    return ok(
-      [
-        `Project: ${p.name}${p.blurb ? ` — ${p.blurb}` : ""}`,
-        p.goals ? `Their stated goal: ${p.goals}` : "No goal written for this project yet.",
-        `Decks (${decks.length}): ${decks.map((d) => `${d.name} (${d.cards.length})`).join(", ") || "none"}`,
-        `Cards: ${total} total, ${due} due now, ${leeches} being failed repeatedly, ${unseen} never seen.`,
-        `Journal: ${entries.length} entries, ${entries.filter((e) => e.summary).length} written up.`,
-        `Memory: ${mem.filter((m) => m.scope === "project").length} for this project, ${mem.filter((m) => m.scope === "global").length} global.`,
-        topics.length ? `Memory topics: ${topics.slice(0, 12).map((t) => `${t.topic} (${t.count})`).join(", ")}` : "No memory topics filed yet.",
-        `Insight log: ${store.notesOf(ctx.projectId).length} notes.`
-      ].join("\n")
-    );
+    const w = whereFor(args, ctx);
+    if (!isWhere(w)) return w;
+    return overviewOf(w.ids[0]);
   }
 };
 
@@ -224,15 +389,18 @@ const standing: Tool = {
     "How this learner is actually doing, computed from the review log and from exams — recurring confusions, " +
     "the cards they are failing, and recent exam results. Recall cannot see this: it is derived, not written " +
     "down, and it changes as they review. Call it before diagnosing a weakness or deciding what they should " +
-    "work on next. It takes no arguments.",
+    "work on next.",
   scope: "project",
   kind: "read",
-  schema: { properties: {}, required: [] },
+  schema: { properties: { project: PROJECT_PARAM }, required: [] },
   maxChars: 3200,
-  run(_args, ctx) {
-    if (!store.projects()[ctx.projectId]) return miss("That project no longer exists.");
-    const decks = store.decksOf(ctx.projectId);
-    const gaps = gapsFrom([...store.logOf(decks), ...examMisses(ctx.projectId)], { limit: 6 });
+  run(args, ctx) {
+    const w = whereFor(args, ctx);
+    if (!isWhere(w)) return w;
+    if (!w.ids.some((id) => store.projects()[id])) return miss("That project no longer exists.");
+    const decks = w.ids.flatMap((id) => store.decksOf(id));
+    const deckLabel = (d: Deck) => (w.wide ? `${projectName(d.projectId)} › ${d.name}` : decks.length > 1 ? d.name : undefined);
+    const gaps = gapsFrom([...store.logOf(decks), ...w.ids.flatMap((id) => examMisses(id))], { limit: 6 });
     const failing = decks.flatMap((d) =>
       store
         .weakCardsOf(d, 40)
@@ -241,10 +409,16 @@ const standing: Tool = {
           return !!st && (store.isLeech(st) || st.lapses > 0);
         })
         .slice(0, 4)
-        .map((c) => cardLine(c, d.srs[c.id], decks.length > 1 ? d.name : undefined))
+        .map((c) => cardLine(c, d.srs[c.id], deckLabel(d)))
     );
-    const exams = examStore.isLoaded() ? examStore.listForProject(ctx.projectId).slice(0, 4) : [];
+    const exams = examStore.isLoaded()
+      ? w.ids
+          .flatMap((id) => examStore.listForProject(id))
+          .sort((a, b) => b.created - a.created)
+          .slice(0, 4)
+      : [];
     const parts: string[] = [];
+    if (w.wide) parts.push(`Across ${w.ids.length} spaces: ${w.ids.map(projectName).join(", ")}.`);
     if (!examStore.isLoaded()) {
       parts.push("Exams have not finished loading. An empty exam list right now is not 'they have never sat one'.");
     }
@@ -270,12 +444,12 @@ const standing: Tool = {
                 .slice(0, 3)
                 .map((q) => q.result!.missing[0] || q.prompt.slice(0, 80));
               const head = graded.length ? `${got}/${graded.length} got` : "not sat";
-              return `- ${e.title} (${U.ago(e.created)}): ${head}${missed.length ? `. Missed: ${missed.join("; ")}` : ""}`;
+              return `- [exam:${e.id}] ${e.title} (${U.ago(e.created)}${from(w, e.projectId)}): ${head}${missed.length ? `. Missed: ${missed.join("; ")}` : ""}`;
             })
             .join("\n")
       );
     } else if (examStore.isLoaded()) {
-      parts.push("No exams in this project.");
+      parts.push(w.wide ? "No exams anywhere yet." : "No exams in this project.");
     }
     return ok(parts.join("\n\n"));
   }
@@ -283,16 +457,18 @@ const standing: Tool = {
 
 /* ================================================================= RECALL */
 
-const SOURCES = ["all", "memory", "cards", "journal", "notes", "files"] as const;
+const SOURCES = ["all", "memory", "cards", "journal", "notes", "files", "chats", "exams", "figures"] as const;
 type Source = (typeof SOURCES)[number];
 
 const recall: Tool = {
   name: "recall",
   description:
     "Search everything known about this learner in one call — what they have told you (memory), their flashcards " +
-    "and how each is going, their daily journal, their insight log, and any reference material attached to the " +
-    "project. Leave `source` as \"all\" unless you specifically want one kind; searching everything is usually " +
-    "the right first move. Results are one line each and carry a [ref] you can pass to `open` for the full text.",
+    "and how each is going, their daily journal, their insight log, reference material attached to a project, their " +
+    "past conversations with you, the exams they sat, and the figures they kept. Leave `source` as \"all\" unless you " +
+    "specifically want one kind; searching everything is usually the right first move. When they mention something " +
+    "by description — \"the chat about attention\", \"Monday's exam\" — this is how you find it. Results are one line " +
+    "each and carry a [ref] you can pass to `open` for the full text.",
   scope: "global",
   kind: "read",
   schema: {
@@ -304,23 +480,29 @@ const recall: Tool = {
         enum: SOURCES,
         default: "all"
       },
+      project: PROJECT_PARAM,
       limit: { type: "number", description: "Results per source, 1-15.", default: 6 }
     },
     required: ["query"]
   },
-  maxChars: 3600,
-  run(args, ctx) {
+  maxChars: 4200,
+  async run(args, ctx) {
     const query = str(args, "query");
     const source = oneOf<Source>(args, "source", SOURCES, "all");
     const limit = num(args, "limit", 6, 1, 15);
     const words = extractKeywords(query);
     const want = (s: Source) => source === "all" || source === s;
     const blocks: string[] = [];
-    const inProject = !!store.projects()[ctx.projectId];
+    const w = whereFor(args, ctx);
+    if (!isWhere(w)) return w;
+    const ids = w.ids.filter((id) => store.projects()[id]);
 
     /* ---- memory ---- */
     if (want("memory")) {
-      const pool = poolFor("both", ctx.projectId);
+      /* Global memories once, then each project's own — poolFor("both") per
+         project would list every global memory once per project searched. */
+      const seen = new Set<string>();
+      const pool = ids.flatMap((id) => poolFor("both", id)).filter((m) => !seen.has(m.id) && !!seen.add(m.id));
       const trace = retrieve(pool, { queryText: query, limit, maxChars: 1800 });
       if (trace.picked.length) {
         /* Usage is recorded here rather than in the loop, because this is the
@@ -332,8 +514,8 @@ const recall: Tool = {
     }
 
     /* ---- cards ---- */
-    if (want("cards") && inProject) {
-      const decks = store.decksOf(ctx.projectId);
+    if (want("cards")) {
+      const decks = ids.flatMap((id) => store.decksOf(id));
       const rows: { d: Deck; c: Card; st?: SRSState; rank: number }[] = [];
       for (const d of decks) {
         for (const c of d.cards) {
@@ -347,17 +529,15 @@ const recall: Tool = {
       if (rows.length) {
         rows.sort((a, b) => b.rank - a.rank);
         const shown = rows.slice(0, limit);
-        blocks.push(
-          "CARDS:\n" +
-            withMore(shown.map((r) => cardLine(r.c, r.st, decks.length > 1 ? r.d.name : undefined)), rows.length, shown.length)
-        );
+        const label = (d: Deck) => (w.wide ? `${projectName(d.projectId)} › ${d.name}` : decks.length > 1 ? d.name : undefined);
+        blocks.push("CARDS:\n" + withMore(shown.map((r) => cardLine(r.c, r.st, label(r.d))), rows.length, shown.length));
       }
     }
 
     /* ---- journal ---- */
-    if (want("journal") && inProject) {
-      const hits = journalStore
-        .listForProject(ctx.projectId)
+    if (want("journal")) {
+      const hits = ids
+        .flatMap((id) => journalStore.listForProject(id))
         .map((e) => {
           const hay = e.summary
             ? [e.summary.narrative, ...e.summary.learned, ...e.summary.stuck, ...e.summary.open].join(" ")
@@ -373,7 +553,10 @@ const recall: Tool = {
             withMore(
               shown.map(({ e }) => {
                 const head = e.summary ? e.summary.narrative : "(not written up) " + e.raw.map((r) => r.text).join(" ");
-                return `[day:${e.day}] ${head.length > 180 ? head.slice(0, 180) + "…" : head}`;
+                /* A day is only unique within a project, so a wide search names
+                   the project in the ref itself and `open` can find it again. */
+                const ref = e.projectId !== ctx.projectId ? `day:${e.projectId}:${e.day}` : `day:${e.day}`;
+                return `[${ref}]${from(w, e.projectId)} ${head.length > 180 ? head.slice(0, 180) + "…" : head}`;
               }),
               hits.length,
               shown.length
@@ -383,39 +566,130 @@ const recall: Tool = {
     }
 
     /* ---- insight log ---- */
-    if (want("notes") && inProject) {
-      const hits = store.notesOf(ctx.projectId).filter((n) => matches(words, n.text + " " + n.tag) > 0).reverse();
+    if (want("notes")) {
+      const hits = ids
+        .flatMap((id) => store.notesOf(id))
+        .filter((n) => matches(words, n.text + " " + n.tag) > 0)
+        .sort((a, b) => b.t - a.t);
       if (hits.length) {
         const shown = hits.slice(0, limit);
         blocks.push(
           "THEIR OWN NOTES (their phrasing — build on it where you can):\n" +
-            withMore(shown.map((n) => `- (${n.tag || "note"}, ${U.ago(n.t)}) ${n.text}`), hits.length, shown.length)
+            withMore(shown.map((n) => `- (${n.tag || "note"}, ${U.ago(n.t)}${from(w, n.projectId)}) ${n.text}`), hits.length, shown.length)
         );
       }
     }
 
     /* ---- attached files ---- */
-    if (want("files") && inProject) {
-      const items = (store.projects()[ctx.projectId]?.knowledge || []).filter((k) => k.enabled);
-      const hits: { name: string; para: string; score: number }[] = [];
-      for (const k of items) {
-        for (const para of k.text.split(/\n{2,}/)) {
-          const clean = para.trim();
-          if (clean.length < 40) continue;
-          const score = matches(words, clean);
-          if (score > 0) hits.push({ name: k.name, para: clean.slice(0, 400), score });
+    if (want("files")) {
+      const hits: { name: string; para: string; score: number; pid: string }[] = [];
+      for (const id of ids) {
+        for (const k of (store.projects()[id]?.knowledge || []).filter((x) => x.enabled)) {
+          for (const para of k.text.split(/\n{2,}/)) {
+            const clean = para.trim();
+            if (clean.length < 40) continue;
+            const score = matches(words, clean);
+            if (score > 0) hits.push({ name: k.name, para: clean.slice(0, 400), score, pid: id });
+          }
         }
       }
       if (hits.length) {
         hits.sort((a, b) => b.score - a.score);
         const shown = hits.slice(0, Math.min(limit, 4));
-        blocks.push("ATTACHED MATERIAL:\n" + withMore(shown.map((h) => `--- ${h.name} ---\n${h.para}`), hits.length, shown.length));
+        blocks.push("ATTACHED MATERIAL:\n" + withMore(shown.map((h) => `--- ${h.name}${from(w, h.pid)} ---\n${h.para}`), hits.length, shown.length));
+      }
+    }
+
+    /* ---- exams ---- */
+    if (want("exams") && examStore.isLoaded()) {
+      const hits = ids
+        .flatMap((id) => examStore.listForProject(id))
+        .map((e) => ({
+          e,
+          score: matches(words, e.title + " " + e.questions.map((q) => q.prompt + " " + (q.result?.missing.join(" ") || "")).join(" "))
+        }))
+        .filter((x) => x.score > 0)
+        .sort((a, b) => b.score - a.score || b.e.created - a.e.created);
+      if (hits.length) {
+        const shown = hits.slice(0, limit);
+        blocks.push(
+          "EXAMS:\n" +
+            withMore(
+              shown.map(({ e }) => {
+                const graded = e.questions.filter((q) => q.result);
+                const got = graded.filter((q) => q.result!.verdict === "got").length;
+                return (
+                  `[exam:${e.id}] ${e.title} (${U.ago(e.created)}${from(w, e.projectId)}) — ` +
+                  `${graded.length ? `${got}/${graded.length} got` : "not sat yet"}, ${e.questions.length} questions`
+                );
+              }),
+              hits.length,
+              shown.length
+            )
+        );
+      }
+    }
+
+    /* ---- kept figures ---- */
+    if (want("figures")) {
+      const hits = ids
+        .flatMap((id) => figureShelf.list(id))
+        .map((f) => ({ f, score: matches(words, f.title + " " + f.note + " " + (f.kind === "image" ? "" : f.source.slice(0, 2000))) }))
+        .filter((x) => x.score > 0)
+        .sort((a, b) => b.score - a.score || b.f.updated - a.f.updated);
+      if (hits.length) {
+        const shown = hits.slice(0, limit);
+        blocks.push(
+          "FIGURES THEY KEPT:\n" +
+            withMore(
+              shown.map(({ f }) => `[figure:${f.id}] ${f.title} (${keptLabel(f.kind).toLowerCase()}, kept ${U.ago(f.updated)}${from(w, f.projectId)})`),
+              hits.length,
+              shown.length
+            )
+        );
+      }
+    }
+
+    /* ---- past conversations ----
+       Last, and the only async source: transcripts live in IndexedDB. The
+       thread being answered is left out — it is already in the history, and
+       finding it would be the model reading its own question back. A read
+       that fails costs this source only, said plainly, rather than the whole
+       search. */
+    if (want("chats")) {
+      try {
+        const scope = new Set(ids);
+        const hits = (await chatStore.all())
+          .filter((c) => c.id !== ctx.conversationId && scope.has(c.projectId) && c.turns.length)
+          .map((c) => {
+            const text = chatText(c);
+            return { c, text, score: matches(words, text) };
+          })
+          .filter((x) => x.score > 0)
+          .sort((a, b) => b.score - a.score || b.c.updated - a.c.updated);
+        if (hits.length) {
+          const shown = hits.slice(0, limit);
+          blocks.push(
+            "PAST CONVERSATIONS:\n" +
+              withMore(
+                shown.map(
+                  ({ c, text }) =>
+                    `[chat:${c.id}] "${c.title}" (${U.ago(c.updated)}, ${c.turns.length} messages${from(w, c.projectId)}) — ` +
+                    snippetAround(text.slice(c.title.length), words)
+                ),
+                hits.length,
+                shown.length
+              )
+          );
+        }
+      } catch (e) {
+        blocks.push(`PAST CONVERSATIONS: could not be read just now (${(e as Error)?.message || "storage error"}).`);
       }
     }
 
     if (!blocks.length) {
       return miss(
-        `Nothing found for "${query}"${source === "all" ? "" : ` in ${source}`}. ` +
+        `Nothing found for "${query}"${source === "all" ? "" : ` in ${source}`}${w.wide ? " in any project" : ""}. ` +
           "That is a real answer — say so rather than searching again with the same words."
       );
     }
@@ -428,23 +702,24 @@ const recall: Tool = {
 const open: Tool = {
   name: "open",
   description:
-    "Read one thing in full, by the [ref] a recall result gave you: [mem:id] for a memory, [card:id] for a card " +
-    "and its complete review history, [day:YYYY-MM-DD] for a whole journal entry including the raw notes. Use " +
-    "this when a one-line summary is not enough to answer properly.",
+    "Read one thing in full, by the [ref] a result gave you: [mem:id] a memory, [card:id] a card with its complete " +
+    "review history, [day:YYYY-MM-DD] a whole journal entry with the raw notes, [chat:id] a past conversation, " +
+    "[exam:id] an exam question by question with what they wrote, [figure:id] a figure they kept with its source, " +
+    "[deck:id] a deck's cards, [project:id] a project's overview. Use it when a one-line summary is not enough.",
   scope: "global",
   kind: "read",
   schema: {
     properties: {
-      ref: { type: "string", description: 'A reference from a recall result, e.g. "card:abc123" or "day:2026-09-01".' }
+      ref: { type: "string", description: 'A reference from a result, e.g. "card:abc123", "chat:c_9f2" or "day:2026-09-01".' }
     },
     required: ["ref"]
   },
-  maxChars: 2600,
-  run(args, ctx) {
+  maxChars: 4000,
+  async run(args, ctx) {
     const raw = str(args, "ref").replace(/^\[|\]$/g, "");
     const [kind, ...rest] = raw.split(":");
     const id = rest.join(":");
-    if (!kind || !id) return miss('A ref looks like "card:abc123", "mem:abc123" or "day:2026-09-01".');
+    if (!kind || !id) return miss('A ref looks like "card:abc123", "chat:c_9f2" or "day:2026-09-01".');
 
     if (kind === "mem") {
       const m = memoryStore.get(id);
@@ -463,7 +738,9 @@ const open: Tool = {
     }
 
     if (kind === "card") {
-      for (const d of store.decksOf(ctx.projectId)) {
+      /* Every deck, not this project's: a card id is unique app-wide, and a
+         ref found by a search across projects must open from anywhere. */
+      for (const d of Object.values(store.get().decks)) {
         const c = d.cards.find((x) => x.id === id);
         if (!c) continue;
         const st = d.srs[c.id];
@@ -477,7 +754,7 @@ const open: Tool = {
           .reverse();
         return ok(
           [
-            `[card:${c.id}] (${c.tag}) in deck "${d.name}"`,
+            `[card:${c.id}] (${c.tag}) in deck "${d.name}"${d.projectId !== ctx.projectId ? ` (${projectName(d.projectId)})` : ""}`,
             `Front: ${U.stripTags(c.q)}`,
             `Back: ${U.stripTags(c.a)}`,
             st && st.reps
@@ -495,13 +772,33 @@ const open: Tool = {
           ].join("\n")
         );
       }
-      return miss(`No card with id ${id} in this project.`);
+      return miss(`No card with id ${id}.`);
     }
 
     if (kind === "day") {
-      const e = journalStore.byDay(ctx.projectId, id);
-      if (!e) return miss(`No journal entry for ${id}.`);
-      const parts = [`Journal — ${e.day}`];
+      /* "day:2026-09-01" is this conversation's project; "day:<project>:<day>"
+         is how a search across projects names one elsewhere. A bare day that
+         is not here is looked for everywhere — the personal space has no
+         journal worth the name, and a day asked about from it is a day in a
+         project. */
+      const m = /^(.*):(\d{4}-\d{2}-\d{2})$/.exec(id);
+      const day = m ? m[2] : id;
+      let e = journalStore.byDay(m ? m[1] : ctx.projectId, day);
+      if (!e && !m) {
+        const found = bodiesOfWork()
+          .map((p) => journalStore.byDay(p.id, day))
+          .filter(Boolean);
+        if (found.length > 1) {
+          return miss(
+            `${day} has a journal entry in ${found.length} projects. Open one as ` +
+              found.map((x) => `day:${x!.projectId}:${day} (${projectName(x!.projectId)})`).join(" or ") +
+              "."
+          );
+        }
+        e = found[0];
+      }
+      if (!e) return miss(`No journal entry for ${day}.`);
+      const parts = [`Journal — ${e.day}${e.projectId !== ctx.projectId ? ` (${projectName(e.projectId)})` : ""}`];
       if (e.summary) {
         const s = e.summary;
         parts.push(s.narrative);
@@ -515,7 +812,54 @@ const open: Tool = {
       return ok(parts.join("\n\n"));
     }
 
-    return miss(`Unknown reference kind "${kind}". Use mem:, card: or day:.`);
+    if (kind === "chat") {
+      if (id === ctx.conversationId) return miss("That is this conversation — it is already above.");
+      const c = await chatStore.load(id);
+      if (!c) return miss(`No conversation with id ${id}. Search for it with recall, source "chats".`);
+      return ok(chatDigest(c, { where: isPersonalProject(c.projectId) ? undefined : projectName(c.projectId) }));
+    }
+
+    if (kind === "exam") {
+      const e = examStore.get(id);
+      if (!e) return miss(examStore.isLoaded() ? `No exam with id ${id}.` : "Exams are still loading — try once more.");
+      return ok(examDigest(e, { where: e.projectId !== ctx.projectId ? projectName(e.projectId) : undefined }));
+    }
+
+    if (kind === "figure") {
+      const f = figureShelf.get(id);
+      if (!f) return miss(`No kept figure with id ${id}.`);
+      const head =
+        `[figure:${f.id}] "${f.title}" — ${keptLabel(f.kind).toLowerCase()}, kept ${U.ago(f.updated)}` +
+        (f.conversationTitle ? `, from the conversation "${f.conversationTitle}"` : "") +
+        (f.note ? `\nTheir note on why they kept it: ${f.note}` : "");
+      if (f.kind === "image") {
+        return ok(head + "\nA picture they generated. Its pixels are not readable here — describe it from its title and note only.");
+      }
+      /* The block itself, so it can be revised: written again under the same
+         title, a revision lands as the next version of what they kept. */
+      const src = f.source.replace(/\n$/, "");
+      return ok(`${head}\n\n\`\`\`${f.info}\n${src.length > 3000 ? src.slice(0, 3000) + "\n…" : src}\n\`\`\``);
+    }
+
+    if (kind === "deck") {
+      const d = store.get().decks[id];
+      if (!d) return miss(`No deck with id ${id}.`);
+      const shown = d.cards.slice(0, 30);
+      return ok(
+        [
+          `[deck:${d.id}] "${d.name}"${d.projectId !== ctx.projectId ? ` (${projectName(d.projectId)})` : ""} — ${d.cards.length} cards`,
+          ...shown.map((c) => cardLine(c, d.srs[c.id]))
+        ].join("\n") + (d.cards.length > shown.length ? `\n…and ${d.cards.length - shown.length} more. Search with recall to find one.` : "")
+      );
+    }
+
+    if (kind === "project") {
+      const p = store.projects()[id] || Object.values(store.projects()).find((x) => x.name.toLowerCase() === id.toLowerCase());
+      if (!p) return miss(`No project "${id}".`);
+      return overviewOf(p.id);
+    }
+
+    return miss(`Unknown reference kind "${kind}". Use mem:, card:, day:, chat:, exam:, figure:, deck: or project:.`);
   }
 };
 
@@ -532,14 +876,17 @@ const reviews: Tool = {
   schema: {
     properties: {
       days: { type: "number", description: "How far back, 1-30.", default: 7 },
-      failed_only: { type: "string", description: 'Pass "true" for only the cards that failed or were hard.' }
+      failed_only: { type: "string", description: 'Pass "true" for only the cards that failed or were hard.' },
+      project: PROJECT_PARAM
     },
     required: []
   },
   maxChars: 3000,
   run(args, ctx) {
     const days = num(args, "days", 7, 1, 30);
-    const deckIds = new Set(store.decksOf(ctx.projectId).map((d) => d.id));
+    const w = whereFor(args, ctx);
+    if (!isWhere(w)) return w;
+    const deckIds = new Set(w.ids.flatMap((id) => store.decksOf(id)).map((d) => d.id));
     const from = new Date().setHours(0, 0, 0, 0) - (days - 1) * U.DAY;
     const entries = store.get().log.filter((e) => e.t >= from && deckIds.has(e.d));
     if (!entries.length) return miss(`Nothing reviewed in the last ${days} days.`);
@@ -843,7 +1190,7 @@ const note: Tool = {
 
 /* =================================================================== WEB */
 
-/* Voice mode's way onto the web, and — when the Web switch is on — Agent and
+/* Voice mode's way onto the web, and — when the Web switch is on — Auto and
    Deep's too. A plugin on every round would search while the model was reading
    the learner's own cards. A tool searches only when the question needs it.
    In voice there is no switch to throw, so the tool is always offered where
@@ -882,12 +1229,13 @@ const web_lookup: Tool = {
  *  closely, then act. */
 const CORE: Tool[] = [overview, standing, recall, open, reviews, remember, forget, draft_card, journal_add];
 
-/** Deep mode only. In the reactive mode they would be pure overhead — a
- *  two-lookup question does not need a plan, and forcing one would make the
- *  cheap mode cost three requests to answer what one could. */
+/** Offered to Deep, which must use them, and to Auto and voice, which may.
+ *  Never forced on a question that does not need them — that is the "auto" in
+ *  planning, and the reason Auto does not cost three requests to answer what
+ *  one could. */
 const DEEP_ONLY: Tool[] = [plan_set, plan_step, note];
 
-/** Offered wherever this run may search. Voice always may; Agent and Deep may when the Web switch is on. */
+/** Offered wherever this run may search. Voice always may; Auto and Deep may when the Web switch is on. */
 const WEB_ONLY: Tool[] = [web_lookup];
 
 export const TOOLS: Tool[] = [...CORE, ...DEEP_ONLY, ...WEB_ONLY];
@@ -926,7 +1274,7 @@ export interface ToolsForOpts {
   /** Deep mode gets the plan tools; so does voice ("auto"), which may plan
    *  when a request needs it and is not made to when it does not. */
   planning: boolean | "auto";
-  /** This run may search. Voice always may, where the backend can; Agent and
+  /** This run may search. Voice always may, where the backend can; Auto and
    *  Deep may when the Web switch is on. The catalogue is filtered rather than
    *  the model being asked not to search. */
   web?: boolean;

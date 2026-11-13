@@ -30,7 +30,8 @@ import { keepVideo } from "@/services/files/generatedVideo";
 import { clock, effectiveVideo } from "@/lib/videoSpec";
 import { buildContext } from "@/lib/chatContext";
 import { getPersona } from "@/lib/personas";
-import { budgetFor, deepSteps } from "@/lib/effort";
+import { budgetFor, roundsFor } from "@/lib/effort";
+import { answerRoute } from "@/lib/answerRoute";
 import { localTitle } from "@/lib/title";
 import type { Effort } from "@/types/core";
 import { costOf } from "@/lib/tokens";
@@ -188,7 +189,7 @@ export interface ChatState {
   streaming: string | null;
   /** id of the turn being streamed into */
   streamingTurnId: string | null;
-  /** The agent loop as it happens, or null outside agent mode. Live state
+  /** The agent loop as it happens, or null when a reply takes the single path. Live state
    *  only — the durable record is Variant.trace. */
   agentLive: AgentLive | null;
   /** The model's working as it arrives, or null when nothing is in flight. */
@@ -223,7 +224,7 @@ export interface ChatState {
   /** The mode chosen on the empty screen, before a conversation exists to pin
    *  it to. Without this, picking Agent or Deep on first arrival at chat did
    *  nothing at all: `update()` returns early with no conversation, so the
-   *  choice was dropped and the chip snapped back to Direct. Model and effort
+   *  choice was dropped and the chip snapped back to the default. Model and effort
    *  already had drafts for exactly this reason; mode was added without one. */
   draftMode: ChatMode;
   setDraftMode: (m: ChatMode) => void;
@@ -367,8 +368,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [followups, setFollowups] = useState<string[]>([]);
   const [draftModel, setDraftModel] = useState("");
   const [draftEffort, setDraftEffort] = useState<Effort | "">("");
-  const [draftMode, setDraftMode] = useState<ChatMode>("direct");
-  const [draftActions, setDraftActions] = useState<ChatActionId[]>([]);
+  const [draftMode, setDraftMode] = useState<ChatMode>("auto");
+  /* Web starts on where the learner has said so (the default). The send path
+     asks availability() before it searches, so a draft that says "web" on a
+     backend that cannot search is a dimmed glyph, never a failed request. */
+  const [draftActions, setDraftActions] = useState<ChatActionId[]>(() => (store.settings().webByDefault ? ["web"] : []));
   const [draftImage, setDraftImage] = useState<ImageSpec>(DEFAULT_IMAGE_SPEC);
   const [draftVideo, setDraftVideo] = useState<VideoSpec>({});
 
@@ -459,7 +463,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     return {
       ...(d.draftModel ? { model: d.draftModel } : {}),
       ...(d.draftEffort ? { effort: d.draftEffort } : {}),
-      ...(d.draftMode !== "direct" ? { mode: d.draftMode } : {}),
+      ...(d.draftMode !== "auto" ? { mode: d.draftMode } : {}),
       ...(d.draftActions.length ? { actions: d.draftActions } : {}),
       /* Only when it says something. A spec of two Autos is the absence of a
          spec, and writing it would put a field on every conversation ever
@@ -506,7 +510,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const target = AI.resolve({ backend: resolveBackend(c, project).value, model: resolveModel(c, project).value });
       const modalities = catalogueEntry(target.model)?.inputModalities;
       /* A voice turn is answered by the loop whatever the thread's own mode. */
-      const mode = voice ? "agent" : c.mode === "agent" || c.mode === "deep" ? c.mode : "direct";
+      const route = voice ? "auto" : answerRoute(c.mode, c.actions);
       const base: Omit<CarryContext, "age"> = {
         window: windowFor(effort),
         image: canTake(modalities, "image"),
@@ -514,8 +518,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         backend: target.type,
         /* The agent loop has no way to name OpenRouter's PDF parser on its
            requests, and a file sent with none named is read by OpenRouter's
-           paid default. Agent and Deep read PDFs in this browser. */
-        pdfEngine: mode === "direct" ? store.settings().pdfEngine || "local" : "local"
+           paid default. Auto and Deep read PDFs in this browser. */
+        pdfEngine: route === "single" ? store.settings().pdfEngine || "local" : "local"
       };
 
       /* How many user turns stand between each turn and the newest — what
@@ -654,7 +658,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const budget = budgetFor(resolveEffort(c, store.get().projects[c.projectId]).value);
       const replyScale = budget.replyScale;
 
-      /* Agent mode is a different shape of request, not a different feature:
+      /* The loop is a different shape of request, not a different feature:
          same turn, same variants, same abort path, same receipts. Everything
          after this branch is shared, which is why the loop returns an answer
          string rather than writing the turn itself. */
@@ -683,10 +687,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         const engine = store.settings().pdfEngine;
         const pdfEngine = built.binary.some((b) => b.kind === "file") && engine && engine !== "local" ? engine : undefined;
         let full: string;
-        /* Voice is its own route: always the loop, planning offered rather
-           than required, the web a tool rather than a switch. Whoever is
-           talking never picks a mode — see services/agent/prompt.ts. */
-        const mode = voice ? "voice" : c.mode === "agent" || c.mode === "deep" ? c.mode : "direct";
+        /* Two engines, five modes — lib/answerRoute.ts is the map. Voice is
+           Auto with the web always allowed: whoever is talking never picks a
+           mode, which is the same reason Auto became the default for typing. */
+        const route = voice ? "auto" : answerRoute(c.mode, c.actions);
         const threadMax = Math.max(256, Math.round(c.maxTokens * replyScale));
         if (c.mode === "video" && !voice) {
           /* A clip is a job, not a request: submitted, then waited on. The job
@@ -745,9 +749,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           drawn = out.images;
           full = "";
           usage = { promptTokens: 0, completionTokens: 0, reportedCost: out.cost, cost: out.cost };
-        } else if (mode !== "direct") {
+        } else if (route !== "single") {
           const resolved = AI.resolve({ backend: runBackend, model: runModel });
           setAgentLive({ steps: [], answering: false, plan: null, notes: [] });
+          /* Whether any round has reached for a tool yet. Until one does, an
+             Auto reply is indistinguishable from a single call and is drawn
+             like one — its working in the thinking panel, not in a trace
+             headed "Looking things up" over a question nobody looked up. */
+          let looked = false;
           const result = await runAgentTurn({
             /* messages[0] is the system message buildMessages already built —
                persona plus the deterministic context block. The loop keeps it:
@@ -759,16 +768,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             conversationId: c.id,
             turnId: targetTurn.id,
             backend: resolved.type,
+            model: resolved.model,
             /* Shared with the mode picker via lib/effort, so the number shown
-               on the chip is the number the loop actually gets. Voice gets
-               Deep's ceiling, and a plain answer uses none of it. */
-            maxSteps: mode === "agent" ? budget.agentSteps : deepSteps(budget.agentSteps),
-            planning: mode === "voice" ? "auto" : mode === "deep",
+               on the chip is the number the loop actually gets. A plain answer
+               uses none of it. */
+            maxSteps: roundsFor(budget.agentSteps),
+            planning: route === "deep" ? true : "auto",
             /* Same verdict the send path uses for the Web switch, so the loop
                never offers a search the backend would refuse. Voice always
-               may; Agent and Deep may when the switch is on. */
+               may; Auto and Deep may when the switch is on — which a new chat
+               starts with, unless Settings says otherwise. */
             web:
-              (mode === "voice" || (c.actions || []).includes("web")) &&
+              (!!voice || (c.actions || []).includes("web")) &&
               availability("web", resolved.backend.supports, resolved.model).can,
             /* Think reaches every round. Web does not ride along as a plugin —
                runAgentTurn turns it into the lookup tool, which is the only
@@ -790,6 +801,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             onEvent: (e) => {
               if (e.kind === "token") {
                 acc = e.acc;
+                /* Until a round has reached for a tool, words arriving are the
+                   answer as far as anyone can tell — the thinking panel stops
+                   there, as it would for a single call. A round that turns out
+                   to be a lookup reopens it below. */
+                if (!looked) answerStarted();
                 streamOut.current?.push(e.acc);
                 voice?.onText(e.acc);
               } else if (e.kind === "reasoning") {
@@ -799,6 +815,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                    answer. The earlier rounds stay on their steps in the live
                    trace, where they belong next to the lookups they explain. */
                 chain = e.acc;
+                /* Before any lookup, the working goes where a single call's
+                   would: most Auto replies never look anything up, and their
+                   thinking must not wait for a trace that will never draw. */
+                if (!looked) thinkOut.current?.push(e.acc);
                 setAgentLive((st) => (st ? patchStep(st, e.step, (x) => ({ ...x, reasoning: e.acc })) : st));
               } else if (e.kind === "thought") {
                 setAgentLive((s) => (s ? patchStep(s, e.step, (st) => ({ ...st, thought: e.text })) : s));
@@ -807,6 +827,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                    it from the reply body — it reappears as the step's thought
                    in the trace, which is where a "let me check three things"
                    belongs. */
+                looked = true;
+                /* The words were intent, so the thinking did not end with
+                   them; the answer's own first word will end it. */
+                thoughtUntil = null;
                 acc = "";
                 setStreaming("");
                 voice?.onText("");
@@ -834,7 +858,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             }
           });
           full = result.answer;
-          trace = result.trace;
+          /* A trace with nothing in it is not kept. Most Auto replies look
+             nothing up, and a conversation is one record rewritten whole on
+             every message — an empty trace on each of them is bytes spent
+             recording that nothing happened. */
+          trace = result.trace.steps.length || result.trace.plan ? result.trace : undefined;
           if (result.proposed.length) agentProposed = result.proposed;
           usage = {
             ...result.usage,

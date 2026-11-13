@@ -75,10 +75,16 @@ export default function ChatPrefs() {
             </button>
           ))}
         </div>
-        <p className="sset-note">{effortMeans(effort, "direct")}</p>
+        <p className="sset-note">{effortMeans(effort, "auto")}</p>
       </Section>
 
       <Section id="chat.requests">
+        <SwitchRow
+          title="Start new chats with Web on"
+          sub="In Auto it searches only when a question needs something outside your record, and names its sources — OpenRouter bills each search. In Quick, Web searches before every reply."
+          on={s.webByDefault}
+          onToggle={() => store.updateSettings({ webByDefault: !s.webByDefault })}
+        />
         <SwitchRow
           title="Suggest follow-up questions"
           sub="Costs a second request after every reply. Off at low effort regardless."
@@ -109,8 +115,8 @@ export default function ChatPrefs() {
           onChange={(v) => store.updateSettings({ pdfEngine: v as PdfEngine })}
         />
         <p className="sset-note">
-          The OpenRouter choices apply when chat is pointed at OpenRouter, in a Direct conversation. Everywhere else — Groq,
-          Ollama, a custom server, Agent and Deep — PDFs are read in this browser. Pictures always go to a model that can see
+          The OpenRouter choices apply when chat is pointed at OpenRouter, in a Quick conversation. Everywhere else — Groq,
+          Ollama, a custom server, Auto and Deep — PDFs are read in this browser. Pictures always go to a model that can see
           as themselves; Word, Excel and text files are always read here first.
         </p>
       </Section>

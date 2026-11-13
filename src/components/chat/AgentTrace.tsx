@@ -171,8 +171,20 @@ export default function AgentTrace({
   const [open, setOpen] = useState(false);
   if (!steps.length && !plan) return null;
 
-  const shown = running || open;
+  /* Open while it runs only when it is a plan being worked — then the list is
+     the thing worth watching. A lookup or two in Auto is a line that says
+     what it is doing, the way a person says "let me check"; the rows are a
+     click away for anyone who wants to audit them. */
+  const shown = open || (!!running && !!plan);
   const lookups = steps.reduce((n, s) => n + s.calls.length, 0);
+  const now = running ? inFlight(steps) : null;
+  const line = running
+    ? now
+      ? `${TOOL_WORDS[now.name]?.doing || "Looking something up"}${subject(now) ? " · " + subject(now) : ""}`
+      : lookups
+        ? "Reading what it found"
+        : "Working out what to look at"
+    : summarise(steps) || `${lookups} lookup${lookups === 1 ? "" : "s"}`;
 
   return (
     <div className={"atrace" + (running ? " live" : "")}>
@@ -183,17 +195,18 @@ export default function AgentTrace({
 
       <button
         className="atrace-toggle"
-        onClick={() => !running && setOpen((v) => !v)}
+        onClick={() => setOpen((v) => !v)}
         aria-expanded={shown}
-        disabled={running || !steps.length}
+        aria-live={running ? "polite" : undefined}
+        disabled={!steps.length}
+        title={`${lookups} lookup${lookups === 1 ? "" : "s"}${totalMs ? ` in ${(totalMs / 1000).toFixed(1)}s` : ""} — open to see each one and what it returned`}
       >
         <Icon name={running ? "search" : "check"} size={12} />
-        <span>
-          {running
-            ? "Looking things up…"
-            : `${lookups} lookup${lookups === 1 ? "" : "s"}${totalMs ? ` · ${(totalMs / 1000).toFixed(1)}s` : ""}`}
+        <span className="atrace-line">
+          {line}
+          {running ? "…" : totalMs ? ` · ${(totalMs / 1000).toFixed(1)}s` : ""}
         </span>
-        {!running && !!steps.length && <Icon name="chevron" size={11} className={"atrace-chev" + (shown ? " on" : "")} />}
+        {!!steps.length && <Icon name="chevron" size={11} className={"atrace-chev" + (shown ? " on" : "")} />}
       </button>
 
       {shown && (
@@ -245,6 +258,42 @@ export default function AgentTrace({
       )}
     </div>
   );
+}
+
+/** The call still waiting on its result, newest first — what the line says
+ *  is happening right now. Null between rounds, while the model reads. */
+function inFlight(steps: TraceStep[]): ToolCall | null {
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const s = steps[i];
+    for (let j = s.calls.length - 1; j >= 0; j--) {
+      const c = s.calls[j];
+      if (!s.runs.some((r) => r.call.id === c.id)) return c;
+    }
+  }
+  return null;
+}
+
+/**
+ * What was looked at, in a phrase: "Searched your chats, read one in full".
+ *
+ * A count of lookups says how hard it worked, which nobody asked; the verbs
+ * say where the answer came from, which is the reason to show a trace at all.
+ * Two named, the rest counted, so a long investigation still fits on a line.
+ */
+function summarise(steps: TraceStep[]): string {
+  const verbs: string[] = [];
+  for (const s of steps) {
+    for (const c of s.calls) {
+      const v = verbFor(c, s.runs.find((r) => r.call.id === c.id));
+      if (!verbs.includes(v)) verbs.push(v);
+    }
+  }
+  if (!verbs.length) return "";
+  const head = verbs
+    .slice(0, 2)
+    .map((v, i) => (i ? v.charAt(0).toLowerCase() + v.slice(1) : v))
+    .join(", ");
+  return verbs.length > 2 ? `${head} and ${verbs.length - 2} more` : head;
 }
 
 /** Both callers hand in different shapes; this is the one place they become

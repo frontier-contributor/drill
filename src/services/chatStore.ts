@@ -14,7 +14,8 @@ import * as U from "@/lib/util";
 import * as store from "./store";
 import { idbAll, idbBulkPut, idbClear, idbDelete, idbGet, idbPut, STORE_CONV, STORE_META } from "./idb";
 import * as persistence from "./persistence";
-import { DEFAULT_PERSONA_ID, getPersona } from "@/lib/personas";
+import { COMPANION_PERSONA_ID, DEFAULT_PERSONA_ID, getPersona } from "@/lib/personas";
+import { isPersonalProject } from "@/lib/migrate";
 import { markdownToText } from "@/lib/plaintext";
 import type { ChatMode, Conversation, ConversationMeta, ContextSource, Turn, Usage, Variant, VideoSpec } from "@/types/chat";
 import type { ChatActionId } from "@/lib/chatActions";
@@ -198,19 +199,44 @@ function repair(c: Conversation): Conversation {
   if (!Array.isArray(c.pinnedAttachments)) c.pinnedAttachments = [];
   if (typeof c.rolledUpThrough !== "number") c.rolledUpThrough = 0;
   if (!Array.isArray(c.actions)) c.actions = [];
-  /* "chat" was the first name for the single-call mode, before `deep` made a
-     two-value flag inadequate. Renamed rather than kept as an alias so there
-     is one spelling of it in the codebase.
-
-     Anything unrecognised — including a thread written before modes existed —
-     lands on `direct`. A thread that silently became multi-request because the
-     app updated would be a bill the learner never agreed to. */
-  if ((c.mode as string) === "chat") c.mode = "direct";
-  /* Image and Video are modes too. Image was missing from this list when it
-     shipped, so every drawing thread came back from a reload as a chat
-     thread — the composer, the dials and the model restriction all gone. */
-  if (c.mode !== "agent" && c.mode !== "deep" && c.mode !== "direct" && c.mode !== "image" && c.mode !== "video") c.mode = "direct";
+  c.mode = repairMode(c.mode);
   return c;
+}
+
+/**
+ * Every spelling a stored thread can have, read as one the app has today.
+ *
+ * Image and Video are modes too. Image was missing from this list when it
+ * shipped, so every drawing thread came back from a reload as a chat thread —
+ * the composer, the dials and the model restriction all gone. A mode added to
+ * ChatMode and not here is reset on every load.
+ *
+ * The retired three all land on `auto`, and that is a decision rather than a
+ * default (asked for on 2026-11-13: chat should go and get what you refer to
+ * without being put in a mode first). `chat` and `direct` were the single
+ * call's names while it was the default, which is exactly why they cannot say
+ * whether anyone chose them — and a thread that cannot look up "the exam I
+ * took on Monday" is what the request was about. `agent` was Auto without the
+ * plan tools. Anything unrecognised, including a thread written before modes
+ * existed, lands there too. The single call is still a choice, now spelled
+ * `quick`, and a thread set to it stays set.
+ */
+export function repairMode(mode: unknown): ChatMode {
+  return mode === "quick" || mode === "deep" || mode === "image" || mode === "video" ? mode : "auto";
+}
+
+/**
+ * Every conversation, repaired — what the assistant searches when it is asked
+ * about something said in another thread.
+ *
+ * A thread already open is read from the cache rather than the database, since
+ * the cached copy is the one with the latest message in it (writes are
+ * debounced). One read of the store per call, the same bargain search() makes:
+ * at the scale one person writes, that is cheaper than an index that can drift.
+ */
+export async function all(): Promise<Conversation[]> {
+  const rows = await idbAll<Conversation>(STORE_CONV);
+  return rows.map((c) => cache.get(c.id) || repair(c));
 }
 
 /** In-memory only — used by the UI to read a conversation it already opened
@@ -232,7 +258,7 @@ export interface CreateOpts {
   /** Defaults to the active project. */
   projectId?: string;
   effort?: Effort | "";
-  /** Carried from the empty screen's mode picker. Absent means `direct`. */
+  /** Carried from the empty screen's mode picker. Absent means `auto`. */
   mode?: ChatMode;
   /** Carried from the empty screen's capability switches — Web, Think. */
   actions?: ChatActionId[];
@@ -272,11 +298,15 @@ export function defaultContext(): ContextSource[] {
 }
 
 export function create(opts: CreateOpts = {}): Conversation {
-  const persona = getPersona(opts.personaId || DEFAULT_PERSONA_ID);
+  const projectId = opts.projectId || store.get().activeProjectId;
+  /* The personal space talks as a companion and a project as a tutor — see
+     lib/personas.ts. A caller that names a persona (a starter, a slash
+     command) still gets it. */
+  const persona = getPersona(opts.personaId || (isPersonalProject(projectId) ? COMPANION_PERSONA_ID : DEFAULT_PERSONA_ID));
   const now = Date.now();
   const c: Conversation = {
     id: U.uuid(),
-    projectId: opts.projectId || store.get().activeProjectId,
+    projectId,
     title: opts.title || "New chat",
     titled: !!opts.title,
     created: now,
@@ -290,7 +320,7 @@ export function create(opts: CreateOpts = {}): Conversation {
     temperature: opts.temperature ?? persona.temperature ?? 0.6,
     maxTokens: 4096,
     effort: opts.effort || "",
-    mode: opts.mode || "direct",
+    mode: opts.mode || "auto",
     context: opts.context ?? defaultContext(),
     pinnedAttachments: [],
     turns: [],

@@ -197,13 +197,13 @@ export const SECTIONS = sections({
     cat: "chat",
     title: "Effort",
     sub: "How hard a new conversation tries by default. Any thread can override it from the composer.",
-    finds: ["effort", "reasoning", "thinking", "depth", "low", "medium", "high", "budget", "lookups", "agent"]
+    finds: ["effort", "reasoning", "thinking", "depth", "low", "medium", "high", "budget", "lookups", "agent", "auto", "quick", "deep", "rounds"]
   },
   "chat.requests": {
     cat: "chat",
     title: "Extra requests per message",
-    sub: "Both of these buy convenience with a second call. They are listed together because that is the only thing they have in common, and it is the thing that costs money.",
-    finds: ["follow-ups", "followups", "suggestions", "suggested questions", "auto title", "naming", "titles", "cost", "extra calls"]
+    sub: "Each of these can buy convenience with another call. They are listed together because that is the only thing they have in common, and it is the thing that costs money.",
+    finds: ["follow-ups", "followups", "suggestions", "suggested questions", "auto title", "naming", "titles", "cost", "extra calls", "web", "search", "internet", "online", "browse", "sources"]
   },
   "chat.files": {
     cat: "chat",

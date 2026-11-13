@@ -125,6 +125,12 @@ Do not relitigate these while building.
    the default; `agent` and `deep` run the loop in `services/agent/`. As
    predicted, the effort dial is where it landed — `agentSteps` on
    `EffortBudget`. See §13.
+   *Amended again 2026-11-13, at the user's request ("in the chat I can refer
+   anything [and] it can automatically get [it] with agentic steps without
+   agentic mode").* In chat the loop is now the default — `auto`, which
+   answers a plain question in its first request and looks things up only
+   when the question needs it. The single call survives as `quick`. Everything
+   outside chat is still one call, and that part stays non-negotiable.
 3. **No embeddings.** Keyword + recency + usage scoring, plus date filtering,
    which is exact and free.
 4. **Nothing commits itself.** Every stage proposes; the learner accepts.
@@ -931,19 +937,43 @@ real faults in the first version. The rebuild is what shipped.
 
 ### Three chat modes
 
-`Conversation.mode`, per conversation, resolved in `ChatContext.run()`:
+`Conversation.mode`, per conversation, mapped to an engine by
+`lib/answerRoute.ts` and run in `ChatContext.run()`:
 
 | mode | what it does | rounds |
 |---|---|---|
-| `direct` | one request, context chosen up front by `lib/chatContext.ts` | 0 |
-| `agent` | looks things up reactively, then answers | `agentSteps` (1/3/6) |
-| `deep` | states a plan, works every step, closes it out, then answers | `deepSteps()` = 2n+2 |
+| `auto` | **the default.** Answers at once when it can; looks things up, or plans, when the question needs it | up to `roundsFor()` = 2n+2, usually 0 |
+| `quick` | one request, no tools, context chosen up front by `lib/chatContext.ts` | 0 |
+| `deep` | states a plan, works every step, closes it out, then answers | `roundsFor()` = 2n+2 |
 
-`direct` is the default and must stay the default — it is right for most
-messages, and the other two cost a request per round. An older two-value flag
-spelled the first mode `"chat"`; `chatStore.repair()` renames it and lands
-anything unrecognised on `direct`, so no existing thread silently became
-multi-request.
+**Changed 2026-11-13.** Until then `direct` (now `quick`) was the default and
+the loop was something you switched to. The user asked for chat to work like a
+companion — refer to anything, and it goes and gets it — so the default became
+the loop voice mode had always used: a plan offered, never required, a plain
+question still one request. The cost of that is the tool catalogue riding on
+every request (about two thousand input tokens), which is what every
+assistant that can look things up pays. `chatStore.repairMode()` reads the
+retired `direct`, `agent` and `chat` as `auto`, because `direct` was the
+default and so cannot say whether anyone chose it; a thread set to `quick`
+from now on stays set. The Image switch takes a thread down the single path
+while it is on — a picture drawn mid-loop would land on a lookup round and be
+thrown away with it.
+
+What made the default safe to change:
+
+- **Models that take no tools.** `ModelPrice.tools` (from
+  `supported_parameters`) sends a known "no" to the text protocol, and a
+  native first round refused with "no endpoints found that support tool use"
+  reruns once on the text protocol (`isToolRefusal`). Verified against a
+  stubbed 404 in the browser.
+- **Reach.** `recall` searches past chats, exams and kept figures beside the
+  record it always searched; `open` reads every kind of ref; and from the
+  personal space every read spans every project (`whereFor()` in `tools.ts`).
+  `@` reaches the same places (`lib/references.ts`), and a chat or exam is
+  rendered by `lib/digest.ts` for both.
+- **No trace for a reply that looked nothing up.** Until a round reaches for a
+  tool, an Auto reply is drawn exactly like a single call's, thinking panel
+  and all; an empty trace is not stored.
 
 ### The shape, and why
 
@@ -1015,6 +1045,11 @@ Deep query against a real deck and read the trace.
 
 ### Next, in the order the user asked for it
 
+0. **Run Auto against a real model** (2026-11-13). Everything above was
+   driven with a stubbed transport: a tool round, a streamed answer, the
+   saved trace, and the text-protocol fallback. Whether a real model reaches
+   for `recall` when it should — and leaves it alone on "hello" — is the open
+   question, and the whole default rests on it.
 1. **The scratch chat** — a non-project thread for quick unrelated questions.
    Cleanest path is a reserved `system: true` project so `projectId` stays
    non-null everywhere and `chatStore.repair()` keeps working;

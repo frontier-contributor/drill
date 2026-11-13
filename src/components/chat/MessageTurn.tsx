@@ -33,10 +33,11 @@ import { formatCost, formatTokens } from "@/lib/tokens";
 import * as AI from "@/services/ai";
 import * as chatStore from "@/services/chatStore";
 import { useToast } from "@/context/ToastContext";
-import type { Attachment, Conversation, Turn } from "@/types/chat";
+import type { Attachment, Conversation, Turn, Variant } from "@/types/chat";
+import { catalogueEntry } from "@/services/pricing";
 import AttachmentCard from "./AttachmentCard";
 import type { BackendType } from "@/types";
-import Icon from "../ui/Icon";
+import Icon, { type IconName } from "../ui/Icon";
 import { actionsFor } from "@/lib/chatActions";
 
 /* One selector, used to build the contents and to jump within it. */
@@ -253,35 +254,33 @@ export default function MessageTurn({
   const failed = !isUser && !streaming && turn.variants.length === 0;
   const cutShort = !isUser && !streaming && !!turn.error && turn.variants.length > 0;
 
+  /* Whether the loop running into this turn has reached for anything yet. In
+     Auto most replies never do, and until one does the reply is drawn exactly
+     like a single call's — its thinking in the thinking panel, no trace. A
+     round's reasoning creates a step before any call exists, which is why
+     this asks for calls rather than for steps. */
+  const looked = !!agentLive && (!!agentLive.plan || agentLive.steps.some((s) => s.calls.length > 0));
+
   return (
     <div
       className={`turn ${isUser ? "user" : "assistant"}${turn.starred ? " starred" : ""}${listening ? " listening" : ""}`}
       data-turn={turn.id}
     >
-      <div className="turn-head">
-        <span>{isUser ? "You" : "Assistant"}</span>
-        {turn.voice && (
-          <span className="turn-voice" title={isUser ? "Said out loud" : "Answered out loud"}>
-            <Icon name="waveform" size={11} />
-          </span>
-        )}
-        {turn.starred && <Icon name="star-filled" size={11} style={{ color: "var(--amber)" }} />}
-        {turn.variants.length > 1 && (
-          <span className="variant-nav">
-            <button onClick={() => onVariant(turn.active - 1)} disabled={turn.active === 0} aria-label="Previous version">
-              ‹
-            </button>
-            {turn.active + 1}/{turn.variants.length}
-            <button
-              onClick={() => onVariant(turn.active + 1)}
-              disabled={turn.active >= turn.variants.length - 1}
-              aria-label="Next version"
-            >
-              ›
-            </button>
-          </span>
-        )}
-      </div>
+      {/* Who is speaking is said by where the words sit — your message in a
+          bubble on the right, the reply as the page — so the label survives
+          only for a screen reader. Two small marks earn a line of their own:
+          it was spoken, or you starred it. */}
+      <span className="sr-only">{isUser ? "You said" : "Reply"}</span>
+      {(turn.voice || turn.starred) && (
+        <div className="turn-head">
+          {turn.voice && (
+            <span className="turn-voice" title={isUser ? "Said out loud" : "Answered out loud"}>
+              <Icon name="waveform" size={11} />
+            </span>
+          )}
+          {turn.starred && <Icon name="star-filled" size={11} className="turn-star" />}
+        </div>
+      )}
 
       {!!turn.attachments?.length && (
         <div className="att-row">
@@ -355,7 +354,7 @@ export default function MessageTurn({
               thought, then it looked things up, then it answered. In agent
               mode the live chain belongs on the step that produced it and the
               trace renders it there, so this one stands down. */}
-          {thinking && !agentLive ? (
+          {thinking && !looked ? (
             <ThinkingPanel
               text={thinking.text}
               running={thinking.endedAt == null && (!!thinking.text || thinking.asked)}
@@ -372,12 +371,12 @@ export default function MessageTurn({
           {/* Above the reply, because it happened before it — and because a
               collapsed one-line summary reads as provenance, which is what it
               is, rather than as an appendix nobody opens. */}
-          {agentLive && (agentLive.steps.length || agentLive.plan) ? (
+          {looked ? (
             <AgentTrace
-              steps={agentLive.steps}
-              plan={agentLive.plan}
-              notes={agentLive.notes}
-              running={!agentLive.answering}
+              steps={agentLive!.steps}
+              plan={agentLive!.plan}
+              notes={agentLive!.notes}
+              running={!agentLive!.answering}
             />
           ) : !streaming && variant?.trace && (variant.trace.steps.length || variant.trace.plan) ? (
             <AgentTrace
@@ -450,17 +449,37 @@ export default function MessageTurn({
 
       {!editing && !streaming && !failed && (
         <div className={`turn-acts${isLast || listening ? " always" : ""}`}>
-          {!isUser && <ListenButton turn={turn} conversation={conversation} content={content} root={mdRef} />}
-          <button className="tact" onClick={copyAll} title="Copy response">
-            <Icon name="copy" size={11} />
-            <span>Copy</span>
-          </button>
+          {/* The versions of this reply, at the head of its own row of
+              controls — the place every chat app has taught people to look
+              for "2 / 3", and the one place it cannot be mistaken for content. */}
+          {turn.variants.length > 1 && (
+            <span className="variant-nav">
+              <button onClick={() => onVariant(turn.active - 1)} disabled={turn.active === 0} aria-label="Previous version">
+                <Icon name="chevron" size={11} className="vnav-prev" />
+              </button>
+              <span className="vnav-count">
+                {turn.active + 1} / {turn.variants.length}
+              </span>
+              <button
+                onClick={() => onVariant(turn.active + 1)}
+                disabled={turn.active >= turn.variants.length - 1}
+                aria-label="Next version"
+              >
+                <Icon name="chevron" size={11} className="vnav-next" />
+              </button>
+            </span>
+          )}
           {isUser ? (
-            <button className="tact" onClick={beginEdit} disabled={busy} title="Edit message">
-              <Icon name="pencil" size={11} />
-              <span>Edit</span>
+            <button className="tact" onClick={beginEdit} disabled={busy} title="Edit and resend" aria-label="Edit message">
+              <Icon name="pencil" size={14} />
             </button>
           ) : (
+            <ListenButton turn={turn} conversation={conversation} content={content} root={mdRef} />
+          )}
+          <button className="tact" onClick={copyAll} title="Copy" aria-label="Copy">
+            <Icon name="copy" size={14} />
+          </button>
+          {!isUser && (
             <>
               <RegenerateMenu
                 backend={conversation.backend}
@@ -468,26 +487,30 @@ export default function MessageTurn({
                 busy={busy}
                 onRegenerate={onRegenerate}
               />
-              <button className="tact" onClick={() => onMakeCards(selectedOrAll())} disabled={busy} title="Turn into flashcards">
-                <Icon name="cards" size={11} />
+              {/* The one action with its word kept: turning what you just read
+                  into cards is the thing this app exists for, and an unlabelled
+                  glyph is a feature nobody finds. */}
+              <button className="tact tact-word" onClick={() => onMakeCards(selectedOrAll())} disabled={busy} title="Turn into flashcards — or select a passage first">
+                <Icon name="cards" size={14} />
                 <span>Make cards</span>
-              </button>
-              <button className="tact" onClick={() => onSaveNote(selectedOrAll())} title="Save to insight log">
-                <Icon name="journal" size={11} />
-                <span>Save insight</span>
               </button>
             </>
           )}
-          <button className="tact" onClick={onBranch} title="Branch into a new conversation">
-            <Icon name="panel" size={11} />
-            <span>Branch</span>
-          </button>
-          <button className={"tact" + (turn.starred ? " on" : "")} onClick={onStar} title={turn.starred ? "Unstar turn" : "Star turn"}>
-            <Icon name={turn.starred ? "star-filled" : "star"} size={11} />
-          </button>
-          <button className="tact danger" onClick={onDelete} title="Delete message">
-            <Icon name="close" size={11} />
-          </button>
+          <TurnMore
+            items={[
+              ...(isUser ? [] : [{ icon: "journal" as const, label: "Save to insight log", run: () => onSaveNote(selectedOrAll()) }]),
+              { icon: "panel" as const, label: "Branch into a new chat", run: onBranch },
+              { icon: turn.starred ? ("star-filled" as const) : ("star" as const), label: turn.starred ? "Unstar" : "Star", run: onStar },
+              { icon: "close" as const, label: "Delete message", run: onDelete, danger: true }
+            ]}
+          />
+          {/* The receipt, at the end of the row it belongs to: what answered,
+              how long it took, what it cost. Quiet until the row is. */}
+          {!isUser && variant && (variant.usage || variant.elapsed || variant.listened) && (
+            <span className="turn-foot" title={variant.model || undefined}>
+              {receipt(variant)}
+            </span>
+          )}
         </div>
       )}
 
@@ -505,23 +528,94 @@ export default function MessageTurn({
         </div>
       )}
 
-      {!isUser && !streaming && variant && (variant.usage || variant.elapsed || variant.listened) && (
-        <div className="turn-foot">
-          {variant.model ? variant.model + " · " : ""}
-          {variant.elapsed ? (variant.elapsed / 1000).toFixed(1) + "s" : ""}
-          {variant.usage
-            ? ` · ${formatTokens(variant.usage.promptTokens)} in / ${formatTokens(variant.usage.completionTokens)} out`
-            : ""}
-          {/* The receipt for the Think switch. Reasoning is billed as output
-              and is invisible in the reply, so without this the only evidence
-              that thinking happened is the bill being larger than it looks. */}
-          {variant.usage?.reasoningTokens ? ` (${formatTokens(variant.usage.reasoningTokens)} thinking)` : ""}
-          {variant.usage?.cost != null ? " · " + formatCost(variant.usage.cost) : ""}
-          {/* What hearing it cost, beside what writing it cost. An unpriced
-              voice shows what was read rather than a cost it cannot know. */}
-          {variant.listened
-            ? ` · listened ${variant.listened.cost != null ? formatCost(variant.listened.cost) : formatTokens(variant.listened.chars) + " characters"}`
-            : ""}
+    </div>
+  );
+}
+
+/** One reply's receipt, in a line. */
+function receipt(v: Variant): string {
+  const bits: string[] = [];
+  /* The model by its catalogue name where there is one — the id is in the
+     tooltip — because "anthropic/claude-sonnet-4.5" is a path, not a name. */
+  if (v.model) bits.push(catalogueEntry(v.model)?.title || v.model);
+  if (v.elapsed) bits.push((v.elapsed / 1000).toFixed(1) + "s");
+  if (v.usage) {
+    /* The receipt for the Think switch. Reasoning is billed as output and is
+       invisible in the reply, so without this the only evidence that thinking
+       happened is the bill being larger than it looks. */
+    bits.push(
+      `${formatTokens(v.usage.promptTokens)} in / ${formatTokens(v.usage.completionTokens)} out` +
+        (v.usage.reasoningTokens ? ` (${formatTokens(v.usage.reasoningTokens)} thinking)` : "")
+    );
+  }
+  if (v.usage?.cost != null) bits.push(formatCost(v.usage.cost));
+  /* What hearing it cost, beside what writing it cost. An unpriced voice
+     shows what was read rather than a cost it cannot know. */
+  if (v.listened) {
+    bits.push(`listened ${v.listened.cost != null ? formatCost(v.listened.cost) : formatTokens(v.listened.chars) + " characters"}`);
+  }
+  return bits.join(" · ");
+}
+
+interface MoreItem {
+  icon: IconName;
+  label: string;
+  run: () => void;
+  danger?: boolean;
+}
+
+/**
+ * The actions a reply needs now and then rather than every time.
+ *
+ * Six labelled buttons under every message was a toolbar, and a toolbar under
+ * every paragraph is the loudest thing in a conversation. What is used on most
+ * replies stays on the row; the rest are here, one click further and still
+ * keyboard-reachable. Closes on Escape and on any press outside — Escape is
+ * stopped here so it does not also reach Shell and close something behind it.
+ */
+function TurnMore({ items }: { items: MoreItem[] }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [open]);
+  return (
+    <div className="tmore" ref={wrap}>
+      <button className={"tact" + (open ? " on" : "")} onClick={() => setOpen((v) => !v)} title="More" aria-label="More actions" aria-haspopup="menu" aria-expanded={open}>
+        <Icon name="more" size={14} />
+      </button>
+      {open && (
+        <div className="tmore-pop" role="menu">
+          {items.map((it) => (
+            <button
+              key={it.label}
+              role="menuitem"
+              className={"tmore-item" + (it.danger ? " danger" : "")}
+              onClick={() => {
+                setOpen(false);
+                it.run();
+              }}
+            >
+              <Icon name={it.icon} size={13} />
+              <span>{it.label}</span>
+            </button>
+          ))}
         </div>
       )}
     </div>

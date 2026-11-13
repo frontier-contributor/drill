@@ -14,28 +14,39 @@ import type { Effort, MemoryScope } from "@/types/core";
 import type { AspectId, ImageSpec } from "@/lib/imageSpec";
 
 /**
- * How a message is answered. Three genuinely different purchases, not a
- * quality slider — each is the right answer to a different kind of question.
+ * How a message is answered.
  *
- *   direct  one request. Context is chosen deterministically by
- *           lib/chatContext.ts before the call. Fast, cheap, and correct for
- *           "explain this to me", which is most messages.
+ *   auto    the default, and the one a companion needs: the model decides.
+ *           A plain question is answered in the first request, exactly as a
+ *           single call would; one that depends on the learner's record — or
+ *           on anything outside it — is looked up first; one that is really
+ *           several steps gets a plan. Context is still chosen up front by
+ *           lib/chatContext.ts, so the tools are for what that could not
+ *           anticipate, never a tax on saying hello. It is what voice mode
+ *           always did, and the reason it became the default is the reason
+ *           voice never had a picker: whoever is asking should not have to
+ *           decide how hard their question is before asking it.
  *
- *   agent   the model looks things up itself, reactively, then answers. For
- *           "what am I still getting wrong" — where what to fetch second
- *           depends on what the first lookup returned.
+ *   quick   one request, no tools at all. The old `direct`, kept for a model
+ *           that should not be handed tools and for the cheapest possible
+ *           message — never the default again.
  *
  *   deep    the model states a plan, works it, closes every step, and only
  *           then answers. For questions worth several minutes: "where am I
  *           actually weak across this whole project", "what should I do next".
- *           Slower and dearer than `agent` on purpose — the plan is what makes
- *           a long run auditable and stops it declaring victory early.
+ *           The plan is what makes a long run auditable and stops it
+ *           declaring victory early.
+ *
+ *   image / video   every message draws, or films.
+ *
+ * Two spellings are retired and read as `auto` by chatStore.repair():
+ * `direct`, which was the default and so cannot say whether anyone chose it,
+ * and `agent`, which was Auto with the plan tools taken away.
  *
  * Per conversation rather than global: the mode that suits a thread is a
- * property of what the thread is for, and a global switch would make every
- * quick question expensive.
+ * property of what the thread is for.
  */
-export type ChatMode = "direct" | "agent" | "deep" | "image" | "video";
+export type ChatMode = "auto" | "quick" | "deep" | "image" | "video";
 
 /** Re-exported so chat code has one import for its own vocabulary. */
 export type Usage = TokenUsage;
@@ -299,9 +310,7 @@ export interface Conversation {
 
   /** "" means inherit from the project, which may inherit from global. */
   effort: Effort | "";
-  /** Absent on conversations created before agent mode existed, which
-   *  chatStore.repair() reads as "chat" — the cheap default, so an old thread
-   *  never silently becomes expensive. */
+  /** Absent, or a retired spelling, reads as `auto` — see ChatMode. */
   mode?: ChatMode;
   /** Shape and size for `image` mode. Absent means the defaults, and the
    *  defaults send nothing — see lib/imageSpec.ts. Per conversation like the
@@ -396,6 +405,14 @@ export interface ModelPrice {
    *  answer to "can this one think?". Absent on a record written before the
    *  field existed, which reads as "not known", never as "no". */
   reasoning?: boolean;
+  /** Whether the model takes a `tools` field — read off `supported_parameters`
+   *  like `reasoning`, and with the same convention: absent is "not known",
+   *  never "no". It decides how Auto talks to the model. OpenRouter answers a
+   *  `tools` field sent to a model that has none with a 404 ("no endpoints
+   *  found that support tool use"), so a thread defaulting to the loop has to
+   *  know before it asks — services/agent/protocol.ts gives a "no" the text
+   *  protocol instead, which any model that can follow instructions can use. */
+  tools?: boolean;
   /** What the model accepts as input beyond text — "image", "file", "audio" —
    *  from the catalogue's `architecture.input_modalities`. Absent means not
    *  known, same convention as `reasoning`; ["text"] means text-only. Read by

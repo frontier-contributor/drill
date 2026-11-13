@@ -4,11 +4,11 @@
  * These exist because the composer showed two chips that both read as cost
  * dials, and one of them described a budget the other had switched off: the
  * effort tooltip said "up to three lookups" while the thread was set to
- * Direct, which makes none. Pure: no DOM, no stores.
+ * Quick, which makes none. Pure: no DOM, no stores.
  * ========================================================================== */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { EFFORT_BUDGETS, EFFORT_ORDER, budgetFor, deepSteps, effortMeans } from "@/lib/effort";
+import { EFFORT_BUDGETS, EFFORT_ORDER, budgetFor, deepSteps, effortMeans, roundsFor } from "@/lib/effort";
 
 test("no effort blurb claims lookups on its own", () => {
   /* The blurb is shown in every mode, so anything it says has to be true in
@@ -19,20 +19,27 @@ test("no effort blurb claims lookups on its own", () => {
   }
 });
 
-test("direct mode says plainly that there are no lookups", () => {
+test("quick mode says plainly that there are no lookups", () => {
   for (const e of EFFORT_ORDER) {
-    const s = effortMeans(e, "direct");
+    const s = effortMeans(e, "quick");
     assert.match(s, /no lookups/i);
-    assert.doesNotMatch(s, /up to \d+/, `${e} promised a lookup budget in direct mode`);
+    assert.doesNotMatch(s, /up to \d+/, `${e} promised a lookup budget in quick mode`);
   }
 });
 
-test("agent and deep quote the budget the loop is actually given", () => {
+test("auto and deep quote the budget the loop is actually given", () => {
   for (const e of EFFORT_ORDER) {
     const b = budgetFor(e);
-    assert.match(effortMeans(e, "agent"), new RegExp(`up to ${b.agentSteps},`));
-    assert.match(effortMeans(e, "deep"), new RegExp(`up to ${deepSteps(b.agentSteps)},`));
+    assert.match(effortMeans(e, "auto"), new RegExp(`up to ${roundsFor(b.agentSteps)},`));
+    assert.match(effortMeans(e, "deep"), new RegExp(`up to ${roundsFor(b.agentSteps)},`));
   }
+});
+
+test("auto says a plain question is still one request", () => {
+  /* The worry about a default that can loop is that every message got
+     dearer. It did not, and the one sentence that describes the mode has to
+     say so or the menu reads as a price rise. */
+  for (const e of EFFORT_ORDER) assert.match(effortMeans(e, "auto"), /plain question is still one request/i);
 });
 
 test("deep always buys more rounds than agent, at every effort", () => {

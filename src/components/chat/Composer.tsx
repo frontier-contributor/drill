@@ -236,7 +236,24 @@ export default function Composer({
     const next = before.slice(0, cut) + label + after;
     setText(next);
     setRefOff(true);
-    setAttachments((prev) => (prev.some((a) => a.name === `${KIND_LABEL[r.kind]}: ${r.label}`) ? prev : [...prev, toAttachment(r)]));
+    /* Most references materialise at once; a past conversation is read from
+       IndexedDB first. Both go through the file reader's pending row, so Send
+       waits for it exactly as it waits for a PDF — a message sent a moment
+       before the chat it points at arrived would point at nothing. */
+    const name = `${KIND_LABEL[r.kind]}: ${r.label}`;
+    if (!attachments.some((a) => a.name === name)) {
+      const id = "ref:" + r.id;
+      setPending((p) => (p.some((x) => x.id === id) ? p : [...p, { id, name, label: "Reading" }]));
+      void toAttachment(r)
+        .then((a) => {
+          setAttachments((prev) => (prev.some((x) => x.name === name) ? prev : [...prev, a]));
+          setPending((p) => p.filter((x) => x.id !== id));
+        })
+        .catch((e: unknown) => {
+          const message = (e as Error)?.message || "Could not read that.";
+          setPending((p) => p.map((x) => (x.id === id ? { ...x, error: message } : x)));
+        });
+    }
     const pos = cut + label.length;
     requestAnimationFrame(() => {
       const el = ref.current;

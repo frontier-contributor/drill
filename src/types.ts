@@ -138,6 +138,13 @@ export interface Settings {
    *  follow-up questions. Off by default: one message should be one request
    *  unless you have said otherwise. Also forced off at low effort. */
   followups: boolean;
+  /** Whether a new chat starts with Web switched on. On by default, because
+   *  in Auto that means "may search when a question needs it", not "searches
+   *  every message" — the companion should be able to go and get what you
+   *  point it at, and most of what you point at is in your record, which
+   *  costs nothing to read. In Quick the same switch searches on every
+   *  message, and the Tools menu says so. Read by ChatContext's draft. */
+  webByDefault: boolean;
   /** Whether to spend one request naming a new conversation from its opening
    *  exchange. On by default, because it is one request per *thread* and a
    *  sidebar of "New chat" is unusable. Off falls back to a title written

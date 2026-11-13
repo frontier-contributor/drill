@@ -13,6 +13,8 @@
 import * as chatStore from "@/services/chatStore";
 import { describeSource, retrieveForSource, sourceSize } from "@/lib/chatContext";
 import { estimateTokens, formatCost, formatTokens } from "@/lib/tokens";
+import { answerRoute } from "@/lib/answerRoute";
+import { isPersonalProject } from "@/lib/migrate";
 import type { Conversation } from "@/types/chat";
 import { RailEmpty, RailFigure, RailGroup, RailItem, RailList, RailSub } from "./Rail";
 
@@ -38,6 +40,13 @@ export default function ChatRail({ conversation }: { conversation: Conversation 
   const contextChars = c.context.reduce((n, s) => n + sourceSize(s, queryText, c.projectId), 0);
   const contextTokens = estimateTokens("x".repeat(contextChars));
 
+  /* Auto and Deep can go and get what the fixed context did not bring, so
+     "what it can see" is two lists now: what goes out with every message,
+     and what it may look up. Saying the first is empty without the second
+     would describe a Quick thread. */
+  const looks = answerRoute(c.mode, c.actions) !== "single";
+  const reach = isPersonalProject(c.projectId) ? "every project — " : "this project — ";
+
   const spent = c.usage || { promptTokens: 0, completionTokens: 0 };
   const total = (spent.promptTokens || 0) + (spent.completionTokens || 0);
 
@@ -47,7 +56,9 @@ export default function ChatRail({ conversation }: { conversation: Conversation 
         {c.context.length === 0 ? (
           <>
             <RailEmpty>
-              Nothing attached — this thread is a plain model that cannot see your day, your cards or your journal.
+              {looks
+                ? "Nothing attached up front — it looks things up in your record when a question needs it."
+                : "Nothing attached — this thread is a plain model that cannot see your day, your cards or your journal."}
             </RailEmpty>
             {/* Every conversation made before defaults existed has an empty
                 context, and finding the settings panel to fix that is more
@@ -70,6 +81,15 @@ export default function ChatRail({ conversation }: { conversation: Conversation 
           </RailList>
         )}
       </RailGroup>
+
+      {looks && (
+        <RailGroup title="Can look up">
+          <RailSub>
+            {reach}memory, cards and how they are going, the journal, notes, files, past chats, exams and kept figures
+            {(c.actions || []).includes("web") ? ", and the web" : ""}. Only when a question needs it.
+          </RailSub>
+        </RailGroup>
+      )}
 
       {memSource && (
         <RailGroup title="Memory in play" note={trace ? `${trace.picked.length}/${trace.considered.length}` : undefined}>

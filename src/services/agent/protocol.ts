@@ -34,9 +34,37 @@ import type { BackendType } from "@/types";
  * silently ignored by older builds and by many GGUF chat templates, and a
  * silently ignored tools array produces a model that hallucinates having
  * searched. Text is the honest choice there: it works or it visibly does not.
+ *
+ * `tools` is the catalogue's verdict on the model itself, and only a "no"
+ * moves anything. The comment above was written when the loop was a mode you
+ * chose; with Auto the default, every message goes through here, and the
+ * "model that ignores `tools`" turned out not to be the failure OpenRouter
+ * actually has — sent to a model with no tool support it refuses the whole
+ * request ("no endpoints found that support tool use"). So a model the
+ * catalogue says has none gets the text protocol, which asks for nothing but
+ * prose. Not knowing stays native, as every three-state verdict here does,
+ * and `isToolRefusal` below catches the case the catalogue got wrong.
  */
-export function protocolFor(backend: BackendType): ToolProtocol {
-  return backend === "ollama" || backend === "custom" ? "text" : "native";
+export function protocolFor(backend: BackendType, tools?: boolean): ToolProtocol {
+  if (backend === "ollama" || backend === "custom") return "text";
+  return tools === false ? "text" : "native";
+}
+
+/**
+ * Whether an error is a gateway refusing the `tools` field, rather than the
+ * request failing for any other reason.
+ *
+ * The catalogue is a day old at best and knows nothing about Groq's own ids,
+ * so a model can still turn out to take no tools. That refusal arrives before
+ * a single token, which makes it safe to ask again on the text protocol —
+ * and the alternative is an error box on a plain "hello" in a thread that
+ * never asked for a lookup. Matched on the words, because every provider
+ * spells the code differently and they all name the thing they refused.
+ */
+export function isToolRefusal(e: unknown): boolean {
+  const msg = (e as Error)?.message || "";
+  if (!/\b(400|404|422)\b/.test(msg)) return false;
+  return /tool[ _-]?(use|call|choice|s\b)|function[ _-]?call/i.test(msg);
 }
 
 /* --------------------------------------------------------------- native -- */

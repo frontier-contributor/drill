@@ -54,8 +54,9 @@ const CATALOGUE = API + "/models?output_modalities=all";
 const TTL = 24 * 60 * 60 * 1000;
 const RETRY_MS = 60_000;
 /** Bumped when the stored shape changes, so an old cache reads as a miss
- *  rather than as models that "cannot think" or "cannot draw". */
-const SHAPE = 6;
+ *  rather than as models that "cannot think" or "cannot draw". 7 added
+ *  `tools`, which decides how Auto speaks to a model. */
+const SHAPE = 7;
 
 /** localStorage keys the catalogue used before it moved to IndexedDB. Removed
  *  on first load: they were a few hundred kilobytes of the review log's room. */
